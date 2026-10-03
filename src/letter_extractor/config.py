@@ -15,6 +15,10 @@ from typing import Any, Dict, Optional
 class InkParams:
     """Settings that differ between black and red ink (red is lighter and thinner)."""
     min_speck_px: int = 8             # ink blobs smaller than this are dust, not text
+    break_max_frac: float = 0.3       # headline thinner than this x its typical thickness is a break...
+    break_soft_frac: float = 0.5      # ...which extends while the headline is thinner than this
+    min_break_px: int = 2             # headline gaps narrower than this are not breaks
+    min_piece_ink_px: int = 15        # pieces with less ink than this are specks
 
 
 @dataclass
@@ -53,8 +57,15 @@ class Config:
     line_margin_px: int = 6           # margin around each line image
     line_erase_grow_px: int = 4       # other lines' ink is erased from a line image with this much extra edge
 
-    black: InkParams = field(default_factory=lambda: InkParams(min_speck_px=8))
-    red: InkParams = field(default_factory=lambda: InkParams(min_speck_px=5))
+    # ---- stroke pieces (C3a, FR-4) ------------------------------------------------
+    headline_above_px: int = 8        # headline thickness is measured from this far above the traced row...
+    headline_below_px: int = 4        # ...to this far below (letter bodies start further down)
+    piece_top_frac: float = 0.1       # a piece starts this far (x pitch) above the headline (its top edge)
+
+    black: InkParams = field(default_factory=lambda: InkParams(
+        min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
+    red: InkParams = field(default_factory=lambda: InkParams(
+        min_speck_px=5, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=10))
 
     # ---- batch ------------------------------------------------------------------------
     workers: int = 0                  # 0 = automatic

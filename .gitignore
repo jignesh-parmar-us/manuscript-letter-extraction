@@ -222,9 +222,10 @@ __marimo__/
 # Build virtualenv created by packaging/build_*.sh/.bat
 .venv-build/
 
-# Local run folders
+# Local run folders (the README example writes to out/)
 input_images/
 output_images/
+out/
 
 # macOS
 .DS_Store

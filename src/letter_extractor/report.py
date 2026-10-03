@@ -13,7 +13,7 @@ STATUS_IGNORED = "IGNORED"
 
 CSV_COLUMNS = ["file", "status", "message", "width", "height",
                "block_x", "block_y", "block_w", "block_h", "black_px", "red_px",
-               "lines", "line_spacing", "seconds"]
+               "lines", "line_spacing", "pieces", "specks", "seconds"]
 
 
 @dataclass
@@ -31,6 +31,8 @@ class PageResult:
     red_px: int = 0
     lines: int = 0
     line_spacing: float = 0.0         # line pitch found on the page (px)
+    pieces: int = 0                   # stroke pieces after the first cut at headline breaks
+    specks: int = 0                   # pieces dropped as too small
     seconds: float = 0.0
 
 

@@ -14,16 +14,20 @@ import cv2
 from . import io_utils, report
 from .config import Config
 from .lines import LineLayout, detect_lines, line_image, lines_overlay
+from .pieces import Piece, pieces_overlay, split_lines
 from .prepare import PreparedPage, ink_overlay, prepare_page
 from .report import PageResult
 
 ProgressFn = Callable[[int, int, PageResult], None]
 
 
-def process_page(rgb, cfg: Config) -> Tuple[PreparedPage, Optional[LineLayout]]:
-    """Every step for one page: ink masks (C1), then lines (C2). Later chunks add letter cutting."""
+def process_page(rgb, cfg: Config) -> Tuple[PreparedPage, Optional[LineLayout], List[Piece], int]:
+    """Every step for one page: ink masks (C1), lines (C2), stroke pieces (C3a).
+    Returns the prepared page, the line layout, the pieces and the number of specks dropped."""
     page = prepare_page(rgb, cfg)
-    return page, detect_lines(page, cfg)
+    layout = detect_lines(page, cfg)
+    pieces, specks = split_lines(page, layout, cfg) if layout is not None else ([], 0)
+    return page, layout, pieces, specks
 
 
 def _png(img, path: Path) -> None:
@@ -37,7 +41,7 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
     try:
         rgb, meta = io_utils.load_image(src)
         res.height, res.width = rgb.shape[:2]
-        page, layout = process_page(rgb, cfg)
+        page, layout, pieces, specks = process_page(rgb, cfg)
         if page.block is None:
             res.status = report.STATUS_NO_TEXT
             res.message = "no text block found"
@@ -47,6 +51,8 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
         if layout is not None and layout.lines:
             res.lines = len(layout.lines)
             res.line_spacing = layout.spacing
+            res.pieces = len(pieces)
+            res.specks = specks
             lines_dir = out_dir / "lines"
             lines_dir.mkdir(exist_ok=True)
             for line in layout.lines:
@@ -61,6 +67,8 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
             debug_dir.mkdir(exist_ok=True)
             _png(ink_overlay(page), debug_dir / f"{src.stem}_ink.png")
             _png(lines_overlay(page, layout), debug_dir / f"{src.stem}_lines.png")
+            if layout is not None:
+                _png(pieces_overlay(page, layout, pieces, cfg), debug_dir / f"{src.stem}_pieces.png")
     except Exception as e:  # one page failing never stops the batch
         res.status = report.STATUS_FAILED
         res.message = f"{type(e).__name__}: {e}"

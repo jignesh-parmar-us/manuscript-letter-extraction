@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation) and C2 (line detection) are done. Cutting lines into stroke pieces (C3a) is next.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection) and C3a (first cut into stroke pieces) are done. Joining and splitting pieces into letters (C3b) is next.
 
 ## Install
 
@@ -35,10 +35,11 @@ The exit code is 0 if every page is OK, 1 if some pages failed, and 2 for a fold
 
 ## Output so far
 
-- `report.csv`: one row per file with status (`OK`, `NO_TEXT`, `FAILED`, `IGNORED`), message, page size, text block (`block_x/y/w/h`), black and red ink pixel counts, number of lines, line spacing and seconds. Files that cannot be read are `FAILED` and do not stop the run; files that are not images are `IGNORED`.
+- `report.csv`: one row per file with status (`OK`, `NO_TEXT`, `FAILED`, `IGNORED`), message, page size, text block (`block_x/y/w/h`), black and red ink pixel counts, number of lines, line spacing, number of stroke pieces, specks dropped, and seconds. Files that cannot be read are `FAILED` and do not stop the run; files that are not images are `IGNORED`.
 - `lines/<page>_L01.png`, ...: one image per text line, cut from the original page with a small margin. Matras that reach into the neighbouring lines are kept; ink of the neighbouring lines is filled in from the paper around it.
 - `debug/<page>_ink.png` (with `--debug`): black ink in black, red ink in red, removed ruled lines in blue, everything outside the text block greyed out, text block outlined in green.
 - `debug/<page>_lines.png` (with `--debug`): each line's ink in its own colour (a matra in the wrong colour is on the wrong line), traced headlines as thin dark lines, boundaries between lines dashed.
+- `debug/<page>_pieces.png` (with `--debug`): stroke pieces in alternating colours with their numbers, a thin red line at every cut, and ink outside the pieces (upper and lower matras, left for C3b) in light purple.
 
 ## How page preparation works (C1)
 
@@ -61,10 +62,21 @@ Raw scans and pages cleaned by the border remover both work. Letters that touch 
 
 On both sample pages all 11 lines are found, and a page takes about 2 s (without `--debug`).
 
+## How the first cut works (C3a)
+
+The headline is drawn letter by letter. Between two letters it either has a gap or, where the strokes overlap, thins out sharply. On the sample pages the red headlines are almost continuous but thin to 1-3 px at every join, so looking only for empty columns misses most red letter boundaries.
+
+1. **Headline thickness** is measured in every column, in a band from 8 px above to 4 px below the traced headline (letter bodies start lower).
+2. **Breaks:** a run of columns where the headline is thinner than half its typical thickness, and somewhere thinner than 30% of it. Runs narrower than `min_break_px` are ignored. Limits are set separately for red and black ink.
+3. **Cuts:** inside a break the cut goes through each empty column run of the main zone, otherwise through the column with the least ink. A danda or digit standing in a gap becomes its own piece.
+4. **Pieces** take the line's ink in their columns, from just above the headline to the bottom of the main zone. Pieces with less ink than `min_piece_ink_px` are dropped as specks. Each piece records its ink colour, the width of its headline ink and the width of its stems, for C3b.
+
+Result on the sample pages: about 36-46 pieces per line. As in the trial in the requirements, black lines show most letter boundaries, with extra pieces where vowel bars (ा ी) have their own short headline and missed cuts where headlines run into each other. Red lines have more of both: about a quarter of their pieces are narrow (bars, ि hooks) and a fifth are wider than 1.6 x the typical piece. C3b corrects these.
+
 ## Tests
 
 ```
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-Synthetic pages ([tests/synthetic.py](tests/synthetic.py)) check folder handling, ink masks and line detection (sloped and wavy headlines within 2 px, detached marks on the right line) against known values. The sample pages in `samples/` check the text block, ink colours and 11 lines per page on real scans.
+Synthetic pages ([tests/synthetic.py](tests/synthetic.py)) check folder handling, ink masks line detection (sloped and wavy headlines within 2 px, detached marks on the right line) and the first cut (gaps and thin joins cut, tiny gaps and continuous headlines not, a danda as its own piece, in red and black ink) against known values. The sample pages in `samples/` check the text block, ink colours and 11 lines per page on real scans.
