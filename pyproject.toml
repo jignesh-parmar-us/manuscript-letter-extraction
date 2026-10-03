@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "letter-extractor"
+version = "0.1.0"
+description = "Cut every letter out of scanned Devanagari manuscript pages, group identical letters and build a labeled dataset."
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "pillow>=10.2"]
+
+[project.scripts]
+letter-extractor = "letter_extractor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

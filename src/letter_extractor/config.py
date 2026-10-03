@@ -1,0 +1,91 @@
+"""All thresholds and defaults in one place (tunable without touching the code).
+
+A JSON file passed with --config overrides any value, for example
+    {"black_max_rel_l": 0.6, "red": {"min_speck_px": 4}}
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field, fields, is_dataclass
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+
+@dataclass
+class InkParams:
+    """Settings that differ between black and red ink (red is lighter and thinner)."""
+    min_speck_px: int = 8             # ink blobs smaller than this are dust, not text
+
+
+@dataclass
+class Config:
+    # ---- page preparation (C1, FR-2) ----------------------------------------------
+    work_scale: float = 0.25          # paper tone is estimated on a copy this size (speed)
+    paper_blur_px: int = 151          # median window (full-page px) for the paper tone; must be much wider
+                                      # than a letter, or dense text pulls the estimate towards the ink colour
+    scanner_rel_l: float = 0.45       # darker than this x paper lightness and touching the image edge = scanner
+    black_max_rel_l: float = 0.62     # pixel is black ink if its lightness is below this x local paper lightness
+    red_min_da: float = 14.0          # pixel is red ink if its Lab a* is this much above the local paper a*...
+    red_min_dl: float = 8.0           # ...and it is at least this much darker (Lab L, 0-255) than the paper
+    rule_min_frac: float = 0.15       # straight ink runs longer than this x page height / width are ruled lines
+    rule_slant_px: int = 5            # tolerance for slanted ruled lines
+    block_smooth_px: int = 41         # smoothing of the ink profiles used to find the text block
+    block_col_frac: float = 0.20      # a column is in the text block if its ink is this x a typical text column
+    block_row_frac: float = 0.05      # same for rows (low: gaps between lines must not split the block)
+    block_gap_px: int = 60            # gaps up to this wide do not split the text block
+    block_pad_px: int = 15            # margin added around the text block (matras at the edges)
+
+    # ---- line detection (C2, FR-3) ------------------------------------------------
+    line_spacing_px: int = 0          # line pitch; 0 = estimate per page (about 110 px on the samples)
+    line_min_spacing_px: int = 40     # range searched when estimating the pitch
+    line_max_spacing_px: int = 300
+    line_min_gap_frac: float = 0.6    # headline peaks closer than this x pitch belong to one line
+    line_peak_frac: float = 0.25      # weaker peaks (x a typical headline peak) are not lines
+    headline_min_run_px: int = 25     # headlines are found from horizontal ink runs at least this long
+    headline_window_px: int = 150     # the headline is traced in windows this wide...
+    headline_search_frac: float = 0.3 # ...within this x pitch of the line's peak row
+    headline_min_ink_frac: float = 0.25   # a window needs this share of inked columns at its best row
+    headline_max_wave_frac: float = 0.08  # windows further than this x pitch from a smooth fit are ignored
+    headline_tol_px: int = 4         # ink this close to a traced headline touches it
+    main_zone_frac: float = 0.5       # fallback headline-to-main-zone-bottom distance (x pitch)
+    main_zone_drop: float = 0.25      # main zone ends where row ink falls below this x letter-body ink
+    line_red_share: float = 0.8       # a line is red (or black) if this share of its ink is that colour
+    line_margin_px: int = 6           # margin around each line image
+    line_erase_grow_px: int = 4       # other lines' ink is erased from a line image with this much extra edge
+
+    black: InkParams = field(default_factory=lambda: InkParams(min_speck_px=8))
+    red: InkParams = field(default_factory=lambda: InkParams(min_speck_px=5))
+
+    # ---- batch ------------------------------------------------------------------------
+    workers: int = 0                  # 0 = automatic
+    debug: bool = False
+
+
+def _apply(obj: Any, values: Dict[str, Any], where: str) -> None:
+    known = {f.name: f for f in fields(obj)}
+    for key, value in values.items():
+        if key not in known:
+            raise ValueError(f"Unknown setting in config file: {where}{key}")
+        current = getattr(obj, key)
+        if is_dataclass(current):
+            if not isinstance(value, dict):
+                raise ValueError(f"Setting {where}{key} must be an object")
+            _apply(current, value, f"{where}{key}.")
+        else:
+            setattr(obj, key, type(current)(value))
+
+
+def load_config(path: Optional[Path] = None, **overrides: Any) -> Config:
+    """Defaults, then the JSON file (if given), then keyword overrides (from the CLI)."""
+    cfg = Config()
+    if path is not None:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            raise ValueError(f"Cannot read config file {path}: {e}") from e
+        if not isinstance(data, dict):
+            raise ValueError(f"Config file {path} must contain a JSON object")
+        _apply(cfg, data, "")
+    _apply(cfg, overrides, "")
+    return cfg

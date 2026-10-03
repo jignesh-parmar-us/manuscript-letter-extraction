@@ -218,3 +218,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Build virtualenv created by packaging/build_*.sh/.bat
+.venv-build/
+
+# Local run folders
+input_images/
+output_images/
+
+# macOS
+.DS_Store
