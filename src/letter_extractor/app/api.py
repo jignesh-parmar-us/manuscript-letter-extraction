@@ -7,8 +7,10 @@ same browser therefore cannot use the API.
 
 Routes (all JSON unless noted):
   books      GET/POST /api/books, GET/PATCH/DELETE /api/books/{id}, GET /api/books/{id}/page-problems
-  jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut, GET /api/jobs/{job},
-             POST /api/jobs/{job}/cancel
+  jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11),
+             GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
+  ocr (C11)  GET /api/tesseract (installed? version, languages); groups carry `suggestion` and `readings`,
+             unsure samples `reading`, the book `ocr_runs`
   reading    GET /api/books/{id}/pages, /api/pages/{id}, /api/books/{id}/groups, /api/groups/{id},
              /api/groups/{id}/samples, /api/books/{id}/unsure, /api/samples/{id}
   actions    POST /api/books/{id}/actions/{move|new-group|merge|dissolve|label|status|delete|restore},
@@ -43,7 +45,8 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force, GroupRef, Label,
-                      LibraryChoice, Merge, Move, SampleIds, Split, Status, Upload)
+                      LibraryChoice, Merge, Move, SampleIds, Split, Status, SuggestRequest, Upload)
+from .suggest import group_readings, latest_runs, sample_readings
 
 MAX_PAGE = 500
 
@@ -66,7 +69,8 @@ def _sample_json(smp: Sample, book_id: int, token: str) -> Dict:
             "image": f"/files/books/{book_id}/{smp.image}?token={token}"}
 
 
-def _group_json(s, g: LetterGroup, token: str) -> Dict:
+def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None) -> Dict:
+    """`ocr`: the group's entry of suggest.group_readings (suggestion and most common readings)."""
     mem = s.scalars(select(Sample).where(Sample.group_id == g.id, Sample.deleted.is_(False))
                     .order_by(Sample.distance)).all()
     red = sum(m.ink == "red" for m in mem)
@@ -76,7 +80,9 @@ def _group_json(s, g: LetterGroup, token: str) -> Dict:
             "spread": round(sum(dists) / len(dists), 3) if dists else None,
             "example_id": mem[0].id if mem else None,
             "example_image": f"/files/books/{g.book_id}/{mem[0].image}?token={token}" if mem else None,
-            "updated_at": g.updated_at.isoformat() if g.updated_at else None}
+            "updated_at": g.updated_at.isoformat() if g.updated_at else None,
+            "suggestion": (ocr or {}).get("suggestion"), "readings": (ocr or {}).get("readings", []),
+            "read": (ocr or {}).get("read", 0)}
 
 
 def create_app(library: Library, token: str, context=None) -> FastAPI:
@@ -140,8 +146,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         book = library.get_book(book_id)
         undo_redo = actions.can_undo_redo(library, book_id)
         running = jobs.running_for(book_id)
+        with library.session() as s:
+            runs = [{"engine": r.engine, "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                     "result": json.loads(r.result or "{}")} for r in latest_runs(s, book_id)]
         return {**_book_json(summary), "settings": json.loads(book.settings), "undo": undo_redo["undo"],
-                "redo": undo_redo["redo"], "job": running.as_dict() if running else None}
+                "redo": undo_redo["redo"], "job": running.as_dict() if running else None, "ocr_runs": runs}
 
     @app.patch("/api/books/{book_id}", dependencies=auth)
     def update_book(book_id: int, body: BookUpdate) -> Dict:
@@ -173,6 +182,27 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/pages/{page_id}/recut", dependencies=auth, status_code=202)
     def recut(book_id: int, page_id: int, body: Force = Force()) -> Dict:
         return jobs.recut_page(book_id, page_id, force=body.force).as_dict()
+
+    def tesseract_setting() -> str:
+        from .main import load_settings
+        return str(load_settings(context.settings_file).get("tesseract_path", ""))   # app setting, not per book
+
+    @app.post("/api/books/{book_id}/suggest", dependencies=auth, status_code=202)
+    def suggest(book_id: int, body: SuggestRequest = SuggestRequest()) -> Dict:
+        return jobs.suggest(book_id, body.engine, tesseract_setting()).as_dict()
+
+    @app.get("/api/tesseract", dependencies=auth)
+    def tesseract(book_id: Optional[int] = None) -> Dict:
+        """Whether Tesseract can run, and with the book's languages (C11; the C12 button uses it)."""
+        from ..ocr.tesseract import TesseractError, find_tesseract
+        langs = library.book_config(library.get_book(book_id)).ocr_langs if book_id else Config().ocr_langs
+        try:
+            engine = find_tesseract(tesseract_setting())
+            engine.check_langs(langs)
+        except TesseractError as e:
+            return {"ok": False, "error": str(e), "langs_needed": langs}
+        return {"ok": True, "path": engine.path, "version": engine.version, "langs": engine.langs,
+                "langs_needed": langs}
 
     @app.post("/api/books/{book_id}/export", dependencies=auth, status_code=202)
     def export(book_id: int, body: ExportRequest = ExportRequest()) -> Dict:
@@ -223,14 +253,18 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.get("/api/books/{book_id}/groups", dependencies=auth)
     def groups(book_id: int) -> List[Dict]:
         with library.session() as s:
-            book_or_404(s, book_id)
-            return [_group_json(s, g, token) for g in
+            book = book_or_404(s, book_id)
+            ocr = group_readings(s, book, library.book_config(book))
+            return [_group_json(s, g, token, ocr.get(g.id)) for g in
                     s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id).order_by(LetterGroup.code))]
 
     @app.get("/api/groups/{group_id}", dependencies=auth)
     def group(group_id: int) -> Dict:
         with library.session() as s:
-            return _group_json(s, group_or_404(s, group_id), token)
+            g = group_or_404(s, group_id)
+            book = s.get(Book, g.book_id)
+            ocr = group_readings(s, book, library.book_config(book), [g.id])
+            return _group_json(s, g, token, ocr.get(g.id))
 
     @app.get("/api/groups/{group_id}/samples", dependencies=auth)
     def group_samples(group_id: int, offset: int = 0, limit: int = Query(200, le=MAX_PAGE)) -> Dict:
@@ -251,9 +285,12 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                 q = q.where(Sample.group_id.is_(None))
             total = s.scalar(select(func.count()).select_from(q.subquery()))
             rows = s.scalars(q.order_by(Sample.page_id, Sample.line_number, Sample.pos).offset(offset).limit(limit)).all()
-            sugg = suggestions(s, book_id, rows, library.book_config(book).group_distance) if suggest else {}
+            cfg = library.book_config(book)
+            sugg = suggestions(s, book_id, rows, cfg.group_distance) if suggest else {}
+            reads = sample_readings(s, book, cfg, [x.id for x in rows])
             return {"total": total, "offset": offset,
-                    "samples": [{**_sample_json(x, book_id, token), "suggestion": sugg.get(x.id)} for x in rows]}
+                    "samples": [{**_sample_json(x, book_id, token), "suggestion": sugg.get(x.id),
+                                 "reading": reads.get(x.id)} for x in rows]}
 
     @app.get("/api/samples/{sample_id}", dependencies=auth)
     def sample(sample_id: int) -> Dict:

@@ -109,6 +109,7 @@ class LetterGroup(Base):
     label_guj: Mapped[str] = mapped_column(String(50), default="")
     status: Mapped[str] = mapped_column(String(10), default="auto")   # auto | reviewed | labelled
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    rejected_dev: Mapped[str] = mapped_column(String(50), default="")   # suggested label the user rejected (C11)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now, onupdate=now)
 
@@ -145,6 +146,31 @@ class Sample(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
     group: Mapped[Optional[LetterGroup]] = relationship(back_populates="samples")
+
+
+class OcrRun(Base):
+    """One run of a reader over a book (C11): Tesseract now, other books and the classifier later.
+    Only the newest finished run per engine is kept."""
+    __tablename__ = "ocr_run"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    book_id: Mapped[int] = mapped_column(ForeignKey("book.id", ondelete="CASCADE"), index=True)
+    engine: Mapped[str] = mapped_column(String(20))                   # tesseract | books | classifier
+    settings: Mapped[str] = mapped_column(Text, default="{}")         # what it ran with, as JSON
+    result: Mapped[str] = mapped_column(Text, default="{}")           # its counts, as JSON
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class OcrReading(Base):
+    """What a run read for one sample; samples it could not match get no row."""
+    __tablename__ = "ocr_reading"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("ocr_run.id", ondelete="CASCADE"), index=True)
+    sample_id: Mapped[int] = mapped_column(ForeignKey("sample.id", ondelete="CASCADE"), index=True)
+    text_dev: Mapped[str] = mapped_column(String(50))                 # Devanagari NFC, a valid label
+    confidence: Mapped[float] = mapped_column(Float)                  # 0 to 100
+    alternatives: Mapped[str] = mapped_column(Text, default="[]")     # per character: [[text, confidence], ...]
+    overlap: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class Action(Base):

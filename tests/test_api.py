@@ -217,5 +217,51 @@ class ReviewTests(ApiTestCase):
         self.assertEqual(g["samples"], g["red"] + g["black"])
 
 
+
+class SuggestionTests(ApiTestCase):
+    """C11: suggestions in the API (the job itself is tested with a fake Tesseract in test_suggest)."""
+
+    def test_groups_carry_suggestions_after_a_run(self):
+        from test_suggest import FakeTesseract
+        from letter_extractor.app.suggest import run_tesseract
+        groups = self.groups()
+        self.assertTrue(all(g["suggestion"] is None and g["readings"] == [] for g in groups))
+        self.assertEqual(self.get(f"/api/books/{self.book}").json()["ocr_runs"], [])
+        run_tesseract(self.lib, self.book, reader=FakeTesseract(self.lib, self.book, lambda smp: "क"), workers=1)
+        groups = self.groups()
+        big = [g for g in groups if g["samples"] >= 3]
+        self.assertTrue(big)
+        for g in big:
+            self.assertEqual(g["suggestion"]["label_dev"], "क")
+            self.assertEqual(g["suggestion"]["label_guj"], "ક")
+            self.assertEqual(g["readings"][0]["label_dev"], "क")
+        one = self.get(f"/api/groups/{big[0]['id']}").json()
+        self.assertEqual(one["suggestion"]["label_dev"], "क")
+        runs = self.get(f"/api/books/{self.book}").json()["ocr_runs"]
+        self.assertEqual([r["engine"] for r in runs], ["tesseract"])
+        self.assertIn("samples_matched", runs[0]["result"])
+        for smp in self.get(f"/api/books/{self.book}/unsure").json()["samples"]:
+            self.assertIn("reading", smp)
+
+    def test_tesseract_status(self):
+        r = self.get(f"/api/tesseract?book_id={self.book}").json()
+        self.assertIn("ok", r)
+        self.assertEqual(r["langs_needed"], "script/Devanagari")
+        if not r["ok"]:
+            self.assertIn("INSTALL_TESSERACT.md", r["error"])
+
+    def test_suggest_job_with_real_tesseract(self):
+        status = self.get("/api/tesseract").json()
+        if not status["ok"]:
+            self.skipTest("Tesseract with script/Devanagari is not installed")
+        r = self.post(f"/api/books/{self.book}/suggest", {"engine": "tesseract"})
+        self.assertEqual(r.status_code, 202)
+        job = self.wait(r.json())
+        self.assertEqual(job["status"], "done", job["error"])
+        self.assertEqual(job["kind"], "suggest")
+        self.assertGreater(job["result"]["lines"], 0)
+        self.assertEqual(self.post(f"/api/books/{self.book}/suggest", {"engine": "books"}).status_code, 422)
+
+
 if __name__ == "__main__":
     unittest.main()

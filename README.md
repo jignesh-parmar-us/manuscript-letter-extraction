@@ -156,7 +156,7 @@ For screen development: `npm run dev` in `frontend/` serves the screen with live
 
 ## Reading lines with Tesseract (Phase 2, C10)
 
-Printed books can be read by [Tesseract](https://github.com/tesseract-ocr/tesseract) to suggest labels (the suggestions come in C11 and C12). Tesseract is a separate install: see [docs/INSTALL_TESSERACT.md](docs/INSTALL_TESSERACT.md). To read one line image and see its aksharas with their boxes:
+Printed books can be read by [Tesseract](https://github.com/tesseract-ocr/tesseract) to suggest labels. Since C11 the app can read a whole book in the background and vote a suggested label for each group from its samples' readings (`POST /api/books/{id}/suggest`; the screen for it comes in C12). Tesseract is a separate install: see [docs/INSTALL_TESSERACT.md](docs/INSTALL_TESSERACT.md). To read one line image and see its aksharas with their boxes:
 
 ```
 python -m letter_extractor.ocr out/lines/page1_L01.png            # script/Devanagari, one line

@@ -1,4 +1,5 @@
-"""Long tasks in the background (C5c): capture a book, add new pages, cut one page again.
+"""Long tasks in the background (C5c): capture a book, add new pages, cut one page again, export,
+read a book with Tesseract for label suggestions (C11).
 
 A job runs in a background thread of the app; the page work itself runs in worker processes, as in
 the CLI (pipeline.process_folder). The screen polls the job for progress and can cancel it: the
@@ -21,12 +22,12 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export
+    kind: str                                  # capture | add_pages | recut_page | export | suggest
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
     current: str = ""
-    pages: List[Dict] = field(default_factory=list)   # per page: file, status, message, seconds
+    pages: List[Dict] = field(default_factory=list)   # per page (per line for suggest): file, status, message, seconds
     result: Optional[Dict] = None
     error: str = ""
     started: float = field(default_factory=time.time)
@@ -64,7 +65,7 @@ class Jobs:
         pages expected, so the screen can show "0 of 12" before the first page is done."""
         with self._lock:
             if self.running_for(book_id):
-                raise LibraryError("A capture is already running for this book.")
+                raise LibraryError("Another job (capture, export or suggestions) is already running for this book.")
             job = Job(id=uuid.uuid4().hex[:12], book_id=book_id, kind=kind, total=total)
             self._jobs[job.id] = job
 
@@ -127,6 +128,22 @@ class Jobs:
         self.lib.get_book(book_id)
         return self.start(book_id, "export",
                           lambda progress, cancel: export_book(self.lib, book_id, folder, image))
+
+    def suggest(self, book_id: int, engine: str = "tesseract", tesseract_path: str = "") -> Job:
+        """Read every line of the book and store the readings; groups then carry suggestions (C11)."""
+        from sqlalchemy import func, select
+        from .db import Line, Page, Sample
+        from .suggest import run_tesseract, tesseract_reader
+        if engine != "tesseract":
+            raise LibraryError(f"Unknown reader '{engine}'.")
+        book = self.lib.get_book(book_id)
+        reader = tesseract_reader(self.lib.book_config(book), tesseract_path)   # fails now if Tesseract is missing
+        with self.lib.session() as s:
+            total = s.scalar(select(func.count(func.distinct(Line.id))).join(Page, Line.page_id == Page.id)
+                             .join(Sample, Sample.line_id == Line.id)
+                             .where(Page.book_id == book_id, Sample.deleted.is_(False))) or 0
+        return self.start(book_id, "suggest", lambda progress, cancel:
+                          run_tesseract(self.lib, book_id, progress, cancel, reader=reader), total=total)
 
     def _images(self, book_id: int):
         from pathlib import Path

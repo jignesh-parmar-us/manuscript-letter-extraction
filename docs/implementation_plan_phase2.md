@@ -4,7 +4,7 @@ Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, grou
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. **C11 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. **C12 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -67,7 +67,7 @@ src/letter_extractor/
 ├── app/
 │   ├── suggest.py        # label-suggestion jobs: Tesseract, other books, classifier          (C11, C13, C14)
 │   ├── texts.py          # converted text, proofreading edits                                  (C16b, C17)
-│   └── migrations/versions/0002_book_writing.py (C10), 0003_ocr_suggestions.py, 0004_models_dictionary.py,
+│   └── migrations/versions/0002_book_writing.py (C10), 0003_ocr_readings.py (C11), 0004_models_dictionary.py,
 │                           0005_page_sets.py (C16a), 0006_texts.py
 
 frontend/src/components/
@@ -108,11 +108,13 @@ Book            + convert_dir (the folder of the pages to convert; empty = none)
 Page            + folder (training | convert): which of the book's folders the file is in
                 + role (training | convert): how the page is used; it changes when a page is moved across
                 unique (book_id, folder, file) instead of (book_id, file); existing pages are training / training
-OcrRun          id, book_id, engine (tesseract | classifier | books), settings JSON, model_id?, started_at, finished_at, status
-OcrReading      id, run_id, sample_id, text_dev, confidence, alternatives JSON, box_overlap, matched (bool)
+OcrRun          id, book_id, engine (tesseract | books | classifier), settings JSON, result JSON (counts),
+                started_at, finished_at; only the newest run per book and engine is kept (C11).
+                C14 adds model_id.
+OcrReading      id, run_id, sample_id, text_dev (a valid label, NFC), confidence, alternatives JSON, overlap
                 one row per sample the run read; samples it could not match get no row
-LetterGroup     + suggested_dev, suggested_share, suggested_count, suggested_run_id, suggestion_state
-                  (none | open | accepted | rejected): the current suggestion of the group
+LetterGroup     + rejected_dev: the suggested label the user rejected (C11). Suggestions themselves are
+                  not stored: they are voted from the readings of the group's current samples when asked for
 Model           id, kind (letter-cnn), path, classes JSON, trained_on JSON (books, sample counts), accuracy, created_at
 WordList        id, name, source, words (count), enabled_books JSON
 PageText        id, page_id, version, text_dev, text_guj, letters JSON (sample id, text, confidence, source per letter),
@@ -123,6 +125,7 @@ Rules that carry over from Phase 1:
 - **A suggestion never sets a label by itself.** Only an accept by the user does, and then as a normal `set_label` action with undo.
 - **Labels stay canonical in Devanagari NFC.** OCR text is normalised to NFC before it is compared or stored.
 - **Raw results are kept** (`OcrReading`, the hOCR files), so a better alignment or voting rule can be re-run without running OCR again.
+- **Suggestions follow the groups:** they are voted live from the readings, so moving, merging or splitting samples changes them at once (C11).
 
 ---
 
@@ -176,53 +179,80 @@ Rules that carry over from Phase 1:
 
 ### C11. Matching OCR letters to our samples, and group suggestions
 
+**Status:** done (2026-10-05).
+
 **Goal:** a job that reads every line of a book with Tesseract, gives each cut sample its OCR akshara where the match is clear, and gives each group a suggested label by vote.
 
-**Files:** `ocr/align.py`, `app/suggest.py`, `app/migrations/versions/0003_ocr_suggestions.py`, additions to `app/db.py`, `app/jobs.py`, `app/api.py`, `app/schemas.py`, `tests/test_align.py`, `tests/test_suggest.py`.
+**Files:** `ocr/align.py`, `app/suggest.py`, `app/migrations/versions/0003_ocr_readings.py`, additions to `app/db.py`, `app/jobs.py`, `app/api.py`, `app/schemas.py`, `config.py`, `ocr/tesseract.py` (environment for parallel runs), `frontend/src/api.ts` (types only; the screen is C12); `tests/test_align.py`, `tests/test_suggest.py`, additions to `tests/test_api.py`, `tests/test_library.py`; `docs/TUNING_PHASE2.md`.
 
 **What it does:**
-- **Per line:** run C10 on the line image (`Line.image`). Keep the hOCR in `books/<book>/ocr/`. The job runs on any book; the screen offers it as the main action only on printed books (C12).
-- **Alignment** (`align.py`): match the line's OCR aksharas to its samples (not deleted, in reading order by x):
-  1. **By overlap:** an OCR akshara and a sample match when their x ranges overlap by at least 60% of the smaller one. C10 returns boxes in the line image's coordinates (border and scaling already undone); they are converted to page coordinates with the line's offset.
-  2. **By order, where boxes are unclear:** Tesseract's boxes for vowel signs and conjuncts are sometimes too narrow or empty. A dynamic-programming alignment (like a text diff) matches the two sequences by position. Its costs come from overlap, and it allows "skip OCR akshara" and "skip sample". This handles a sample that Tesseract read as two aksharas, or the other way round.
-  3. A match is kept only if **both** methods agree, or the overlap is at least 80%. Everything else is left unmatched, which is better than a wrong match.
-  4. **Whole lines are refused** when fewer than 50% of the samples match. That usually means Tesseract misread the line, or the line is not text.
-- **Readings:** one `OcrReading` per matched sample (text, confidence, alternatives, overlap).
-- **Group vote:** for each group, the readings of its samples are counted, weighted by confidence. The group gets a suggestion when:
-  - at least `suggest_min_votes` samples (3) were read;
-  - the winner has at least `suggest_min_share` (0.6) of the weighted votes.
+- **Per line:** run C10 on the line image (`Line.image`), several lines at once (one Tesseract process per core, each limited to one thread). The hOCR is kept in `books/<book>/ocr/<line image>.hocr`. The job runs on any book; the screen offers it as the main action only on printed books (C12).
+- **Alignment** (`ocr/align.py`), on x positions only, with the line's samples (not deleted, in reading order by x):
+  1. **Akshara spans:** the union of its characters' boxes, leaving out boxes wider than 2.5 × the line's median character width (Tesseract gives some vowel signs a box over a whole word). If the base letter's box was left out, the span starts where the previous akshara ends. An akshara with no usable box gets the gap between its neighbours. Spans are moved to page coordinates by the line image's x (`Line.x` − `line_margin_px`, at least 0).
+  2. **Dynamic programming** (like a text diff) aligns the two sequences with these steps: one akshara to one sample (cost 1 − overlap); 2 or 3 aksharas on one sample (a word that was not cut: its reading is the word); one akshara over 2 or 3 samples (a conjunct cut in two: no reading); skip an akshara or a sample (cost 0.5). For several items on one, each must lie inside the one.
+  3. **A match is kept** when its overlap is at least `align_sure_overlap` (0.8), or at least `align_min_overlap` (0.6) and the pair are also each other's best overlap. Everything else is left unmatched.
+  4. **Whole lines are refused** when fewer than `align_min_matched` (0.5) of the samples match.
+- **Readings:** one `OcrReading` per matched sample (text, confidence, alternatives per character, overlap). Only readings that are valid labels (`mapping.canonical_label`, words allowed) are stored; stray signs and other characters are counted and dropped. A new run replaces the book's previous Tesseract run. Nothing is stored when the job is cancelled.
+- **Group vote** (`suggest.group_readings`), live from the readings of the group's current samples, weighted by confidence. A group gets a suggestion when:
+  - it is unlabelled;
+  - at least `suggest_min_votes` (3) of its samples were read;
+  - the winner has at least `suggest_min_share` (0.6) of the weighted votes, with no tie;
+  - the winner is not the label the user rejected for this group (`rejected_dev`).
 
-  The suggestion is stored on the group (`suggested_dev`, share, count). A sample can also match several OCR aksharas in a row (a whole word that was not cut); its reading is then the word, so a word label can be suggested too. If another group already has the suggested label, the suggestion is shown as **"merge into gXXXX"**, because one label belongs to one group. **Labelled groups and groups with a rejected suggestion are skipped.** A new run replaces open suggestions only.
-- **Unsure samples:** each gets its own reading as a suggestion if its confidence is at least `suggest_min_confidence` (80). C10 found Tesseract's confidence about 95% even on misread handwriting, so this filter alone is weak: on handwritten books, unsure samples get no Tesseract suggestion unless C12's measurement shows they are right often enough.
-- **Job:** `POST /api/books/{id}/suggest {"engine": "tesseract"}`. It is cancellable, with progress per line, and one job per book as in Phase 1. Its result gives lines read, lines refused, samples matched, groups with a suggestion, and seconds.
+  If another group already has the suggested label, the suggestion carries `merge_into` (that group), because one label belongs to one group. Every group with readings also carries its **3 most common readings with counts**: a mixed group shows up as two strong readings.
+- **Unsure samples:** on **printed** books, each gets its own reading if its confidence is at least `suggest_min_confidence` (80). Handwritten books get none (C10: Tesseract's confidence stays high when it is wrong).
+- **API:**
+  - `POST /api/books/{id}/suggest {"engine": "tesseract"}`: a job (kind `suggest`), cancellable, progress per line, one job per book. It fails at once with the reason when Tesseract or the book's language is missing. Its result gives lines, lines read, refused and failed, samples, samples matched, readings that were not labels, groups with a suggestion, and seconds.
+  - `GET /api/tesseract[?book_id=]`: whether Tesseract runs with the book's languages, its version and languages, or the error (for the C12 button).
+  - every group carries `suggestion: {label_dev, label_guj, share, count, read, engine, merge_into}` or null, `readings: [{label_dev, label_guj, count}]` and `read`; unsure samples carry `reading`; the book carries `ocr_runs` (engine, time, result).
+  - The Tesseract path is the app setting `tesseract_path` in the user's settings file (empty: search).
 
-**Settings (per book, in `Config`):** `ocr_langs` ("script/Devanagari"), `ocr_psm` (7), `ocr_letter_height` (0 = as is), `suggest_min_votes` (3), `suggest_min_share` (0.6), `suggest_min_confidence` (80), `align_min_overlap` (0.6). The `tesseract_path` setting is per app, not per book.
+**Settings (per book, in `Config`):** `ocr_langs` ("script/Devanagari"), `ocr_psm` (7), `ocr_letter_height` (0 = as is), `align_min_overlap` (0.6), `align_sure_overlap` (0.8), `align_min_matched` (0.5), `suggest_min_votes` (3), `suggest_min_share` (0.6), `suggest_min_confidence` (80). The `tesseract_path` setting is per app, not per book.
 
 **Tests:**
-- Alignment on hand-made sequences: equal counts; OCR splitting one sample in two; OCR merging two samples; a missing akshara; empty boxes.
-- The vote, with a tie, too few votes, and a labelled group left untouched.
-- The job runs on the synthetic book with a fake Tesseract (a function that returns saved hOCR).
+- Alignment on hand-made sequences: equal counts, the line image's offset, OCR splitting one sample in two, OCR merging two samples, a missing akshara, an akshara without a box, an implausibly wide character box, an unclear overlap left unmatched, a refused line, confidence and alternatives.
+- The vote: a winner, too few votes, a tie, a share below the minimum, weighting by confidence.
+- The job on the synthetic book with a fake Tesseract (it "reads" each sample as a text the test chooses): every group gets its reading; hOCR kept per line; a new run replaces the old; cancelling stores nothing; readings that are not labels are dropped; progress per line.
+- Groups: a labelled group gets no suggestion but keeps its readings; `merge_into`; a rejected label is not suggested again; a mixed group shows both readings; votes follow moved samples; unsure readings on printed books only.
+- API: suggestions in the group list, one group, the book's `ocr_runs` and unsure samples; `/api/tesseract`; the real job when Tesseract is installed (skipped otherwise).
 - The migration upgrades a library at schema `0002`.
 
-**Output:** in the API, every group carries `suggestion: {label_dev, label_guj, share, count}`.
-**Done when:** on the printed book, at least 70% of the groups with 5 or more samples get a suggestion; the screen check is in C12.
+**Output:** in the API, every group carries `suggestion` and `readings`.
+
+**Measured** (`TUNING_PHASE2.md`, on a copy of the user's library): on the printed book with 27 labelled groups, 75% of the read samples match their label. 13 of the 27 groups would get a suggestion, **all 13 right**; the others get none. 74 to 75% of all samples get a reading; a 23-page book takes 2 minutes. **27 to 32% of the groups with 5 or more samples get a suggestion**, short of the planned 70%: most groups of this print are mixed (Phase 1 grouping puts ता and ना, नि and ने together), and the vote rightly refuses to suggest one label for them. The ा bar, which Phase 1 cuts off on its own or joins to the next letter, makes त / ता split the vote in the same way.
+
+**Done when:** the job runs on the printed books and the suggestions are measured against the user's labels. *Met, with the coverage target moved to C12 (see below).*
+
+**Changes from the original plan:**
+- **Suggestions are voted live, not stored on the group.** The plan stored `suggested_dev`, share, count, run and state on each group. Then every move, merge or split would have left stale suggestions. Now only the readings are stored, the vote runs when groups are listed (one query per book), and the group stores only the label the user rejected (`rejected_dev`). "Accepted" needs no state: the group then has a label. Migration `0003_ocr_readings`.
+- **Readings must be valid labels.** Tesseract's stray signs, Latin letters and punctuation are dropped before they are stored, so a suggestion can always be accepted as a label.
+- **Groups also return their most common readings**, so C12 can show mixed groups. The original plan had only the winner.
+- **Akshara spans leave out implausible character boxes** and start where the previous akshara ends when the base letter's box is unusable (measured: Tesseract gives vowel signs boxes over whole words).
+- **The match rule** is "overlap ≥ 0.8, or ≥ 0.6 and each other's best overlap" (the plan: "both methods agree, or overlap ≥ 80%"). Both new thresholds are settings (`align_sure_overlap`, `align_min_matched`).
+- **A vowel-bar rule was tried and removed:** dropping ा from a reading when the next sample is a narrow bar raised sample accuracy only from 75.4% to 75.8% (`TUNING_PHASE2.md`).
+- **Unsure samples get readings on printed books only** (the plan already said so for handwritten books; now it is in the code).
+- **Parallel reading:** several Tesseract processes, one thread each. The plan read lines one by one.
+- **The coverage target (70% of groups with ≥ 5 samples) moves to C12.** It depends on splitting mixed groups, which C12's screen does with the readings.
+- **The job is offered for any book** through the API; the screen decides what to show (C12).
 
 ### C12. Reviewing suggestions in the app, and measuring them
 
 **Goal:** the user sees each suggestion on its group and accepts, corrects or rejects it, one at a time or all above a threshold. The accuracy is measured, not guessed.
 
-**Files:** `frontend/src/screens/Suggestions.tsx` (+ test), additions to `GroupView.tsx`, `Review.tsx`, `SamplesView.tsx`, `api.ts`; additions to `app/actions.py` (`accept_suggestions`, `reject_suggestion`); `docs/TUNING_PHASE2.md`.
+**Files:** `frontend/src/screens/Suggestions.tsx` (+ test), additions to `GroupView.tsx`, `Review.tsx`, `SamplesView.tsx`, `api.ts`; additions to `app/actions.py` (`accept_suggestions`, `reject_suggestion`, which sets `LetterGroup.rejected_dev` as an undoable action), `app/api.py` (each sample's own reading in the group's sample list, for the badges); `docs/TUNING_PHASE2.md`.
 
 **What it does:**
 - **Review tab:**
-  - a **"Suggest labels"** button. Its default reader follows the book's writing: **printed** → Tesseract (the C11 job; disabled, with the reason, when Tesseract is missing); **handwritten** → other books (C13) or the classifier (C14) once they exist. Handwritten books also get **"Try Tesseract"** in the same place, with a note that it is measured to be less reliable on handwriting. Until C13 is built, that is the only reader a handwritten book has;
-  - a filter "Suggested" shows groups with an open suggestion, sorted by share, highest first.
+  - a **"Suggest labels"** button. Its default reader follows the book's writing: **printed** → Tesseract (the C11 job; disabled, with the reason from `GET /api/tesseract`, when Tesseract is missing); **handwritten** → other books (C13) or the classifier (C14) once they exist. Handwritten books also get **"Try Tesseract"** in the same place, with a note that it is measured to be less reliable on handwriting. Until C13 is built, that is the only reader a handwritten book has;
+  - a filter "Suggested" shows groups with a suggestion, sorted by share, highest first;
+  - a filter **"Mixed readings"** shows groups whose two most common readings are both strong (C11 found most unsuggested groups of the printed book are mixed: ता 29 + ना 25). Splitting them is how most groups get a suggestion.
 - **On a group:** a chip `क? 18 of 20 (90%)`, shown in Gujarati and Devanagari like labels:
   - **Accept** sets the label (the normal `set_label` action, undoable);
   - **Change** opens the label picker with the suggestion filled in;
-  - **Reject** keeps the group unlabelled and stops suggesting it.
+  - **Reject** keeps the group unlabelled and stops suggesting that label (`rejected_dev`, undoable);
+  - when the suggestion has `merge_into`, the chip offers **"Merge into gXXXX"** instead of Accept.
 - **Bulk:** **"Accept all with ≥ 90%"** (the threshold can be changed) accepts many suggestions as **one** undoable action, after a confirmation that shows how many groups it will label.
-- **Disagreeing samples:** in a group, samples whose own reading differs from the suggestion get a small badge with their reading (for example `ब` in a `व` group). Selecting them and pressing "New group" or "Move to unsure" splits the look-alikes that Phase 1 grouping merged. This uses the existing actions.
+- **Disagreeing samples:** in a group, samples whose own reading differs from the suggestion (or, without a suggestion, from the group's most common reading) get a small badge with their reading (for example `ब` in a `व` group). **"Select samples read as X"** selects them all, and "New group" or "Move to unsure" splits the look-alikes that Phase 1 grouping merged. This uses the existing actions; the new groups' suggestions appear at once (C11 votes live).
 - **Unsure tab:** samples with a confident reading show it, and "Accept" moves them into the group with that label, or creates one if none exists.
 - **Measuring** (written to `TUNING_PHASE2.md`): on the printed book, after the user's full review, compare suggestions with the final labels:
   - the share of correct suggestions, by share band (≥ 90%, 75 to 90%, 60 to 75%);
@@ -231,7 +261,9 @@ Rules that carry over from Phase 1:
 
   This sets the default bulk-accept threshold. The same is measured on the **handwritten** sample book with "Try Tesseract", to see whether group votes make Tesseract useful there. C10 measured about 30 to 35% wrong code points per handwritten line, so some common letters may still get right suggestions. If the share of correct handwritten suggestions at the threshold is 90% or more, "Try Tesseract" stays offered for handwritten books; otherwise it is hidden behind the settings.
 
-**Done when:** the printed book can be labelled mostly through suggestions, and the measured accuracy at the default threshold is at least 95%. If it is lower, the threshold is raised until it is, and the figure is recorded.
+**Done when:**
+- the printed book can be labelled mostly through suggestions, and the measured accuracy at the default threshold is at least 95%. If it is lower, the threshold is raised until it is, and the figure is recorded;
+- after the mixed groups of the printed book are split with the help of the readings, at least 70% of the groups with 5 or more samples get a suggestion (moved here from C11, where 27 to 32% did before splitting).
 **C7 addition:** none. **C8:** screen tests run as before.
 
 ### Part B: suggestions for handwriting
@@ -433,8 +465,8 @@ Rules that carry over from Phase 1:
 | # | Chunk | Status | Main output | Requirements |
 |---|---|---|---|---|
 | C10 | Tesseract engine, akshara splitting, book writing | done | OCR of a line as aksharas with boxes; handwritten / printed per book | FR-7 |
-| C11 | Matching OCR to samples, group suggestions | **next** | suggestions on groups and unsure samples | FR-7 |
-| C12 | Reviewing suggestions, measuring | planned | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
+| C11 | Matching OCR to samples, group suggestions | done | suggestions on groups and unsure samples | FR-7 |
+| C12 | Reviewing suggestions, measuring | **next** | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
 | C13 | Suggestions from other labelled books | planned | handwriting suggestions, no training | FR-7 |
 | C14 | Letter classifier | planned | `model.onnx`, per-class accuracy report | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
@@ -457,6 +489,8 @@ All in the same `Config` dataclass, per book, except where noted.
 | `ocr_psm` | C10 (used from C11) | 7 (one text line) |
 | `ocr_letter_height` | C10 (used from C11) | 0 = as is (measured in C10) |
 | `align_min_overlap` | C11 | 0.6 |
+| `align_sure_overlap` | C11 | 0.8 |
+| `align_min_matched` | C11 | 0.5 (share of a line's samples) |
 | `suggest_min_votes` | C11 | 3 |
 | `suggest_min_share` | C11 | 0.6 |
 | `suggest_min_confidence` | C11 | 80 (Tesseract scale 0 to 100) |
@@ -503,7 +537,8 @@ All in the same `Config` dataclass, per book, except where noted.
 
 | Risk | Mitigation |
 |---|---|
-| Tesseract's character boxes are wrong for vowel signs and conjuncts | Alignment uses boxes **and** order, keeps only matches where they agree, and refuses unclear lines (C11). Raw hOCR is kept, so the rules can be improved without re-running OCR. |
+| Tesseract's character boxes are wrong for vowel signs and conjuncts | Alignment uses boxes **and** order, leaves out implausible boxes, keeps only clear matches, and refuses unclear lines (C11). Raw hOCR is kept, so the rules can be improved without re-running OCR. |
+| Phase 1 groups mix different letters on print, so few groups get a suggestion (C11: 27 to 32%) | Groups show their most common readings; C12 adds a "Mixed readings" filter and "select samples read as X" to split them, after which the parts get suggestions at once. |
 | Tesseract splits text into aksharas differently from our cutting | Our own akshara rules match Phase 1 cutting; mismatches are handled by the alignment's split / merge steps. |
 | Old typefaces (old अ, ण, श forms) are misread | Suggestions are voted per group, so single misreads are outvoted. Nothing is labelled without the user. Languages were compared in C10 (`script/Devanagari`). |
 | Tesseract is run on handwriting and its suggestions look sure but are wrong (its confidence is about 95% even there, C10) | Books say whether they are handwritten; Tesseract is the default only for printed books. On handwritten books it is a "Try" that C12 measures, and its share threshold comes from that measurement. |

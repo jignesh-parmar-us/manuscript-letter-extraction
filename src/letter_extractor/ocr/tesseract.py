@@ -16,7 +16,7 @@ import tempfile
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -82,10 +82,11 @@ class LineReading:
         return [c for w in self.words for c in w.chars]
 
 
-def _run(args: Sequence[str], timeout: float) -> subprocess.CompletedProcess:
+def _run(args: Sequence[str], timeout: float, env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess:
     # no console window per call on Windows
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    return subprocess.run(list(args), capture_output=True, timeout=timeout, creationflags=flags)
+    full_env = {**os.environ, **env} if env else None
+    return subprocess.run(list(args), capture_output=True, timeout=timeout, creationflags=flags, env=full_env)
 
 
 def find_tesseract(setting: str = "") -> Engine:
@@ -258,8 +259,10 @@ def map_boxes(words: List[Word], scale: float, border: int) -> List[Word]:
 
 # ---- reading a line ---------------------------------------------------------------------------
 
-def run_hocr(engine: Engine, image: np.ndarray, langs: str, psm: int, timeout: float = 60) -> str:
-    """hOCR of one prepared image. The PNG goes through Pillow (Unicode-safe temporary path)."""
+def run_hocr(engine: Engine, image: np.ndarray, langs: str, psm: int, timeout: float = 60,
+             env: Optional[Dict[str, str]] = None) -> str:
+    """hOCR of one prepared image. The PNG goes through Pillow (Unicode-safe temporary path).
+    `env` adds environment variables, for example OMP_THREAD_LIMIT=1 when several run at once."""
     engine.check_langs(langs)
     fd, tmp = tempfile.mkstemp(suffix=".png", prefix="ocr-")
     os.close(fd)
@@ -268,7 +271,7 @@ def run_hocr(engine: Engine, image: np.ndarray, langs: str, psm: int, timeout: f
         args = [engine.path, tmp, "-", "-l", langs, "--psm", str(psm),
                 "-c", "hocr_char_boxes=1", "-c", "lstm_choice_mode=2", "hocr"]
         try:
-            r = _run(args, timeout)
+            r = _run(args, timeout, env)
         except subprocess.TimeoutExpired as e:
             raise TesseractError(f"Tesseract took longer than {timeout:.0f} s on one line.") from e
         except OSError as e:
@@ -286,10 +289,10 @@ def run_hocr(engine: Engine, image: np.ndarray, langs: str, psm: int, timeout: f
 
 def read_line(rgb: np.ndarray, engine: Engine, langs: str = "script/Devanagari", psm: int = 7,
               target_height: int = 0, border: int = 10, ink: Optional[np.ndarray] = None,
-              timeout: float = 60) -> LineReading:
+              timeout: float = 60, env: Optional[Dict[str, str]] = None) -> LineReading:
     """Read one line image. Boxes in the result are in `rgb`'s coordinates."""
     img, scale = prepare_line(rgb, target_height, border, ink)
-    hocr = run_hocr(engine, img, langs, psm, timeout)
+    hocr = run_hocr(engine, img, langs, psm, timeout, env)
     return LineReading(words=map_boxes(parse_hocr(hocr), scale, border), hocr=hocr, scale=scale)
 
 

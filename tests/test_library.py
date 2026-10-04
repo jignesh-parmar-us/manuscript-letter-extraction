@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import synthetic                                                    # noqa: E402
-from letter_extractor.app.db import Action, Base, Book, LetterGroup, Line, Page, Sample   # noqa: E402
+from letter_extractor.app.db import Action, Base, Book, LetterGroup, Line, OcrRun, Page, Sample   # noqa: E402
 from letter_extractor.app.library import (BookHasReviewError, Library, LibraryError,       # noqa: E402
                                           file_sha256)
 from letter_extractor.config import Config                          # noqa: E402
@@ -72,6 +72,23 @@ class SchemaTests(LibraryTestCase):
         self.lib.close()
         self.lib = Library(self.tmp / "My Library")
         self.assertEqual([(b["name"], b["writing"]) for b in self.lib.list_books()], [("Old", "handwritten")])
+
+    def test_upgrade_from_schema_0002(self):
+        """A library from C10 (schema 0002) opens with the OCR tables (C11) and keeps its data."""
+        from alembic import command
+        from alembic.config import Config as AlembicConfig
+        from letter_extractor.app.library import MIGRATIONS
+        self.lib.create_book("Old", self.inp, writing="printed")
+        cfg = AlembicConfig()
+        cfg.set_main_option("script_location", str(MIGRATIONS))
+        with self.lib.engine.begin() as connection:
+            cfg.attributes["connection"] = connection
+            command.downgrade(cfg, "0002")
+        self.lib.close()
+        self.lib = Library(self.tmp / "My Library")
+        self.assertEqual([(b["name"], b["writing"]) for b in self.lib.list_books()], [("Old", "printed")])
+        with self.lib.session() as s:
+            self.assertEqual(s.scalars(select(OcrRun)).all(), [])
 
     def test_times_are_utc(self):
         book = self.lib.create_book("A", self.inp)

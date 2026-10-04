@@ -108,6 +108,17 @@ class Config:
                                           # or "fixed64" (normalized, 64 x 64)
     min_samples_warn: int = 10            # classes with fewer samples are highlighted in overview.html
 
+    # ---- label suggestions (Phase 2: C10, C11; measured in docs/TUNING_PHASE2.md) ---------------
+    ocr_langs: str = "script/Devanagari"  # Tesseract language models, joined by +
+    ocr_psm: int = 7                      # Tesseract page segmentation mode: 7 = one text line
+    ocr_letter_height: int = 0            # letter-body height Tesseract gets, px; 0 = the line image as it is
+    align_min_overlap: float = 0.6        # an OCR akshara and a sample match from this x overlap...
+    align_sure_overlap: float = 0.8       # ...if they are also each other's best match, or from this one
+    align_min_matched: float = 0.5        # a line where fewer of its samples match is not used
+    suggest_min_votes: int = 3            # a group needs this many read samples for a suggestion...
+    suggest_min_share: float = 0.6        # ...and the winning reading this share of the weighted votes
+    suggest_min_confidence: float = 80.0  # an unsure sample shows its own reading from this confidence
+
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
     red: InkParams = field(default_factory=lambda: InkParams(

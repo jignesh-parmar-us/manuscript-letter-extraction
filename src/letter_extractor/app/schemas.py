@@ -55,6 +55,10 @@ class LibraryChoice(BaseModel):
     path: str
 
 
+class SuggestRequest(BaseModel):
+    engine: Literal["tesseract"] = "tesseract"    # other books and the classifier follow (C13, C14)
+
+
 class BookSettings(BaseModel):
     settings: Optional[Dict[str, Any]] = None     # overrides of the default Config; None: defaults
 

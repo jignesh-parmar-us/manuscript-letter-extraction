@@ -93,6 +93,7 @@ export interface Book extends BookSummary {
   undo: number;
   redo: number;
   job: Job | null;
+  ocr_runs?: { engine: string; finished_at: string | null; result: Record<string, number> }[]; // C11
 }
 
 export interface JobPage {
@@ -105,7 +106,7 @@ export interface JobPage {
 export interface Job {
   id: string;
   book_id: number;
-  kind: "capture" | "add_pages" | "recut_page" | "export";
+  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -148,6 +149,26 @@ export interface Group {
   example_id: number | null;
   example_image: string | null;
   updated_at: string | null;
+  suggestion: LabelSuggestion | null; // voted from the samples' OCR readings (C11)
+  readings: Reading[]; // the 3 most common OCR readings of its samples; two strong ones = a mixed group
+  read: number; // samples with an OCR reading
+}
+
+/** A label suggested for a group by a reader (C11: Tesseract). Accepting it is a normal label action. */
+export interface LabelSuggestion {
+  label_dev: string;
+  label_guj: string;
+  share: number; // weighted share of the winning reading, 0 to 1
+  count: number; // samples read as it
+  read: number; // samples read
+  engine: "tesseract";
+  merge_into: { id: number; code: string } | null; // another group already has this label
+}
+
+export interface Reading {
+  label_dev: string;
+  label_guj: string;
+  count: number;
 }
 
 export interface Suggestion {
@@ -174,6 +195,7 @@ export interface Sample {
   rules: string;
   image: string;
   suggestion?: Suggestion | null;
+  reading?: { label_dev: string; label_guj: string; confidence: number; engine: "tesseract" } | null; // C11
 }
 
 export interface SamplePage {
@@ -260,6 +282,7 @@ export const api = {
     post<Book>("/api/books", { name, input_dir, writing }),
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
   setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
+  suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),
   setSettings: (id: number, settings: Record<string, unknown> | null) =>
     patch<Book>(`/api/books/${id}/settings`, { settings }),
