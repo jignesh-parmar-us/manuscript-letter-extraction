@@ -7,11 +7,12 @@ import Capture from "./Capture";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), capture: vi.fn(), addPages: vi.fn(),
-    recutPage: vi.fn(), job: vi.fn(), cancelJob: vi.fn(), setSettings: vi.fn() } };
+    recutPage: vi.fn(), job: vi.fn(), cancelJob: vi.fn(), setSettings: vi.fn(), setWriting: vi.fn() } };
 });
 
 const book: Book = {
-  id: 1, name: "B", input_dir: "/pages", pages: 0, samples: 0, groups: 0, labelled: 0, unsure: 0,
+  id: 1, name: "B", input_dir: "/pages", writing: "handwritten",
+  pages: 0, samples: 0, groups: 0, labelled: 0, unsure: 0,
   created_at: null, updated_at: null, captured_at: null, settings: { group_distance: 0.55 }, undo: 0, redo: 0, job: null,
 };
 const job = (over: Partial<Job>): Job => ({
@@ -53,6 +54,16 @@ describe("Capture", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent("The book has labels. Capture anyway?");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(api.capture).toHaveBeenLastCalledWith(1, true);
+  });
+
+  it("changes how the book is written", async () => {
+    const onChanged = vi.fn();
+    vi.mocked(api.setWriting).mockResolvedValue({ ...book, writing: "printed" });
+    render(<Capture book={book} info={null} onChanged={onChanged} />);
+    expect(screen.getByRole("radio", { name: /Handwritten/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: /Printed/ }));
+    expect(api.setWriting).toHaveBeenCalledWith(1, "printed");
+    expect(onChanged).toHaveBeenCalled();
   });
 
   it("shows new pages and adds them", async () => {

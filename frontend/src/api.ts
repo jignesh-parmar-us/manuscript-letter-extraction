@@ -67,10 +67,17 @@ export interface AppInfo {
   can_pick_folder: boolean;
 }
 
+/** How a book is written. Printed books can be read by Tesseract to suggest labels (Phase 2);
+ *  handwritten books learn from the books already labelled. */
+export type Writing = "handwritten" | "printed";
+
+export const WRITING_LABEL: Record<Writing, string> = { handwritten: "Handwritten", printed: "Printed" };
+
 export interface BookSummary {
   id: number;
   name: string;
   input_dir: string;
+  writing: Writing;
   pages: number;
   samples: number;
   groups: number;
@@ -249,8 +256,10 @@ export const api = {
 
   books: () => get<BookSummary[]>("/api/books"),
   book: (id: number) => get<Book>(`/api/books/${id}`),
-  createBook: (name: string, input_dir: string) => post<Book>("/api/books", { name, input_dir }),
+  createBook: (name: string, input_dir: string, writing: Writing) =>
+    post<Book>("/api/books", { name, input_dir, writing }),
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
+  setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),
   setSettings: (id: number, settings: Record<string, unknown> | null) =>
     patch<Book>(`/api/books/${id}/settings`, { settings }),

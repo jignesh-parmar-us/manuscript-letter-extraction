@@ -58,6 +58,21 @@ class SchemaTests(LibraryTestCase):
         self.lib = Library(self.tmp / "My Library")
         self.assertEqual([b["name"] for b in self.lib.list_books()], ["A"])
 
+    def test_upgrade_from_the_first_schema(self):
+        """A Phase 1 library (schema 0001) opens, and its books become handwritten."""
+        from alembic import command
+        from alembic.config import Config as AlembicConfig
+        from letter_extractor.app.library import MIGRATIONS
+        self.lib.create_book("Old", self.inp)
+        cfg = AlembicConfig()
+        cfg.set_main_option("script_location", str(MIGRATIONS))
+        with self.lib.engine.begin() as connection:
+            cfg.attributes["connection"] = connection
+            command.downgrade(cfg, "0001")
+        self.lib.close()
+        self.lib = Library(self.tmp / "My Library")
+        self.assertEqual([(b["name"], b["writing"]) for b in self.lib.list_books()], [("Old", "handwritten")])
+
     def test_times_are_utc(self):
         book = self.lib.create_book("A", self.inp)
         self.assertEqual(self.lib.get_book(book.id).created_at.tzinfo, timezone.utc)
@@ -76,6 +91,16 @@ class BookTests(LibraryTestCase):
         self.assertFalse(folder.exists())
         self.assertEqual([x["name"] for x in self.lib.list_books()], ["Book A2"])
         self.assertTrue(self.inp.is_dir(), "the input folder is never deleted")
+
+    def test_writing(self):
+        a = self.lib.create_book("Printed", self.inp, writing="printed")
+        self.assertEqual(self.lib.get_book(a.id).writing, "printed")
+        self.lib.set_book_writing(a.id, "handwritten")
+        self.assertEqual(self.lib.get_book(a.id).writing, "handwritten")
+        with self.assertRaises(LibraryError):
+            self.lib.set_book_writing(a.id, "typed")
+        with self.assertRaises(LibraryError):
+            self.lib.create_book("Bad", self.inp, writing="typed")
 
     def test_bad_input(self):
         with self.assertRaises(LibraryError):

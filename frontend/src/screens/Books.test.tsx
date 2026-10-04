@@ -11,7 +11,8 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: BookSummary = {
-  id: 1, name: "Vachanamrut", input_dir: "/pages", pages: 2, samples: 854, groups: 54, labelled: 27, unsure: 236,
+  id: 1, name: "Vachanamrut", input_dir: "/pages", writing: "handwritten",
+  pages: 2, samples: 854, groups: 54, labelled: 27, unsure: 236,
   created_at: null, updated_at: "2026-10-04T09:00:00+00:00", captured_at: null,
 };
 const info: AppInfo = { version: "0.1.0", library: "/lib", mode: "browser", can_pick_folder: false };
@@ -35,8 +36,18 @@ describe("Books", () => {
     await userEvent.type(screen.getByPlaceholderText(/Vachanamrut, part 1/), "New book");
     await userEvent.type(screen.getByPlaceholderText("/path/to/the/page/images"), "/pages");
     await userEvent.click(screen.getByRole("button", { name: "Create book" }));
-    expect(api.createBook).toHaveBeenCalledWith("New book", "/pages");
+    expect(api.createBook).toHaveBeenCalledWith("New book", "/pages", "handwritten");
     await waitFor(() => expect(window.location.hash).toBe("#/books/7"));
+  });
+
+  it("creates a printed book", async () => {
+    vi.mocked(api.createBook).mockResolvedValue({ ...book, id: 8, writing: "printed", settings: {}, undo: 0, redo: 0, job: null });
+    render(<Books info={info} onLibraryChanged={() => {}} />);
+    await userEvent.type(screen.getByPlaceholderText(/Vachanamrut, part 1/), "Printed book");
+    await userEvent.type(screen.getByPlaceholderText("/path/to/the/page/images"), "/pages");
+    await userEvent.click(screen.getByRole("radio", { name: /Printed/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Create book" }));
+    expect(api.createBook).toHaveBeenCalledWith("Printed book", "/pages", "printed");
   });
 
   it("asks before deleting", async () => {

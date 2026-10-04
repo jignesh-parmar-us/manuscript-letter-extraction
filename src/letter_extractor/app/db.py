@@ -50,6 +50,7 @@ class Book(Base):
     folder: Mapped[str] = mapped_column(String(200), unique=True)    # books/<folder> in the library
     input_dir: Mapped[str] = mapped_column(Text)
     settings: Mapped[str] = mapped_column(Text, default="{}")         # Config as JSON
+    writing: Mapped[str] = mapped_column(String(12), default="handwritten")   # handwritten | printed (C10)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now, onupdate=now)
     captured_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)

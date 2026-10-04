@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+ <head>
+  <title></title>
+  <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+  <meta name='ocr-system' content='tesseract 5.5.3' />
+  <meta name='ocr-capabilities' content='ocr_page ocr_carea ocr_par ocr_line ocrx_word ocrp_dir ocrp_lang ocrp_wconf'/>
+ </head>
+ <body>
+  <div class='ocr_page' id='page_1' title='image "/var/folders/jr/c3486b3s5hv1wpsyd4n3lcqm0000gn/T/ocr-w2ppcili.png"; bbox 0 0 2832 167; ppageno 0; scan_res 300 300'>
+   <div class='ocr_carea' id='block_1_1' title="bbox 10 10 2817 157">
+    <p class='ocr_par' id='par_1_1' lang='script/Devanagari' title="bbox 10 10 2817 157">
+     <span class='ocr_line' id='line_1_1' title="bbox 10 10 2817 157; baseline 0.016 1; x_size 183; x_descenders 35; x_ascenders 49">
+      <span class='ocrx_word' id='word_1_1' title='bbox 10 10 1590 157; x_wconf 0'>
+       <span class='ocrx_cinfo' title='x_bboxes 10 10 14 157; x_conf 98.814728'>द</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_1'>
+         <span class='ocrx_cinfo' id='choice_1_1_1' title='x_confs 95.563377'>द</span>
+         <span class='ocrx_cinfo' id='choice_1_1_2' title='x_confs 33.061584'>ढ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_3' title='x_confs 31.316519'>ठ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_4' title='x_confs 30.986782'>ट</span>
+         <span class='ocrx_cinfo' id='choice_1_1_5' title='x_confs 26.746544'>ह</span>
+         <span class='ocrx_cinfo' id='choice_1_1_6' title='x_confs 10.617008'>ब</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 16 39 97 154; x_conf 98.133011'>ू</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_2'>
+         <span class='ocrx_cinfo' id='choice_1_1_7' title='x_confs 95.408722'>ू</span>
+         <span class='ocrx_cinfo' id='choice_1_1_8' title='x_confs 49.096722'>ु</span>
+         <span class='ocrx_cinfo' id='choice_1_1_9' title='x_confs 39.109898'>ृ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_10' title='x_confs 17.262888'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_1_11' title='x_confs 9.2995262'>्</span>
+         <span class='ocrx_cinfo' id='choice_1_1_12' title='x_confs 0'>द</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 79 10 100 157; x_conf 98.838646'>स</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_3'>
+         <span class='ocrx_cinfo' id='choice_1_1_13' title='x_confs 97.847954'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_1_14' title='x_confs 23.534676'>स्‍</span>
+         <span class='ocrx_cinfo' id='choice_1_1_15' title='x_confs 17.694654'>म</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 68 40 169 116; x_conf 97.303078'>्</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_4'>
+         <span class='ocrx_cinfo' id='choice_1_1_16' title='x_confs 91.806267'>्</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 131 10 163 157; x_conf 98.462654'>त</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_5'>
+         <span class='ocrx_cinfo' id='choice_1_1_17' title='x_confs 95.647758'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_1_18' title='x_confs 58.2169'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_1_19' title='x_confs 44.725456'>ल</span>
+         <span class='ocrx_cinfo' id='choice_1_1_20' title='x_confs 14.780998'>्</span>
+         <span class='ocrx_cinfo' id='choice_1_1_21' title='x_confs 14.458847'>न</span>
+         <span class='ocrx_cinfo' id='choice_1_1_22' title='x_confs 14.307241'>क</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 162 10 194 157; x_conf 97.629196'>स</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_6'>
+         <span class='ocrx_cinfo' id='choice_1_1_23' title='x_confs 92.977196'>स</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 167 14 266 113; x_conf 96.665863'>्</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_7'>
+         <span class='ocrx_cinfo' id='choice_1_1_24' title='x_confs 89.383865'>्</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 225 10 257 157; x_conf 90.525902'>म</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_8'>
+         <span class='ocrx_cinfo' id='choice_1_1_25' title='x_confs 86.389038'>म</span>
+         <span class='ocrx_cinfo' id='choice_1_1_26' title='x_confs 73.226341'>भ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_27' title='x_confs 68.212013'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_1_28' title='x_confs 58.923283'>य</span>
+         <span class='ocrx_cinfo' id='choice_1_1_29' title='x_confs 57.663689'>थ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_30' title='x_confs 57.37183'>ल</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 256 10 288 157; x_conf 98.528938'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_9'>
+         <span class='ocrx_cinfo' id='choice_1_1_31' title='x_confs 95.515747'>े</span>
+         <span class='ocrx_cinfo' id='choice_1_1_32' title='x_confs 45.93399'>ै</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 265 14 367 157; x_conf 98.66021'>श</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_10'>
+         <span class='ocrx_cinfo' id='choice_1_1_33' title='x_confs 96.293716'>श</span>
+         <span class='ocrx_cinfo' id='choice_1_1_34' title='x_confs 42.570606'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_1_35' title='x_confs 33.558014'>न</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 319 10 351 157; x_conf 98.856201'>्</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_11'>
+         <span class='ocrx_cinfo' id='choice_1_1_36' title='x_confs 94.429008'>्</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 350 10 372 157; x_conf 98.296005'>र</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_12'>
+         <span class='ocrx_cinfo' id='choice_1_1_37' title='x_confs 97.276382'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_1_38' title='x_confs 60.483608'>न</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 381 129 395 139; x_conf 99.013832'>ी</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_13'>
+         <span class='ocrx_cinfo' id='choice_1_1_39' title='x_confs 94.960869'>ी</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 367 40 477 153; x_conf 97.676216'>ह</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_14'>
+         <span class='ocrx_cinfo' id='choice_1_1_40' title='x_confs 96.577774'>ह</span>
+         <span class='ocrx_cinfo' id='choice_1_1_41' title='x_confs 68.316948'>द</span>
+         <span class='ocrx_cinfo' id='choice_1_1_42' title='x_confs 46.557888'>ट</span>
+         <span class='ocrx_cinfo' id='choice_1_1_43' title='x_confs 42.298275'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_1_44' title='x_confs 36.2616'>्</span>
+         <span class='ocrx_cinfo' id='choice_1_1_45' title='x_confs 35.827145'>ढ</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 423 10 445 157; x_conf 91.649666'>्</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_15'>
+         <span class='ocrx_cinfo' id='choice_1_1_46' title='x_confs 90.551865'>्</span>
+         <span class='ocrx_cinfo' id='choice_1_1_47' title='x_confs 88.894485'>द</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 444 10 476 157; x_conf 99.035172'>र</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_16'>
+         <span class='ocrx_cinfo' id='choice_1_1_48' title='x_confs 92.281593'>र</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 466 16 537 111; x_conf 98.97422'>य</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_17'>
+         <span class='ocrx_cinfo' id='choice_1_1_49' title='x_confs 95.942932'>य</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 517 10 549 157; x_conf 99.037735'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_18'>
+         <span class='ocrx_cinfo' id='choice_1_1_50' title='x_confs 93.172791'>े</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 548 10 591 157; x_conf 96.676651'>न</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_19'>
+         <span class='ocrx_cinfo' id='choice_1_1_51' title='x_confs 92.993553'>न</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 536 19 677 111; x_conf 98.067307'>म</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_20'>
+         <span class='ocrx_cinfo' id='choice_1_1_52' title='x_confs 93.775131'>म</span>
+         <span class='ocrx_cinfo' id='choice_1_1_53' title='x_confs 33.412422'>स</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 638 10 665 13; x_conf 98.967575'>ो</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_21'>
+         <span class='ocrx_cinfo' id='choice_1_1_54' title='x_confs 91.073853'>ो</span>
+         <span class='ocrx_cinfo' id='choice_1_1_55' title='x_confs 22.845367'>ी</span>
+         <span class='ocrx_cinfo' id='choice_1_1_56' title='x_confs 19.554424'>ौ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_57' title='x_confs 7.3067474'>ा</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 663 10 706 157; x_conf 98.97493'>स</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_22'>
+         <span class='ocrx_cinfo' id='choice_1_1_58' title='x_confs 95.813194'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_1_59' title='x_confs 12.345753'>स्‍</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 678 41 772 125; x_conf 98.991119'>्</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_23'>
+         <span class='ocrx_cinfo' id='choice_1_1_60' title='x_confs 94.304413'>्</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 736 10 779 157; x_conf 96.558578'>त</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_24'>
+         <span class='ocrx_cinfo' id='choice_1_1_61' title='x_confs 89.954796'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_1_62' title='x_confs 69.593102'>व</span>
+         <span class='ocrx_cinfo' id='choice_1_1_63' title='x_confs 39.341198'>द</span>
+         <span class='ocrx_cinfo' id='choice_1_1_64' title='x_confs 37.3778'>ठ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_65' title='x_confs 31.852364'>ल</span>
+         <span class='ocrx_cinfo' id='choice_1_1_66' title='x_confs 17.084627'>क</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 778 10 831 157; x_conf 96.537514'>स</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_25'>
+         <span class='ocrx_cinfo' id='choice_1_1_67' title='x_confs 93.891037'>स</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 871 34 883 37; x_conf 92.333641'>र</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_26'>
+         <span class='ocrx_cinfo' id='choice_1_1_68' title='x_confs 78.448456'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_1_69' title='x_confs 64.627136'>द</span>
+         <span class='ocrx_cinfo' id='choice_1_1_70' title='x_confs 60.992653'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_1_71' title='x_confs 53.296082'>्</span>
+         <span class='ocrx_cinfo' id='choice_1_1_72' title='x_confs 51.563473'>स</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 767 39 1046 132; x_conf 85.565117'>त</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_27'>
+         <span class='ocrx_cinfo' id='choice_1_1_73' title='x_confs 71.415955'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_1_74' title='x_confs 63.841042'>न</span>
+         <span class='ocrx_cinfo' id='choice_1_1_75' title='x_confs 32.181496'>ल</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 934 10 977 157; x_conf 98.937286'>ा</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_28'>
+         <span class='ocrx_cinfo' id='choice_1_1_76' title='x_confs 88.700752'>ा</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1000 28 1022 116; x_conf 99.008156'>न</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_29'>
+         <span class='ocrx_cinfo' id='choice_1_1_77' title='x_confs 92.351601'>न</span>
+         <span class='ocrx_cinfo' id='choice_1_1_78' title='x_confs 0'>त</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1018 10 1061 157; x_conf 94.409653'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_30'>
+         <span class='ocrx_cinfo' id='choice_1_1_79' title='x_confs 90.238358'>े</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1044 45 1121 125; x_conf 98.98642'>द</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_31'>
+         <span class='ocrx_cinfo' id='choice_1_1_80' title='x_confs 92.639809'>द</span>
+         <span class='ocrx_cinfo' id='choice_1_1_81' title='x_confs 0'>व</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1091 10 1134 157; x_conf 99.028549'>ा</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_32'>
+         <span class='ocrx_cinfo' id='choice_1_1_82' title='x_confs 94.015892'>ा</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1118 45 1185 110; x_conf 98.831841'>य</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_33'>
+         <span class='ocrx_cinfo' id='choice_1_1_83' title='x_confs 94.454803'>य</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1188 44 1251 115; x_conf 92.104698'>स</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_34'>
+         <span class='ocrx_cinfo' id='choice_1_1_84' title='x_confs 86.104095'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_1_85' title='x_confs 64.202721'>प</span>
+         <span class='ocrx_cinfo' id='choice_1_1_86' title='x_confs 63.610611'>त</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1253 45 1332 133; x_conf 94.630699'>घ</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_35'>
+         <span class='ocrx_cinfo' id='choice_1_1_87' title='x_confs 79.496948'>घ</span>
+         <span class='ocrx_cinfo' id='choice_1_1_88' title='x_confs 54.666382'>ध</span>
+         <span class='ocrx_cinfo' id='choice_1_1_89' title='x_confs 38.950005'>ष</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1325 21 1408 114; x_conf 91.500328'>ण</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_36'>
+         <span class='ocrx_cinfo' id='choice_1_1_90' title='x_confs 79.170181'>ण</span>
+         <span class='ocrx_cinfo' id='choice_1_1_91' title='x_confs 57.730934'>श</span>
+         <span class='ocrx_cinfo' id='choice_1_1_92' title='x_confs 0'>ष</span>
+         <span class='ocrx_cinfo' id='choice_1_1_93' title='x_confs 0'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_1_94' title='x_confs 0'>्</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1383 10 1426 157; x_conf 97.206703'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_37'>
+         <span class='ocrx_cinfo' id='choice_1_1_95' title='x_confs 93.437386'>े</span>
+         <span class='ocrx_cinfo' id='choice_1_1_96' title='x_confs 57.866714'>ै</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1408 17 1470 116; x_conf 99.021011'>न</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_38'>
+         <span class='ocrx_cinfo' id='choice_1_1_97' title='x_confs 94.9757'>न</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1476 49 1495 113; x_conf 98.004059'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_39'>
+         <span class='ocrx_cinfo' id='choice_1_1_98' title='x_confs 93.636406'>े</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1502 46 1520 116; x_conf 97.136162'>॥</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_40'>
+         <span class='ocrx_cinfo' id='choice_1_1_99' title='x_confs 92.53334'>॥</span>
+         <span class='ocrx_cinfo' id='choice_1_1_100' title='x_confs 72.564934'>।</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1522 45 1562 125; x_conf 96.832794'>१</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_41'>
+         <span class='ocrx_cinfo' id='choice_1_1_101' title='x_confs 93.593483'>१</span>
+         <span class='ocrx_cinfo' id='choice_1_1_102' title='x_confs 59.644897'>९</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1571 48 1590 114; x_conf 98.849518'>॥</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_1_42'>
+         <span class='ocrx_cinfo' id='choice_1_1_103' title='x_confs 92.290451'>॥</span>
+         <span class='ocrx_cinfo' id='choice_1_1_104' title='x_confs 23.662157'>।</span>
+        </span>
+      </span>
+      <span class='ocrx_word' id='word_1_2' title='bbox 1626 10 2817 141; x_wconf 15'>
+       <span class='ocrx_cinfo' title='x_bboxes 1626 42 1628 129; x_conf 92.713684'>ज</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_1'>
+         <span class='ocrx_cinfo' id='choice_1_2_1' title='x_confs 88.629196'>ज</span>
+         <span class='ocrx_cinfo' id='choice_1_2_2' title='x_confs 75.256126'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_2_3' title='x_confs 65.220169'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_2_4' title='x_confs 63.932919'>न</span>
+         <span class='ocrx_cinfo' id='choice_1_2_5' title='x_confs 49.645802'>ल</span>
+         <span class='ocrx_cinfo' id='choice_1_2_6' title='x_confs 46.45314'>आ</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1627 44 1727 125; x_conf 87.889618'>ञ</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_2'>
+         <span class='ocrx_cinfo' id='choice_1_2_7' title='x_confs 83.630936'>ञ</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1715 21 1718 25; x_conf 96.801094'>ा</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_3'>
+         <span class='ocrx_cinfo' id='choice_1_2_8' title='x_confs 90.699951'>ा</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1731 17 1797 116; x_conf 98.991165'>न</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_4'>
+         <span class='ocrx_cinfo' id='choice_1_2_9' title='x_confs 89.43367'>न</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1805 10 1814 14; x_conf 99.031128'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_5'>
+         <span class='ocrx_cinfo' id='choice_1_2_10' title='x_confs 92.976906'>े</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1796 50 1860 114; x_conf 98.768356'>न</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_6'>
+         <span class='ocrx_cinfo' id='choice_1_2_11' title='x_confs 94.372086'>न</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1861 48 1932 126; x_conf 97.469086'>थ</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_7'>
+         <span class='ocrx_cinfo' id='choice_1_2_12' title='x_confs 91.841751'>थ</span>
+         <span class='ocrx_cinfo' id='choice_1_2_13' title='x_confs 48.292217'>ध</span>
+         <span class='ocrx_cinfo' id='choice_1_2_14' title='x_confs 30.518555'>य</span>
+         <span class='ocrx_cinfo' id='choice_1_2_15' title='x_confs 27.671562'>घ</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1925 22 2000 110; x_conf 95.286026'>म</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_8'>
+         <span class='ocrx_cinfo' id='choice_1_2_16' title='x_confs 90.272598'>म</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1980 15 1999 31; x_conf 96.580093'>े</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_9'>
+         <span class='ocrx_cinfo' id='choice_1_2_17' title='x_confs 91.408455'>े</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 1997 48 2076 115; x_conf 96.728905'>ण</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_10'>
+         <span class='ocrx_cinfo' id='choice_1_2_18' title='x_confs 91.505493'>ण</span>
+         <span class='ocrx_cinfo' id='choice_1_2_19' title='x_confs 55.68364'>श</span>
+         <span class='ocrx_cinfo' id='choice_1_2_20' title='x_confs 48.323437'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_2_21' title='x_confs 19.164276'>ख</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2062 10 2115 141; x_conf 92.687965'>ख</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_11'>
+         <span class='ocrx_cinfo' id='choice_1_2_22' title='x_confs 81.24707'>ख</span>
+         <span class='ocrx_cinfo' id='choice_1_2_23' title='x_confs 27.364893'>स</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2077 49 2161 126; x_conf 97.587784'>ु</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_12'>
+         <span class='ocrx_cinfo' id='choice_1_2_24' title='x_confs 87.017731'>ु</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2148 50 2234 118; x_conf 96.781029'>त</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_13'>
+         <span class='ocrx_cinfo' id='choice_1_2_25' title='x_confs 89.920067'>त</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2189 30 2213 46; x_conf 96.58506'>त</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_14'>
+         <span class='ocrx_cinfo' id='choice_1_2_26' title='x_confs 93.684906'>त</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2218 10 2251 141; x_conf 96.635925'>ा</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_15'>
+         <span class='ocrx_cinfo' id='choice_1_2_27' title='x_confs 87.164581'>ा</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2233 26 2320 115; x_conf 98.320747'>व</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_16'>
+         <span class='ocrx_cinfo' id='choice_1_2_28' title='x_confs 93.606316'>व</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2291 10 2334 141; x_conf 99.024544'>ि</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_17'>
+         <span class='ocrx_cinfo' id='choice_1_2_29' title='x_confs 90.37616'>ि</span>
+         <span class='ocrx_cinfo' id='choice_1_2_30' title='x_confs 6.7518806'>्</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2321 51 2370 124; x_conf 98.793213'>र</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_18'>
+         <span class='ocrx_cinfo' id='choice_1_2_31' title='x_confs 93.041985'>र</span>
+         <span class='ocrx_cinfo' id='choice_1_2_32' title='x_confs 39.753147'>स</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2366 51 2499 124; x_conf 97.03093'>स</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_19'>
+         <span class='ocrx_cinfo' id='choice_1_2_33' title='x_confs 88.872971'>स</span>
+         <span class='ocrx_cinfo' id='choice_1_2_34' title='x_confs 51.033215'>त</span>
+         <span class='ocrx_cinfo' id='choice_1_2_35' title='x_confs 33.912781'>ल</span>
+         <span class='ocrx_cinfo' id='choice_1_2_36' title='x_confs 28.6805'>व</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2437 10 2491 141; x_conf 97.321297'>ण</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_20'>
+         <span class='ocrx_cinfo' id='choice_1_2_37' title='x_confs 93.495407'>ण</span>
+         <span class='ocrx_cinfo' id='choice_1_2_38' title='x_confs 8.4837723'>ए</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2490 10 2543 141; x_conf 98.475876'>म</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_21'>
+         <span class='ocrx_cinfo' id='choice_1_2_39' title='x_confs 93.382324'>म</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2502 19 2599 122; x_conf 91.614632'>र</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_22'>
+         <span class='ocrx_cinfo' id='choice_1_2_40' title='x_confs 83.276001'>र</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2573 10 2616 141; x_conf 98.26786'>ा</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_23'>
+         <span class='ocrx_cinfo' id='choice_1_2_41' title='x_confs 92.103622'>ा</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2601 51 2688 141; x_conf 96.448769'>द</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_24'>
+         <span class='ocrx_cinfo' id='choice_1_2_42' title='x_confs 93.963959'>द</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2657 10 2689 141; x_conf 96.08268'>ा</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_25'>
+         <span class='ocrx_cinfo' id='choice_1_2_43' title='x_confs 89.638428'>ा</span>
+         <span class='ocrx_cinfo' id='choice_1_2_44' title='x_confs 38.719643'>र</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2688 10 2720 141; x_conf 95.379951'>ञ</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_26'>
+         <span class='ocrx_cinfo' id='choice_1_2_45' title='x_confs 91.268768'>ञ</span>
+         <span class='ocrx_cinfo' id='choice_1_2_46' title='x_confs 61.623299'>उ</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2690 50 2817 127; x_conf 96.931923'>्</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_27'>
+         <span class='ocrx_cinfo' id='choice_1_2_47' title='x_confs 86.685089'>्</span>
+         <span class='ocrx_cinfo' id='choice_1_2_48' title='x_confs 56.314186'>उ</span>
+        </span>
+       <span class='ocrx_cinfo' title='x_bboxes 2790 15 2811 27; x_conf 98.424507'>य</span>
+        <span class='ocrx_cinfo' id='lstm_choices_1_2_28'>
+         <span class='ocrx_cinfo' id='choice_1_2_49' title='x_confs 93.786453'>य</span>
+        </span>
+      </span>
+     </span>
+    </p>
+   </div>
+  </div>
+ </body>
+</html>

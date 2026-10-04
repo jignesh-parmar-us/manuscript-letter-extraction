@@ -85,6 +85,16 @@ class BookTests(ApiTestCase):
         self.assertEqual(self.client.delete(f"/api/books/{new['id']}", headers=H).status_code, 204)
         self.assertEqual(self.get(f"/api/books/{new['id']}").status_code, 404)
 
+    def test_writing(self):
+        self.assertEqual(self.get(f"/api/books/{self.book}").json()["writing"], "handwritten")
+        r = self.post("/api/books", {"name": "Print", "input_dir": str(self.pages), "writing": "printed"})
+        self.assertEqual(r.json()["writing"], "printed")
+        self.assertEqual(self.post("/api/books", {"name": "Bad", "input_dir": str(self.pages),
+                                                  "writing": "typed"}).status_code, 422)
+        r = self.client.patch(f"/api/books/{self.book}", headers=H, json={"writing": "printed"})
+        self.assertEqual((r.json()["writing"], r.json()["name"]), ("printed", "Synthetic"))
+        self.assertEqual(self.get("/api/books").json()[0]["writing"], "printed")
+
     def test_book_with_own_settings(self):
         r = self.post("/api/books", {"name": "Own", "input_dir": str(self.pages),
                                      "settings": {"digits": "western", "red": {"min_break_px": 3}}})

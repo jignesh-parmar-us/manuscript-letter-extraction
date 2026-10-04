@@ -1,19 +1,24 @@
 """Request bodies of the API (C5c). Responses are plain JSON objects built in api.py."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+Writing = Literal["handwritten", "printed"]
 
 
 class BookCreate(BaseModel):
     name: str
     input_dir: str
     settings: Optional[Dict[str, Any]] = None     # overrides of the default Config
+    writing: Writing = "handwritten"
 
 
-class BookRename(BaseModel):
-    name: str
+class BookUpdate(BaseModel):
+    name: Optional[str] = None
+    writing: Optional[Writing] = None
 
 
 class Force(BaseModel):

@@ -1,7 +1,7 @@
 // One book: its name and numbers on top, and tabs for the work on it.
 // Each tab is its own screen file; the address is #/books/<id>/<tab>.
 import { useCallback, useEffect, useState } from "react";
-import { api, AppInfo, Book } from "../api";
+import { api, AppInfo, Book, WRITING_LABEL } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
 import Capture from "./Capture";
@@ -52,7 +52,7 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
           </button>
           <h1>{book.name}</h1>
           <p className="muted small">
-            {book.pages} pages · {book.samples} letters · {book.groups} groups · {book.labelled} labelled ·{" "}
+            {WRITING_LABEL[book.writing]} · {book.pages} pages · {book.samples} letters · {book.groups} groups · {book.labelled} labelled ·{" "}
             {book.unsure} unsure
           </p>
         </div>

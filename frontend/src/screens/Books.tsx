@@ -1,6 +1,7 @@
 // Books screen: every book of the library, and a form to create a new one.
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { api, AppInfo, BookSummary, localTime } from "../api";
+import { api, AppInfo, BookSummary, localTime, Writing } from "../api";
+import WritingChoice from "../components/WritingChoice";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
@@ -151,13 +152,14 @@ function FolderField(props: { value: string; onChange: (v: string) => void; info
 function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void; onError: (e: unknown) => void }) {
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
+  const [writing, setWriting] = useState<Writing>("handwritten");
   const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      const book = await api.createBook(name.trim(), folder.trim());
+      const book = await api.createBook(name.trim(), folder.trim(), writing);
       props.onCreated(book.id);
     } catch (err) {
       props.onError(err);
@@ -174,6 +176,7 @@ function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void;
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="For example: Vachanamrut, part 1" required />
       </label>
       <FolderField label="Folder with the page images" value={folder} onChange={setFolder} info={props.info} />
+      <WritingChoice value={writing} onChange={setWriting} />
       <p className="muted small">The page images are only read, never changed.</p>
       <button className="primary" type="submit" disabled={busy || !name.trim() || !folder.trim()}>
         Create book

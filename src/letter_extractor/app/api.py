@@ -42,7 +42,7 @@ from .centres import suggestions
 from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (BookCreate, BookRename, BookSettings, Crop, ExportRequest, FolderPath, Force, GroupRef, Label,
+from .schemas import (BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force, GroupRef, Label,
                       LibraryChoice, Merge, Move, SampleIds, Split, Status, Upload)
 
 MAX_PAGE = 500
@@ -129,7 +129,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             cfg = load_config(None, **body.settings) if body.settings else None
         except (ValueError, TypeError) as e:
             raise HTTPException(400, f"Settings: {e}")
-        book = library.create_book(body.name, Path(body.input_dir).expanduser(), cfg)
+        book = library.create_book(body.name, Path(body.input_dir).expanduser(), cfg, body.writing)
         return get_book(book.id)
 
     @app.get("/api/books/{book_id}", dependencies=auth)
@@ -144,8 +144,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                 "redo": undo_redo["redo"], "job": running.as_dict() if running else None}
 
     @app.patch("/api/books/{book_id}", dependencies=auth)
-    def rename_book(book_id: int, body: BookRename) -> Dict:
-        library.rename_book(book_id, body.name)
+    def update_book(book_id: int, body: BookUpdate) -> Dict:
+        if body.name is not None:
+            library.rename_book(book_id, body.name)
+        if body.writing is not None:
+            library.set_book_writing(book_id, body.writing)
         return get_book(book_id)
 
     @app.delete("/api/books/{book_id}", dependencies=auth, status_code=204)

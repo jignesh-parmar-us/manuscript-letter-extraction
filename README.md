@@ -142,7 +142,7 @@ python -m letter_extractor.app --browser     # or in the web browser
 python -m letter_extractor.app --library "/path/to/My Library"   # another library folder (remembered)
 ```
 
-The **Books** screen lists the books of the library and creates new ones (a name and the folder with the page images). A book's **Pages & capture** tab cuts the pages into letters with a progress bar, adds new pages later, cuts single pages again, and holds the book's settings.
+The **Books** screen lists the books of the library and creates new ones (a name, the folder with the page images, and whether the book is **handwritten or printed**; this can be changed later in Pages & capture). A book's **Pages & capture** tab cuts the pages into letters with a progress bar, adds new pages later, cuts single pages again, and holds the book's settings.
 
 The **Review groups** tab is where the letters are sorted and labelled: the groups on the left (with filters such as *without label* or *possibly mixed*), the chosen group's samples on the right. Select samples (click, Ctrl/Cmd+click, Shift+click) and send them to **Unsure** (U), a **new group** (N), another group, or delete them; or drag them onto a group in the list. Label a group by typing in Gujarati or Devanagari, or with the on-screen letters; it is checked as you type. Unsure samples show a suggested group to accept with one click. Ctrl/Cmd+Z undoes, Shift+Ctrl/Cmd+Z redoes.
 
@@ -153,6 +153,17 @@ The **Export** tab writes the book's dataset for OCR training: every sample of e
 If `npm install` fails with `EACCES` on `~/.npm`, an earlier `sudo npm` left root-owned files in npm's cache: run `sudo chown -R $(id -u):$(id -g) ~/.npm` once (or add `--cache /some/other/folder`).
 
 For screen development: `npm run dev` in `frontend/` serves the screen with live reload and passes API calls to a backend on port 8765 (`python -m letter_extractor.app --browser --port 8765`). `npm test` runs the screen tests, `npm run typecheck` the type check.
+
+## Reading lines with Tesseract (Phase 2, C10)
+
+Printed books can be read by [Tesseract](https://github.com/tesseract-ocr/tesseract) to suggest labels (the suggestions come in C11 and C12). Tesseract is a separate install: see [docs/INSTALL_TESSERACT.md](docs/INSTALL_TESSERACT.md). To read one line image and see its aksharas with their boxes:
+
+```
+python -m letter_extractor.ocr out/lines/page1_L01.png            # script/Devanagari, one line
+python -m letter_extractor.ocr LINE.png --langs hin --hocr line.hocr
+```
+
+Tesseract reads print well (about 5% wrong characters on the sample book) but handwriting poorly (about a third wrong), and its confidence stays high either way; see [docs/TUNING_PHASE2.md](docs/TUNING_PHASE2.md).
 
 ## The backend API (C5c)
 

@@ -1,10 +1,11 @@
 // "Pages & capture" tab: cut the book's pages into letters (capture), follow the progress,
 // add new pages, cut a single page again, and the settings used for that.
 import { ChangeEvent, useCallback, useEffect, useState } from "react";
-import { api, ApiError, AppInfo, Book, Job, localTime, PageInfo, PageProblem } from "../api";
+import { api, ApiError, AppInfo, Book, Job, localTime, PageInfo, PageProblem, Writing } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import { useJob } from "../components/useJob";
+import WritingChoice from "../components/WritingChoice";
 
 interface Props {
   book: Book;
@@ -55,6 +56,15 @@ export default function Capture({ book, onChanged }: Props) {
     }
   }
 
+  async function changeWriting(writing: Writing) {
+    try {
+      await api.setWriting(book.id, writing);
+      onChanged();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   const running = job?.status === "running";
   const newPages = problems.filter((p) => p.problem === "new");
   const otherProblems = problems.filter((p) => p.problem !== "new");
@@ -70,6 +80,7 @@ export default function Capture({ book, onChanged }: Props) {
           <br />
           Last capture: {localTime(book.captured_at)}
         </p>
+        <WritingChoice value={book.writing} onChange={changeWriting} />
         <div className="row">
           <button
             className="primary"

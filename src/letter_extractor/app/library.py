@@ -55,6 +55,17 @@ class Cancelled(LibraryError):
     """The user cancelled a capture; nothing was stored."""
 
 
+# How a book is written. It decides which readers suggest labels (Phase 2): Tesseract reads printed
+# books; handwritten books learn from the books already labelled.
+WRITING = ("handwritten", "printed")
+
+
+def _check_writing(writing: str) -> str:
+    if writing not in WRITING:
+        raise LibraryError(f"Writing must be one of: {', '.join(WRITING)}.")
+    return writing
+
+
 def default_library_dir() -> Path:
     return Path.home() / "Documents" / "Manuscript Letters"
 
@@ -106,8 +117,10 @@ class Library:
     def book_dir(self, book: Book) -> Path:
         return self.root / "books" / book.folder
 
-    def create_book(self, name: str, input_dir: Path, cfg: Optional[Config] = None) -> Book:
+    def create_book(self, name: str, input_dir: Path, cfg: Optional[Config] = None,
+                    writing: str = "handwritten") -> Book:
         name = name.strip()
+        _check_writing(writing)
         if not name:
             raise LibraryError("A book needs a name.")
         input_dir = Path(input_dir)
@@ -119,7 +132,8 @@ class Library:
         with self.session() as s:
             if s.scalar(select(Book.id).where(Book.name == name)) is not None:
                 raise LibraryError(f"A book named '{name}' already exists.")
-            book = Book(name=name, folder=uuid.uuid4().hex, input_dir=str(input_dir.resolve()), settings=settings)
+            book = Book(name=name, folder=uuid.uuid4().hex, input_dir=str(input_dir.resolve()), settings=settings,
+                        writing=writing)
             s.add(book)
             s.flush()
             book.folder = f"{book.id:04d}-{_slug(name)}"
@@ -142,7 +156,7 @@ class Library:
                 def count(q):
                     return s.scalar(q) or 0
                 out.append({
-                    "id": b.id, "name": b.name, "input_dir": b.input_dir,
+                    "id": b.id, "name": b.name, "input_dir": b.input_dir, "writing": b.writing,
                     "pages": count(select(func.count(Page.id)).where(Page.book_id == b.id)),
                     "samples": count(select(func.count(Sample.id)).where(Sample.book_id == b.id,
                                                                          Sample.deleted.is_(False))),
@@ -167,6 +181,14 @@ class Library:
             if book is None:
                 raise NotFound(f"No book with id {book_id}.")
             book.name = name
+
+    def set_book_writing(self, book_id: int, writing: str) -> None:
+        _check_writing(writing)
+        with self.session() as s:
+            book = s.get(Book, book_id)
+            if book is None:
+                raise NotFound(f"No book with id {book_id}.")
+            book.writing = writing
 
     def delete_book(self, book_id: int) -> None:
         """Delete the book from the database and its folder in the library (never the input pages)."""
