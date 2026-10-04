@@ -2,7 +2,7 @@
 // Address: #/books/<id>/pages/<page id>[/<sample id>]; with a sample id, that sample is selected and
 // scrolled into view (double-click on a letter in Review opens it here).
 //   Select   click a box (Shift or Ctrl/Cmd+click for more); Join, Delete, Open its group, and put the
-//            selection in a group (Move to group, New group, To Unsure) without leaving the page
+//            selection in a group (Label, Move to group, New group, To Unsure) without leaving the page
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
 //   Split    click inside the selected sample where it should be cut in two
 // Boxes are coloured by group; unsure samples have a dashed grey box.
@@ -10,6 +10,7 @@ import { ChangeEvent, MouseEvent, useCallback, useEffect, useRef, useState } fro
 import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
+import LabelPicker from "../components/LabelPicker";
 import { go } from "../route";
 
 type Mode = "select" | "draw" | "split";
@@ -184,6 +185,28 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     }
   }
 
+  /** Give the selected samples a label: move them to the group with that label (the largest, if
+   *  several; locked ones cannot take samples), or to a new group that gets the label. */
+  async function labelSelected(text: string) {
+    const ids = [...selected];
+    const info = await api.checkLabel(text, book.id).catch((e) => {
+      setError(e);
+      return null;
+    });
+    if (!info?.ok || !info.devanagari) return;
+    const same = [...groups.values()]
+      .filter((g) => !g.locked && g.label_dev === info.devanagari)
+      .sort((a, b) => b.samples - a.samples)[0];
+    if (same) {
+      if (await act(() => api.move(book.id, ids, same.id)))
+        setMessage(`${ids.length} sample(s) moved to the group ${info.gujarati} (${same.code}).`);
+      return;
+    }
+    const made = await act(() => api.newGroup(book.id, ids));
+    if (made?.group_id && (await act(() => api.label(book.id, made.group_id!, text))))
+      setMessage(`${ids.length} sample(s) put in a new group labelled ${info.gujarati}.`);
+  }
+
   const sel = page?.samples.filter((s) => selected.has(s.id)) ?? [];
   // Groups to move into: labelled ones first in alphabet order, then the others, largest first.
   // Locked groups refuse changes, so they are left out.
@@ -311,6 +334,18 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                 <button disabled={sel.every((s) => s.group_id === null)} onClick={() => regroup(null)}>
                   To Unsure
                 </button>
+                <div className="selected-label" title="Moves the selected samples to the group with this label, or to a new group with it">
+                  <LabelPicker
+                    bookId={book.id}
+                    current={{
+                      dev: singleGroup?.label_dev ?? "",
+                      guj: singleGroup?.label_guj ?? "",
+                    }}
+                    saveText={`Label ${sel.length === 1 ? "it" : `these ${sel.length}`}`}
+                    canClear={false}
+                    onSave={labelSelected}
+                  />
+                </div>
               </div>
             )}
             <div className="page-scroll" ref={scrollRef}>

@@ -389,6 +389,12 @@ pre.settings {
 .label-picker {
   margin: 10px 0;
 }
+.selected-label {
+  flex-basis: 100%; /* its own row in the Pages tab's selection card */
+}
+.selected-label .label-picker {
+  margin: 4px 0 0;
+}
 .label-input {
   font-size: 20px;
   min-width: 220px;

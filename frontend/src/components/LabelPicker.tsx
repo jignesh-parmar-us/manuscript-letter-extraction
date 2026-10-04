@@ -40,9 +40,11 @@ interface Props {
   current: { dev: string; guj: string };
   disabled?: boolean;
   onSave: (text: string) => Promise<void>;
+  saveText?: string; // the save button's text (default "Save label")
+  canClear?: boolean; // offer "Clear label" when there is a label (default true)
 }
 
-export default function LabelPicker({ bookId, current, disabled, onSave }: Props) {
+export default function LabelPicker({ bookId, current, disabled, onSave, saveText = "Save label", canClear = true }: Props) {
   const [text, setText] = useState(current.guj);
   const [script, setScript] = useState<Script>("gujarati");
   const [info, setInfo] = useState<LabelInfo | null>(null);
@@ -96,9 +98,9 @@ export default function LabelPicker({ bookId, current, disabled, onSave }: Props
           }}
         />
         <button className="primary" disabled={disabled || saving || !info?.ok || unchanged} onClick={() => save(text)}>
-          Save label
+          {saveText}
         </button>
-        {current.dev && (
+        {canClear && current.dev && (
           <button disabled={disabled || saving} onClick={() => save("")}>
             Clear label
           </button>
