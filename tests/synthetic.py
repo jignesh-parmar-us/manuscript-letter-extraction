@@ -135,3 +135,77 @@ def make_break_page(n_lines=3, letters=12, pitch=110, colour=BLACK_INK):
         expected.append((breaks, joined))
     img = cv2.GaussianBlur(img, (0, 0), 0.6)
     return np.clip(img, 0, 255).astype(np.uint8), expected
+
+
+def _block_letter(img, x, hy, colour, lw=46):
+    """Headline, stem on the right, bowl on the left: a letter body with a gap before its stem."""
+    cv2.rectangle(img, (x, hy - 5), (x + lw - 1, hy + 5), colour, -1)
+    cv2.rectangle(img, (x + lw - 12, hy + 5), (x + lw - 5, hy + 52), colour, -1)
+    cv2.ellipse(img, (x + 16, hy + 28), (11, 12), 0, 0, 360, colour, 5)
+
+
+def make_letters_page(n_lines=3, pitch=110, colour=BLACK_INK):
+    """Lines that exercise every join / split rule, left to right:
+
+    1 plain letter | 2 letter + aa bar (thin headline join) | 3 short-i hook + letter (curl over it)
+    | 4, 5 two letters whose headlines touch (bodies apart) | 6 letter + detached anusvara dot and an
+    e-mark that touches its headline but leans mostly over letter 5
+    | 7 double danda | 8 letter + detached lower tick | 9 letter + visarga (two dots that nearly
+    touch, so they look like a tall stroke apart from the waist between them).
+
+    Returns (rgb, expected): expected[i] lists, per letter of line i+1, (kind, x_from, x_to,
+    must_contain) where the letter's box must span at least x_from..x_to and contain the points
+    in must_contain (x, y)."""
+    rng = np.random.default_rng(5)
+    w, h = 1600, max(800, 60 + n_lines * pitch)
+    img = np.empty((h, w, 3), np.float32)
+    img[:] = PAPER
+    img += rng.normal(0, 3.0, (h, w, 1))
+    expected = []
+    for i in range(n_lines):
+        hy, exp = 80 + i * pitch, []
+        x = 80
+        _block_letter(img, x, hy, colour)                                       # 1
+        exp.append(("letter", x, x + 45, []))
+        x += 54
+        _block_letter(img, x, hy, colour)                                       # 2: letter + aa bar
+        cv2.rectangle(img, (x + 46, hy), (x + 49, hy), colour, -1)             # 1 px neck
+        cv2.rectangle(img, (x + 50, hy - 5), (x + 63, hy + 5), colour, -1)     # bar's own headline
+        cv2.rectangle(img, (x + 56, hy + 5), (x + 63, hy + 52), colour, -1)    # bar
+        exp.append(("letter", x, x + 63, [(x + 60, hy + 40)]))
+        x += 64 + 12
+        hook = x                                                                # 3: short-i hook
+        cv2.rectangle(img, (x, hy - 5), (x + 13, hy + 5), colour, -1)
+        cv2.rectangle(img, (x + 3, hy + 5), (x + 10, hy + 52), colour, -1)
+        cv2.ellipse(img, (x + 30, hy - 8), (22, 14), 0, 180, 360, colour, 5)   # curl, ends over the letter
+        x += 20
+        _block_letter(img, x, hy, colour)
+        exp.append(("letter", hook, x + 45, [(hook + 6, hy + 40), (hook + 30, hy - 21)]))
+        x += 54
+        _block_letter(img, x, hy, colour)                                       # 4, 5: touching
+        cv2.rectangle(img, (x + 46, hy - 5), (x + 50, hy + 5), colour, -1)
+        exp.append(("letter", x + 5, x + 40, []))
+        _block_letter(img, x + 51, hy, colour)
+        exp.append(("letter", x + 56, x + 96, []))
+        x += 51 + 54
+        _block_letter(img, x, hy, colour)                                       # 6: anusvara + e-mark
+        cv2.circle(img, (x + 30, hy - 17), 5, colour, -1)
+        cv2.line(img, (x + 8, hy - 5), (x - 30, hy - 26), colour, 4)            # leans over letter 5
+        exp.append(("letter", x - 25, x + 45, [(x + 30, hy - 17), (x - 25, hy - 23)]))
+        x += 70
+        for k in (0, 14):                                                       # 7: double danda
+            cv2.rectangle(img, (x + k, hy - 3), (x + k + 7, hy + 52), colour, -1)
+        exp.append(("danda", x, x + 21, []))
+        x += 45
+        _block_letter(img, x, hy, colour)                                       # 8: lower tick
+        cv2.line(img, (x + 34, hy + 62), (x + 44, hy + 68), colour, 4)
+        exp.append(("letter", x, x + 45, [(x + 39, hy + 65)]))
+        x += 60
+        _block_letter(img, x, hy, colour)                                       # 9: visarga
+        v = x + 46 + 14                                                          # two dots that touch
+        cv2.ellipse(img, (v, hy + 12), (7, 12), 0, 0, 360, colour, -1)
+        cv2.ellipse(img, (v, hy + 37), (7, 12), 0, 0, 360, colour, -1)
+        exp.append(("letter", x, v + 6, [(v, hy + 12), (v, hy + 37)]))
+        expected.append(exp)
+    img = cv2.GaussianBlur(img, (0, 0), 0.6)
+    return np.clip(img, 0, 255).astype(np.uint8), expected

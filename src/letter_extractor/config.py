@@ -62,6 +62,28 @@ class Config:
     headline_below_px: int = 4        # ...to this far below (letter bodies start further down)
     piece_top_frac: float = 0.1       # a piece starts this far (x pitch) above the headline (its top edge)
 
+    # ---- letters: join and split rules (C3b, FR-5, FR-6) -------------------------------
+    min_letter_width_ratio: float = 0.45  # pieces narrower than this x the line's typical piece are not letters
+    stroke_min_height_frac: float = 0.6   # a bar / danda is at least this x the piece zone tall...
+    stroke_min_fill: float = 0.85         # ...with ink in this share of its rows...
+    stroke_min_waist: float = 0.4         # ...and no row in its middle narrower than this x its median width
+                                          # (a visarga's two dots can touch, but pinch between them)
+    mark_min_px: int = 20                 # upper-mark ink touching a bar needed to call it an i-matra
+    bar_head_extra_px: int = 6            # a bar's headline is at least this much wider than its stem
+    bar_protect_px: int = 12              # no split cut within this distance before a joined vowel bar
+    double_danda_gap_ratio: float = 0.5   # two dandas this close (x typical piece width) are one double danda
+    split_width_ratio: float = 1.4        # letters wider than this x the page's typical letter may be split...
+    split_gap_frac: float = 0.15          # ...where a column below the headline has at most this x the
+                                          # letter's typical column ink (bodies apart, only headline joins)
+    split_force_ratio: float = 2.2        # letters wider than this are split even without such a gap
+    split_body_top_frac: float = 0.25     # body ink for splits is counted from this x main zone below the
+                                          # headline (higher up, the headline itself fills every column)
+    split_search_ratio: float = 0.3       # each cut is searched this far (x typical) around its expected place
+    i_stem_edge_ratio: float = 0.45       # a short-i stem rises within this x typical of its letter's right edge...
+    i_curl_cover: float = 0.5             # ...and its curl covers this share of the next letter (or of a typical one)
+    digit_max_width_ratio: float = 1.5    # up to two letters this narrow between dandas are a verse number
+    letter_margin_px: int = 4             # margin around each letter image
+
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
     red: InkParams = field(default_factory=lambda: InkParams(

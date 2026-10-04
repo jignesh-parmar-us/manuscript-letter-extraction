@@ -19,7 +19,8 @@ SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 class KnownJoinsTests(unittest.TestCase):
     def _check(self, colour):
         rgb, expected = synthetic.make_break_page(colour=colour)
-        _, layout, pieces, _ = process_page(rgb, Config())
+        d = process_page(rgb, Config())
+        layout, pieces = d.layout, d.pieces
         self.assertEqual(len(layout.lines), len(expected))
         for line, (breaks, joined) in zip(layout.lines, expected):
             mine = [p for p in pieces if p.line == line.index]
@@ -44,7 +45,8 @@ class KnownJoinsTests(unittest.TestCase):
 
     def test_pieces_cover_the_main_zone_ink_once(self):
         rgb, _ = synthetic.make_break_page()
-        page, layout, pieces, _ = process_page(rgb, Config())
+        d = process_page(rgb, Config())
+        page, pieces = d.page, d.pieces
         seen = np.zeros(page.ink.shape, np.int32)
         for p in pieces:
             x, y, w, h = p.box
@@ -63,7 +65,8 @@ class SamplePagePiecesTests(unittest.TestCase):
         cfg = Config()
         for name in ("page1.jpg", "page2.jpg"):
             rgb, _ = io_utils.load_image(SAMPLES / name)
-            _, layout, pieces, _ = process_page(rgb, cfg)
+            d = process_page(rgb, cfg)
+            layout, pieces = d.layout, d.pieces
             per_line = len(pieces) / len(layout.lines)
             self.assertTrue(33 <= per_line <= 48, (name, per_line))
 

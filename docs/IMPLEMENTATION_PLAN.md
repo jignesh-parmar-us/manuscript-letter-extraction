@@ -6,6 +6,8 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9)**. Each chunk ends with a CLI you can run on the sample pages, and output you can check by eye, before the next chunk starts.
 
+**Status:** C0, C1, C2, C3a and C3b are done (letter cutting: 92% of letters correct on the counted sample lines, see `docs/TUNING.md`). C4 (grouping) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+
 ---
 
 ## 1. Technology Choices
@@ -59,7 +61,6 @@ manuscript-letter-extraction/
 │   ├── dataset.py         # dataset/, lines/, unsure/ writers             (C5)
 │   ├── overview.py        # overview.html                                 (C5)
 │   ├── report.py          # report.csv, samples.csv, letters.csv, summary (C0 -> C5)
-│   ├── debug.py           # overlays drawn on the page for every stage
 │   └── pipeline.py        # process_page(), process_folder()
 ├── tests/
 │   ├── synthetic.py       # draws fake pages with known lines and breaks
@@ -70,6 +71,8 @@ manuscript-letter-extraction/
 ```
 
 The core (`pipeline.py` and everything it calls) has no GUI or CLI code, so the CLI and the GUI call the same functions.
+
+*Change:* there is no separate `debug.py`. Each step's module has its own overlay function next to the code it shows (`ink_overlay` in `prepare.py`, `lines_overlay` in `lines.py`, `pieces_overlay` in `pieces.py`, `letters_overlay` in `letters.py`), which keeps a step and its picture together.
 
 ### Files reused from `manuscript-border-remover-app`
 
@@ -99,25 +102,44 @@ input pages
 
 Steps C1 to C3b run per page in parallel. C4 and C5 run once over all pages.
 
-Data passed between steps (plain dataclasses in `pipeline.py`):
+Data passed between steps (plain dataclasses, each in the module that makes it; `pipeline.PageData` holds them all for one page):
 
 ```python
 @dataclass
-class Line:
+class PreparedPage:            # prepare.py (C1)
+    rgb: np.ndarray            # the page as loaded, never modified
+    paper, black, red, rules: np.ndarray   # bool masks: paper, black ink, red ink, removed ruled lines
+    block: tuple | None        # text block x, y, w, h
+
+@dataclass
+class Line:                    # lines.py (C2)
     index: int                 # 1-based, top to bottom
-    top: int; bottom: int      # band incl. upper and lower matras
-    headline_y: np.ndarray     # headline row for every column (follows slope and waves)
+    box: tuple                 # x, y, w, h of the line's ink, incl. upper and lower matras
+    mask: np.ndarray           # this line's ink only, inside box
+    headline_y: np.ndarray     # headline row for every page column (follows slope and waves)
     ink: str                   # "black" | "red" | "mixed"
 
 @dataclass
-class Letter:
-    page: str; line: int; pos: int          # reading order (FR-6)
-    bbox: tuple[int, int, int, int]         # x, y, w, h in page coordinates
-    mask: np.ndarray                        # ink pixels that belong to this letter only
-    ink: str                                # "black" | "red"
-    kind: str                               # "letter" | "danda" | "digit" | "mark"
-    group_id: str = ""; label: str = ""; confidence: float = 0.0
+class Piece:                   # pieces.py (C3a)
+    line: int; index: int
+    x0: int; x1: int           # columns between two cuts
+    box: tuple; mask: np.ndarray
+    ink: str
+    head_width: int            # widest run of ink in the headline band
+    stem_width: float          # median width of the ink rows below the headline
+
+@dataclass
+class Letter:                  # letters.py (C3b)
+    line: int; pos: int        # reading order (FR-6); the page is known from the file
+    box: tuple                 # x, y, w, h in page coordinates
+    mask: np.ndarray           # ink pixels that belong to this letter only
+    ink: str                   # "black" | "red"
+    kind: str                  # "letter" | "danda" | "digit"
+    pieces: int                # stroke pieces joined into it
+    rules: list[str]           # join / split rules applied (for tuning)
 ```
+
+Group, label and confidence are not stored on the letter: they are added in C4 and C5 as columns of `samples.csv`.
 
 Every stage can save a **debug overlay** to `<output>/debug/` (`--debug`). These overlays are how each chunk is checked and tuned.
 
@@ -144,74 +166,110 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
 **Done when:** a folder with good images, a broken JPEG and a `.txt` file runs to the end; the bad files are in the report; the input folder is unchanged.
 **Tests:** missing input folder, same input and output folder, empty folder, broken file, natural sort order.
 
+**Changes from the original plan:**
+- `report.csv` has a fourth status, `NO_TEXT` (the page loaded but no text block or no lines were found), and gains columns as later chunks add results (text block, ink pixels, lines, pieces, letters, dandas, digits).
+- The CLI exits with 0 (all pages OK), 1 (some pages failed) or 2 (folder or config error), and a misspelled setting in the `--config` file is an error rather than being ignored.
+
 ### C1. Page preparation (FR-2)
 
 **Goal:** a clean ink mask for each page, with red and black ink separated.
 
 - Accept pages already cleaned by the border remover (`samples/cleaned/`) or raw pages.
 - **Paper mask:** exclude the black scanner background (dark pixels connected to the image edge).
-- **Paper tone:** estimate the background with a large median blur, then divide by it to flatten uneven paper tone.
+- **Paper tone:** the local paper value of each Lab channel is a **151 px median** computed on a quarter-size copy.
 - **Ink masks:**
-  - black ink: dark after flattening (adaptive or Sauvola-style threshold);
-  - red ink: high `a*` channel in Lab with its own, lower thresholds (it is lighter and thinner).
-- **Text block:** largest region of dense ink rows and columns; drop the ruled border, margin folio numbers and tape marks outside it.
-- Remove specks smaller than `min_speck_px`.
+  - red ink: Lab `a*` at least 14 above the local paper and at least 8 darker (L) than it;
+  - black ink: lightness below 0.62 x the local paper lightness, and not red.
+- **Ruled lines:** straight ink runs longer than 15% of the page height or width are border rules and are removed from the ink masks.
+- **Text block:** the main run of ink-dense columns, then of rows; folio numbers cover only a few lines, so they fall outside it.
+- Remove specks smaller than `min_speck_px` (separately for red and black).
 
-**Output:** `debug/<page>_ink.png` (black ink in black, red ink in red, discarded areas greyed out).
-**Done when:** on both sample pages the text block is found, the border and folio numbers are outside it, and red verses are fully in the red mask.
+**Output:** `debug/<page>_ink.png` (black ink in black, red ink in red, removed rules in blue, outside the block greyed out, block outlined in green).
+**Done when:** on both sample pages the text block is found, the border and folio numbers are outside it, and red verses are fully in the red mask. *Met.*
+
+**Changes from the original plan:**
+- **Fixed thresholds against the local paper instead of an adaptive (Sauvola) threshold.** The ink is clearly separated from the paper once the paper tone is known locally, so a simple, explainable rule per ink was enough.
+- **The median window is 151 px, not 51.** With 51 px the window is about one letter wide; inside dense red text the "paper" estimate was pulled towards red (`a*` 150 instead of 134), so the red headlines and light strokes were lost. With 151 px paper and red ink separate cleanly (paper at 0, red ink at about +40 in `a*` difference).
+- **Ruled lines are removed by shape**, which the plan did not mention. On raw scans the red rules are red ink too; removing them is what lets the text block exclude them. Letters that cross a rule lose the crossing pixels, so pages cleaned by the border remover are still preferred.
 
 ### C2. Line detection (FR-3)
 
 **Goal:** find all text lines and trace each headline.
 
-1. Horizontal projection of the ink mask inside the text block. The **headline rows are the strongest peaks**, about 110 px apart (expected spacing is a setting, auto-estimated per page from the peak distances).
-2. **Follow the headline:** split the line into column windows (for example 150 px), find the peak row in each window near the global peak, and smooth / interpolate it into `headline_y[x]`. This handles slope and waviness.
-3. **Line band:** from the midpoint to the previous headline down to the midpoint to the next one, measured along the traced headline (not a straight row).
-4. **Assign matras:** each connected component that crosses a band boundary goes to the headline it is closest to, judged by its position relative to each headline (upper matras sit just above a headline, lower matras just below the main zone).
-5. Mark each line `black`, `red` or `mixed` from its ink share.
+1. Keep only **horizontal ink runs of at least 25 px** (stems, dandas and matras drop out). Their row profile has one peak per line: the headline. Line spacing comes from the profile's autocorrelation (about 112 px on the samples) unless `line_spacing_px` is set.
+2. **Follow the headline:** in 150 px windows near the line's peak, take the strongest row of horizontal runs. Fit a smooth curve (degree 2) through all windows and replace windows more than 0.08 x spacing away from it. This follows slope and gentle waves but not jumps.
+3. **Main zone and boundaries:** the main zone ends where the ink below the aligned headlines drops off (about 57 px). The boundary between two lines follows the emptiest rows between the main zone of the upper line and the headline of the lower one.
+4. **Assign ink to lines:** every connected ink blob is assigned whole. A blob touching one headline belongs to that line, even if it crosses the boundary. A blob touching two headlines is split at the boundary. A detached blob goes to the nearer of "just above the headline below" (upper mark) and "just below the main zone above" (lower mark).
+5. Mark each line `black`, `red` or `mixed` from its ink share (80%).
+6. Each line image is cut from the original page; ink of the neighbouring lines inside the crop is **inpainted** from the paper around it.
 
 **Output:**
 - `lines/<page>_L01.png`, ... one cropped image per line (paper background, only that line's ink kept);
 - `debug/<page>_lines.png` with the traced headlines and band edges drawn.
 
-**Done when:** 11 of 11 lines found on both sample pages, headlines follow the ink, and a visual check finds no matras on the wrong line.
-**Tests:** synthetic page with N slanted, wavy fake headlines → N lines, headline error ≤ 2 px.
+**Done when:** 11 of 11 lines found on both sample pages, headlines follow the ink, and a visual check finds no matras on the wrong line. *Met (raw and cleaned pages).*
+**Tests:** synthetic page with N slanted, wavy fake headlines → N lines, headline error ≤ 2 px (measured: 1.5 px on lines that drop 15 px and wave). Detached marks go to their own line; every ink pixel belongs to exactly one line.
+
+**Changes from the original plan:**
+- **Headlines are found on horizontal runs only, not on all ink.** On all ink the peak was right, but tracing failed over dandas and headless stretches: the vertical strokes beat the real headline and the trace dropped into the letter bodies.
+- **A smooth-curve fit replaces the 3-window median.** Runs of big upper matras and the dandas at line ends pulled single windows 20 px off; a median of 3 cannot remove a run of bad windows, a robust fit can.
+- **Boundaries follow the emptiest rows, not the midpoint between headlines.** The midpoint is about 55 px below a headline, which cuts through the letters' lower parts. The blob rules (step 4) decide matras anyway; the boundary only matters for blobs touching two lines.
+- **Line images use inpainting instead of a flat paper colour.** The flat median colour left visible lighter patches.
 
 ### C3a. Stroke pieces: headline breaks (FR-4)
 
 **Goal:** the first cut, exactly as the trial in the requirements (Section 2).
 
-- Take a thin **headline band** (± `headline_half_height` px around `headline_y[x]`).
-- Column has a **break** if the band has no ink in it. Ignore breaks narrower than `min_break_px` (≈ 2 px).
-- Cut the line at each break into **stroke pieces**. Each piece takes all ink below its part of the headline down to the bottom of the main zone.
-- Pieces with less ink than `min_piece_ink_px` are specks and are dropped.
+- Measure the **headline thickness** in every column, in a band from 8 px above to 4 px below the traced headline (letter bodies start lower).
+- A **break** is a run of columns where the headline is thinner than half its typical thickness on that line (`break_soft_frac`), and somewhere thinner than 30% of it (`break_max_frac`). Runs narrower than `min_break_px` (2 px) are ignored. Limits are set separately for red and black ink.
+- Inside a break the cut goes through each empty column run of the main zone, otherwise through the column with the least ink. A danda or digit standing in a gap becomes its own piece.
+- Each piece takes the line's ink in its columns from just above the headline to the bottom of the main zone. Pieces with less ink than `min_piece_ink_px` are specks and are dropped.
+- Each piece records its ink colour, `head_width` (widest run of headline ink) and `stem_width` (median width of its rows below the headline) for C3b.
 
-**Output:** `debug/<page>_pieces.png` with a thin vertical line at every cut, numbered pieces.
-**Done when:** results match the trial: black lines show most letter boundaries (with extra cuts at vowel bars and missing cuts at touching headlines); this is the baseline the next chunk corrects.
+**Output:** `debug/<page>_pieces.png` with a thin red line at every cut and numbered pieces; `report.csv` counts pieces and specks.
+**Done when:** results match the trial: black lines show most letter boundaries (with extra cuts at vowel bars and missing cuts at touching headlines); this is the baseline the next chunk corrects. *Met: 36-46 pieces per line.*
+
+**Changes from the original plan:**
+- **A break is where the headline thins, not only where it has no ink.** The trial in the requirements expected red lines to have too many breaks. On these pages it is the opposite: the red headlines are almost continuous and only thin to 1-3 px (of about 10) at each join, so "no ink in the band" kept whole runs of red letters together (for example तापोनरको as one piece).
+- **Hysteresis (two limits).** A join is often only 1 px wide at its thinnest point, which `min_break_px` would throw away. The run is measured where the headline is below half its thickness, and must reach below 30% somewhere.
+- **No `has_headline` flag; `head_width` and `stem_width` instead.** Every danda reaches into the headline band, so "ink in the band" called every danda a letter with a headline. On the real pages dandas and vowel bars are about equally wide in the band, so C3a cannot tell them apart; the measurements go to C3b, which decides with more context.
 
 ### C3b. Letters: join and split rules (FR-5, FR-6)
 
 **Goal:** turn stroke pieces into letters and save each one as an image.
 
-Rules applied in order, all thresholds in `Config` with separate red and black values:
+Each line is handled as a label image (every ink pixel carries its letter number). Rules in order:
 
-1. **Typical letter width** per line = median piece width (robust to errors).
-2. **Join vowel bars** (ा ी ो ौ): a narrow piece that is mostly one vertical stroke with a short headline joins the piece on its **left**.
-3. **Join ि**: the hook piece (curl above the headline on its left side) joins the piece on its **right**.
-4. **Join broken letters:** a piece narrower than `min_letter_width_ratio` × typical width, with no bar shape, joins the neighbour it touches most.
-5. **Split wide pieces:** wider than `split_width_ratio` (1.6) × typical width → split at the column with the lowest ink count in the main zone below the headline, repeat if still too wide.
-6. **Attach marks:** components above the headline (ि ी े ै ो ौ, ं, र्, ँ) and below the main zone (ु ू ृ ्) go to the letter they overlap most horizontally.
-7. **Dandas, digits and punctuation:** tall thin strokes without a headline (।, ॥), and small isolated shapes in red verse numbers, get `kind = "danda"` / `"digit"`.
-8. **Ink mask per letter:** only the pixels of components (or component parts) assigned to that letter, so ink from neighbours is left out (FR-6).
+1. **Narrow pieces** (narrower than `min_letter_width_ratio` x the line's typical piece width):
+   - a **tall stroke** (ink in at least 85% of its rows, at least 0.6 x the piece zone tall, and no narrow waist) with an **upper mark touching it** is an i-matra bar. If the mark leans right it is the **ि hook and joins RIGHT**; otherwise it is **ी and joins LEFT**;
+   - a tall stroke whose headline runs **through the cut into its left neighbour** (ink on both sides of the cut), or whose headline is clearly wider than its stem, is a **vowel bar (ा ो ौ) and joins LEFT**;
+   - any other tall stroke is a **danda**; two dandas close together are one **double danda**;
+   - anything else (broken strokes, visarga) joins the neighbour it touches most across the cut, or the left one.
+2. **ि stems hidden in the previous letter:** when the ि stem's headline touches the letter before it there is no break. Its curl rises from a stem near that letter's right edge and arches over the next letter; the stem is moved across.
+3. **Split wide letters:** a letter wider than `split_width_ratio` (1.4) x the **page's** typical letter width is cut into round(width / typical) parts, each cut at the column with the least body ink near its expected place, **only where that column is nearly empty** (bodies apart, only the headline joins). Letters wider than `split_force_ratio` (2.2) are cut anyway. Joined bars, ि hooks and moved ि stems are protected, and every part must keep a letter body.
+4. **Attach marks:** ink above the headline band, above or below the piece zone, and specks go to the letter they **touch most**, otherwise the one they overlap most horizontally, otherwise the nearest.
+5. **Digits:** one or two short letters between two dandas are a verse number (`kind = "digit"`).
+6. **Ink mask per letter:** only the pixels labelled with that letter; the letter image inpaints any other ink inside its crop (FR-6).
 
 **Output:**
-- `letters/<page>/L01_003.png`: crop with a small margin, paper background, foreign ink painted out;
-- `samples.csv`: page, line, pos, x, y, w, h, ink, kind (one row per letter);
-- `debug/<page>_letters.png`: one coloured box per letter.
+- `letters/<page>/L01_003.png`: crop with a 4 px margin, original paper background, other letters' ink inpainted away (images of an earlier run are replaced);
+- `samples.csv`: page, line, pos, x, y, w, h, ink, kind, pieces, rules, image (one row per letter, all pages);
+- `debug/<page>_letters.png`: each letter in its own colour with a box; dandas grey, digits magenta, split letters with a dashed red box;
+- `report.csv` counts letters, dandas and digits per page.
 
-**Done when:** for both sample pages, count missed breaks, extra breaks and wrongly attached matras, and record them in a tuning table in `docs/TUNING.md` (as Section 8.4 of the requirements asks). Tune until most letters on black lines are cut right; record the red-line numbers separately.
-**Tests:** synthetic line with a known number of blocks and vowel-bar-like pieces → expected letter count.
-**Performance:** add the process pool here; check ≤ 10 s per page.
+**Done when:** for both sample pages, count missed breaks, extra breaks and wrongly attached matras, and record them in a tuning table in `docs/TUNING.md` (as Section 8.4 of the requirements asks). Tune until most letters on black lines are cut right; record the red-line numbers separately. *Met: 142 of 154 counted letters correct (92%); black 80 of 83, red 62 of 71. Remaining error types and possible fixes are listed in `docs/TUNING.md`.*
+**Tests:** a synthetic line with every rule (plain letter, letter + ा bar, ि hook + letter, two touching letters, anusvara and a leaning e-mark, double danda, lower mark, visarga) in red and black; every letter must be found with the right extent, kind and marks. Each rule was checked by disabling it: the tests then fail.
+**Performance:** 6-7 s per page on one worker, without `--debug` (the process pool from C0 runs pages in parallel).
+
+**Changes from the original plan:**
+- **ि vs ी vs danda vs vowel bar by evidence, not by shape alone.** The plan described the ि hook as "curl above the headline on its left side". In C3a's pieces the curl is outside the piece zone, so a ि stem looks like any bar. The direction of the upper mark that touches the stem decides (right: ि, left: ी), and bars and dandas are told apart by whether the headline continues through the cut (bar) or the stroke stands in empty columns (danda).
+- **Waist test for strokes.** The two dots of a visarga often almost touch and passed as a tall stroke (a danda). A real stroke has about the same width all the way down.
+- **New rule: ि stems hidden in the previous letter** (rule 2). Very common in this hand (मि, नि, ति); without it the stem stayed with the letter before and the curl followed it.
+- **Splitting uses the page's typical width and needs a body gap; threshold 1.4 / 2.2 instead of 1.6.** With 1.6 x a per-line median, real wide letters (प्यो 124 px, श्री 127 px) were split and merged pairs were not: lines with many merges have an inflated median. Width alone cannot separate them (single letters up to about 130 px, pairs from about 130 px), but a merged pair has an empty column between the two bodies and a single letter does not. Repeated halving was replaced by cutting into round(width / typical) parts in one go, so long runs of touching letters are cut evenly.
+- **Marks attach by contact first, then by overlap.** By overlap alone a ि curl or a leaning e-mark goes to the letter it covers instead of the letter it belongs to. Counting contact pixels per letter (not taking the highest label number nearby) fixed the स्वामि case.
+- **Ink above the headline band is always treated as mark ink**, because the column cut of C3a could hand the bottom of a leaning matra to the neighbouring piece.
+- **Digits** are recognised only by position (between dandas); "small isolated shapes in red verse numbers" was not needed.
+- **`samples.csv` also records `pieces`, `rules` and the image path**, so each sample can be traced and each rule's effect counted.
 
 ### C4. Grouping identical letters (FR-7, Section 8.2)
 
@@ -324,19 +382,26 @@ Rules applied in order, all thresholds in `Config` with separate red and black v
 
 One `Config` dataclass in `config.py`. A JSON file passed with `--config` overrides any value. Ink-specific values sit in an `InkParams` dataclass that exists twice, `cfg.black` and `cfg.red`.
 
+The main settings as implemented (see `src/letter_extractor/config.py` for all of them, each with a comment):
+
 | Setting | Chunk | Default (black / red) |
 |---|---|---|
-| `paper_blur_px` | C1 | 51 |
-| `black_threshold`, `red_min_a` | C1 | to tune |
+| `paper_blur_px` | C1 | 151 (was 51 in the plan, see C1) |
+| `black_max_rel_l`, `red_min_da`, `red_min_dl` | C1 | 0.62, 14, 8 |
+| `rule_min_frac` | C1 | 0.15 of the page |
 | `min_speck_px` | C1 | 8 / 5 |
-| `line_spacing_px` | C2 | 0 = auto (≈ 110) |
+| `line_spacing_px` | C2 | 0 = auto (≈ 112) |
+| `headline_min_run_px` | C2 | 25 |
 | `headline_window_px` | C2 | 150 |
-| `headline_half_height` | C3a | 3 / 2 |
-| `min_break_px` | C3a | 2 / 3 |
+| `headline_max_wave_frac` | C2 | 0.08 of the spacing |
+| `headline_above_px`, `headline_below_px` | C3a | 8, 4 (replace `headline_half_height`) |
+| `break_max_frac`, `break_soft_frac` | C3a | 0.3, 0.5 / 0.3, 0.5 of the headline thickness |
+| `min_break_px` | C3a | 2 / 2 |
 | `min_piece_ink_px` | C3a | 15 / 10 |
-| `bar_max_width_ratio` | C3b | 0.35 |
 | `min_letter_width_ratio` | C3b | 0.45 |
-| `split_width_ratio` | C3b | 1.6 |
+| `stroke_min_fill`, `stroke_min_waist` | C3b | 0.85, 0.4 |
+| `split_width_ratio`, `split_force_ratio` | C3b | 1.4, 2.2 (was 1.6, see C3b) |
+| `split_gap_frac` | C3b | 0.15 |
 | `letter_margin_px` | C3b | 4 |
 | `normalize_size` | C4 | 48 |
 | `group_distance` | C4 | to tune |
@@ -353,6 +418,8 @@ One `Config` dataclass in `config.py`. A JSON file passed with `--config` overri
 - **Sample pages:** regression checks on `samples/page1.jpg` and `page2.jpg`: 11 lines per page; letter count within a range that is fixed once C3b is tuned.
 - **Output checks:** CSV columns, `utf-8-sig`, safe folder names, labels surviving a re-run, input folder unchanged.
 - Run locally and in CI with `python -m unittest discover -s tests -v` (`PYTHONPATH=src`).
+- **Synthetic pages must be realistic in size.** Several thresholds are fractions of the page (a ruled line is longer than 15% of the page height or width). On small test pages, stems and joined headlines counted as ruled lines and were erased. The test pages are therefore at least 800 x 1600 px.
+- **Rule tests are checked by breaking the rule.** For C2 and C3b each rule was disabled once to confirm a test fails; two test pages had to be corrected because a rule was not actually exercised.
 
 ---
 

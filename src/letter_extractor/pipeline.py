@@ -6,6 +6,7 @@ import os
 import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -13,6 +14,7 @@ import cv2
 
 from . import io_utils, report
 from .config import Config
+from .letters import Letter, letter_image, letters_overlay, make_letters
 from .lines import LineLayout, detect_lines, line_image, lines_overlay
 from .pieces import Piece, pieces_overlay, split_lines
 from .prepare import PreparedPage, ink_overlay, prepare_page
@@ -21,17 +23,46 @@ from .report import PageResult
 ProgressFn = Callable[[int, int, PageResult], None]
 
 
-def process_page(rgb, cfg: Config) -> Tuple[PreparedPage, Optional[LineLayout], List[Piece], int]:
-    """Every step for one page: ink masks (C1), lines (C2), stroke pieces (C3a).
-    Returns the prepared page, the line layout, the pieces and the number of specks dropped."""
+@dataclass
+class PageData:
+    page: PreparedPage
+    layout: Optional[LineLayout]
+    pieces: List[Piece]
+    specks: int
+    letters: List[Letter]
+
+
+def process_page(rgb, cfg: Config) -> PageData:
+    """Every step for one page: ink masks (C1), lines (C2), stroke pieces (C3a), letters (C3b)."""
     page = prepare_page(rgb, cfg)
     layout = detect_lines(page, cfg)
-    pieces, specks = split_lines(page, layout, cfg) if layout is not None else ([], 0)
-    return page, layout, pieces, specks
+    if layout is None:
+        return PageData(page, None, [], 0, [])
+    pieces, specks = split_lines(page, layout, cfg)
+    return PageData(page, layout, pieces, specks, make_letters(page, layout, pieces, cfg))
 
 
 def _png(img, path: Path) -> None:
     io_utils.save_image(img, path, io_utils.ImageMeta(format="PNG"))
+
+
+def _write_letters(page: PreparedPage, letters: List[Letter], stem: str, out_dir: Path, cfg: Config,
+                   res: PageResult) -> None:
+    """letters/<page>/L01_003.png for every letter, and the page's rows for samples.csv."""
+    folder = out_dir / "letters" / stem
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob("L[0-9][0-9]_[0-9][0-9][0-9].png"):   # letters of an earlier run
+        old.unlink()
+    for L in letters:
+        name = f"L{L.line:02d}_{L.pos:03d}.png"
+        _png(letter_image(page, L, cfg), folder / name)
+        x, y, w, h = L.box
+        res.samples.append({"page": res.file, "line": L.line, "pos": L.pos, "x": x, "y": y, "w": w, "h": h,
+                            "ink": L.ink, "kind": L.kind, "pieces": L.pieces, "rules": " ".join(L.rules),
+                            "image": f"letters/{stem}/{name}"})
+    res.letters = len(letters)
+    res.dandas = sum(L.kind == "danda" for L in letters)
+    res.digits = sum(L.kind == "digit" for L in letters)
 
 
 def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
@@ -41,7 +72,8 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
     try:
         rgb, meta = io_utils.load_image(src)
         res.height, res.width = rgb.shape[:2]
-        page, layout, pieces, specks = process_page(rgb, cfg)
+        data = process_page(rgb, cfg)
+        page, layout, pieces = data.page, data.layout, data.pieces
         if page.block is None:
             res.status = report.STATUS_NO_TEXT
             res.message = "no text block found"
@@ -52,11 +84,12 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
             res.lines = len(layout.lines)
             res.line_spacing = layout.spacing
             res.pieces = len(pieces)
-            res.specks = specks
+            res.specks = data.specks
             lines_dir = out_dir / "lines"
             lines_dir.mkdir(exist_ok=True)
             for line in layout.lines:
                 _png(line_image(page, line, cfg), lines_dir / f"{src.stem}_L{line.index:02d}.png")
+            _write_letters(page, data.letters, src.stem, out_dir, cfg, res)
         elif page.block is not None:
             res.status = report.STATUS_NO_TEXT
             res.message = "no text lines found"
@@ -69,6 +102,7 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
             _png(lines_overlay(page, layout), debug_dir / f"{src.stem}_lines.png")
             if layout is not None:
                 _png(pieces_overlay(page, layout, pieces, cfg), debug_dir / f"{src.stem}_pieces.png")
+                _png(letters_overlay(page, data.letters), debug_dir / f"{src.stem}_letters.png")
     except Exception as e:  # one page failing never stops the batch
         res.status = report.STATUS_FAILED
         res.message = f"{type(e).__name__}: {e}"
@@ -144,4 +178,5 @@ def process_folder(input_dir: Path, output_dir: Path, cfg: Optional[Config] = No
                     break
     ordered = [results[p.name] for p in images if p.name in results]
     report.write_report(ordered, ignored, output_dir)
+    report.write_samples(ordered, output_dir)
     return ordered

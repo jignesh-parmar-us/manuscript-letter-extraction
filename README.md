@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection) and C3a (first cut into stroke pieces) are done. Joining and splitting pieces into letters (C3b) is next.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) and C3b (letters) are done: about 92% of letters are cut correctly on the sample pages ([docs/TUNING.md](docs/TUNING.md)). Grouping identical letters (C4) is next.
 
 ## Install
 
@@ -35,11 +35,14 @@ The exit code is 0 if every page is OK, 1 if some pages failed, and 2 for a fold
 
 ## Output so far
 
-- `report.csv`: one row per file with status (`OK`, `NO_TEXT`, `FAILED`, `IGNORED`), message, page size, text block (`block_x/y/w/h`), black and red ink pixel counts, number of lines, line spacing, number of stroke pieces, specks dropped, and seconds. Files that cannot be read are `FAILED` and do not stop the run; files that are not images are `IGNORED`.
+- `report.csv`: one row per file with status (`OK`, `NO_TEXT`, `FAILED`, `IGNORED`), message, page size, text block (`block_x/y/w/h`), black and red ink pixel counts, number of lines, line spacing, number of stroke pieces, specks dropped, letters, dandas, digits, and seconds. Files that cannot be read are `FAILED` and do not stop the run; files that are not images are `IGNORED`.
+- `letters/<page>/L01_003.png`: one image per letter (line 1, third letter), cut from the original page with a 4 px margin; ink of neighbouring letters is filled in from the paper around it.
+- `samples.csv`: one row per letter of all pages, in reading order: page, line, position, box (x, y, w, h), ink colour, kind (`letter`, `danda`, `digit`), number of stroke pieces joined, the join / split rules applied, and the image path.
 - `lines/<page>_L01.png`, ...: one image per text line, cut from the original page with a small margin. Matras that reach into the neighbouring lines are kept; ink of the neighbouring lines is filled in from the paper around it.
 - `debug/<page>_ink.png` (with `--debug`): black ink in black, red ink in red, removed ruled lines in blue, everything outside the text block greyed out, text block outlined in green.
 - `debug/<page>_lines.png` (with `--debug`): each line's ink in its own colour (a matra in the wrong colour is on the wrong line), traced headlines as thin dark lines, boundaries between lines dashed.
 - `debug/<page>_pieces.png` (with `--debug`): stroke pieces in alternating colours with their numbers, a thin red line at every cut, and ink outside the pieces (upper and lower matras, left for C3b) in light purple.
+- `debug/<page>_letters.png` (with `--debug`): each letter in its own colour with a box around it; dandas grey, digits magenta, letters made by a split with a dashed red box.
 
 ## How page preparation works (C1)
 
@@ -73,10 +76,22 @@ The headline is drawn letter by letter. Between two letters it either has a gap 
 
 Result on the sample pages: about 36-46 pieces per line. As in the trial in the requirements, black lines show most letter boundaries, with extra pieces where vowel bars (ा ी) have their own short headline and missed cuts where headlines run into each other. Red lines have more of both: about a quarter of their pieces are narrow (bars, ि hooks) and a fifth are wider than 1.6 x the typical piece. C3b corrects these.
 
+## How letters are made (C3b)
+
+Stroke pieces are joined and split by rules, in this order (details and the reasons behind them: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md), C3b):
+
+1. **Narrow pieces:** a tall stroke with a mark touching it from above is an i-matra bar; if the mark leans right it is the short-i hook (ि) and joins the letter on its right, otherwise long-i (ी) and joins left. A stroke whose headline runs into its left neighbour, or is wider than its stem, is a vowel bar (ा ो ौ) and joins left. Other tall strokes are dandas (two close together are one ॥). Anything else (broken strokes, visarga) joins the neighbour it touches most.
+2. **Short-i stems in the previous letter:** a curl that rises near a letter's right edge and arches over the next letter marks a ि stem; the stem moves to the next letter.
+3. **Wide letters** (over 1.4 x the page's typical letter width) are split where there is an empty column between two letter bodies, or anyway when over 2.2 x. Joined bars and ि stems are never cut off.
+4. **Marks** above and below the letters go to the letter they touch most, otherwise the one they overlap most.
+5. **Digits:** one or two short letters between dandas.
+
+Black ink is cut almost perfectly; red ink, whose headlines run into each other, has most of the remaining errors. They are listed with their causes in [docs/TUNING.md](docs/TUNING.md).
+
 ## Tests
 
 ```
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-Synthetic pages ([tests/synthetic.py](tests/synthetic.py)) check folder handling, ink masks line detection (sloped and wavy headlines within 2 px, detached marks on the right line) and the first cut (gaps and thin joins cut, tiny gaps and continuous headlines not, a danda as its own piece, in red and black ink) against known values. The sample pages in `samples/` check the text block, ink colours and 11 lines per page on real scans.
+Synthetic pages ([tests/synthetic.py](tests/synthetic.py)) check folder handling, ink masks line detection (sloped and wavy headlines within 2 px, detached marks on the right line) the first cut (gaps and thin joins cut, tiny gaps and continuous headlines not, a danda as its own piece, in red and black ink) and every letter rule (vowel bar, short-i hook, touching letters, upper and lower marks, double danda, visarga) against known values. The sample pages in `samples/` check the text block, ink colours, 11 lines per page and the number of letters and dandas on real scans.
