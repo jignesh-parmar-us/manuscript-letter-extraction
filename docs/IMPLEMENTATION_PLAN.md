@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C5 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling), C5f (fixing cuts and adding samples) and C5g (export) are done. Still to be checked by the user: the app window on macOS, and a first review of the sample book (C5e, C5f). C7 (packaging) is next; C6 was merged into C5. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C5 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling), C5f (fixing cuts and adding samples) and C5g (export) are done. Still to be checked by the user: the app window on macOS, and a first review of the sample book (C5e, C5f). C7 (packaging) and C8 (GitHub Actions) are still open; C6 was merged into C5, and C9 moved to **Phase 2** (`docs/implementation_plan_phase2.md`, started 2026-10-04 with Tesseract label suggestions). Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -609,11 +609,9 @@ The planned Tkinter window (folders, Run, progress, open the output) is the C5d 
 
 **Done when:** a PR shows green tests and both build artifacts; tagging `v0.1.0` creates a release.
 
-### C9. Label suggestions (after first delivery)
+### C9. Label suggestions: moved to Phase 2
 
-Most of the original C9 (review screen, fixing cuts, decisions kept across runs) is now C5e and C5f. What remains:
-- **Label suggestions** for unlabelled groups from a Phase 2 recognizer, or from an AI service as an **opt-in** only (manuscripts may be private; offline by default).
-- Better fingerprints learned from the labelled groups, measured with the labels instead of by eye.
+Most of the original C9 (review screen, fixing cuts, decisions kept across runs) is now C5e and C5f. The rest, **label suggestions** (from Tesseract for printed books, from other labelled books, and from a trained recognizer), is now Phase 2, chunks C10 to C14 in `docs/implementation_plan_phase2.md` (decided 2026-10-04). AI services stay an opt-in only.
 
 ### Chunk summary
 
@@ -633,9 +631,9 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C5f | Fixing cuts, adding samples | done | cropped / joined / split / uploaded samples | FR-8 |
 | C5g | Export | done | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
 | C6 | GUI | merged into C5d | - | Section 7 |
-| C7 | Packaging | **next** | `.app`, `.exe` with the React screen | Section 7 |
+| C7 | Packaging | planned (timing: Phase 2 decision 6) | `.app`, `.exe` with the React screen | Section 7 |
 | C8 | GitHub Actions | planned | CI (Python, API, React), builds, releases | Section 7 |
-| C9 | Label suggestions | planned | suggested labels (opt-in) | FR-7 |
+| C9 | Label suggestions | moved to Phase 2 (C10-C14) | see `implementation_plan_phase2.md` | FR-7 |
 
 ---
 
