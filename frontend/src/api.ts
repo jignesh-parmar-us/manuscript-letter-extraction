@@ -98,7 +98,7 @@ export interface JobPage {
 export interface Job {
   id: string;
   book_id: number;
-  kind: "capture" | "add_pages" | "recut_page";
+  kind: "capture" | "add_pages" | "recut_page" | "export";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -292,6 +292,11 @@ export const api = {
     post<NewSampleResult>(`/api/books/${bookId}/samples/split`, { sample_id: sampleId, x }),
   upload: (bookId: number, filename: string, data: string) =>
     post<NewSampleResult>(`/api/books/${bookId}/samples/upload`, { filename, data }),
+
+  // export (C5g)
+  exportBook: (bookId: number, folder: string | null, image: string | null) =>
+    post<Job>(`/api/books/${bookId}/export`, { folder, image }),
+  openFolder: (path: string) => post<{ opened: string }>("/api/app/open-folder", { path }),
 
   checkLabel: (text: string, bookId?: number) =>
     get<LabelInfo>(`/api/label?text=${encodeURIComponent(text)}${bookId ? `&book_id=${bookId}` : ""}`),

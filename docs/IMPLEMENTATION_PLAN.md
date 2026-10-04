@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling) and C5f (fixing cuts and adding samples) are done; C5g (export) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C5 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling), C5f (fixing cuts and adding samples) and C5g (export) are done. Still to be checked by the user: the app window on macOS, and a first review of the sample book (C5e, C5f). C7 (packaging) is next; C6 was merged into C5. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -373,7 +373,7 @@ All times are stored in UTC and shown in local time.
 | C5d App shell, Books and Capture screens | **done** | C5c |
 | C5e Group review and labeling | **done** | C5c, C5d |
 | C5f Fixing cuts and adding samples | **done** | C5c, C5e |
-| C5g Export | **next** | C5a, C5b (can run before the screens) |
+| C5g Export | **done** | C5a, C5b (can run before the screens) |
 
 Every sub-chunk below has the same parts: status, goal, files, what it does, done when, tests, and (once built) the changes from this plan.
 
@@ -553,18 +553,31 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 #### C5g. Export (FR-9, FR-10)
 
-**Status: planned.**
+**Status: done** (commit "Add the export of a book's dataset (C5g)").
 **Goal:** the output folder of FR-9 and the summary of FR-10, built from a book's database, for Phase 2 training.
-**Files:** `app/export.py`, an Export button in the screens (after C5d), `tests/test_export.py`. Can be built and tested before the screens, from the library API.
+**Files:** `app/export.py`, the export job in `app/jobs.py`, `POST /api/books/{id}/export` and `POST /api/app/open-folder` in `app/api.py` (with `main.open_path`, replaceable through `AppContext.open_folder`), settings `dataset_image` and `min_samples_warn` in `config.py`; `frontend/src/screens/Export.tsx` (the **Export** tab); `tests/test_export.py`, `frontend/src/screens/Export.test.tsx`.
 
-**What it does** (to `exports/<date>/` in the book folder, or a chosen folder):
-- uses C5b's `category()`, `sort_key()`, `safe_name()`, `transliterate()` and `unmapped()` with the book's mapping (`mapping_for`);
-- `dataset/<category>/<safe name>/`: every sample of each **labelled** group (`original` crop by default; `normalized` black on white and `fixed64` 64 x 64 as options), `label.txt` with the Gujarati label; categories from C5b;
-- `lines/<page>_L01.png` + `.txt`: Gujarati text of each line from the labelled letters in reading order (by line, then by the x position of the box, so cropped, joined and split samples fall into place; `[?]` for unlabelled ones; deleted samples left out);
-- `letters.csv` (Gujarati label, Devanagari form, code points, transliteration, category, sample count, example image), `samples.csv` (as now, plus label, source and group status), `overview.html` (one example per class in alphabet order, classes under `min_samples_warn` highlighted, works offline), `unsure/` (unlabelled samples), `summary.txt` (pages, lines, letters, classes, classes with few samples, unsure, skipped files, letters with no Gujarati equivalent).
+**What it does** (to `<book>/exports/<date_time>/` or a chosen folder, which must be new or empty; nothing is written outside it):
+- uses C5b's `category()`, `sort_key()`, `safe_name()`, `transliterate()` and `unmapped()` with the book's mapping (`mapping_for`, so the `digits` and `mapping_file` settings apply);
+- a **class** is a label: groups with the same label are one class; deleted samples are left out;
+- `dataset/<category>/<safe name>/`: every sample of each labelled class, named `<page>_L<line>_<sample id>.png`, as the `original` crop (default), `normalized` (black ink on white, original size, 4 px margin) or `fixed64` (black on white, 64 x 64, aspect kept); `label.txt` with the Gujarati label;
+- `lines/<page>_L01.png` + `.txt`: each line and its Gujarati text from the labelled letters in reading order (by line, then by the x position of the box, so cropped, joined and split samples fall into place; `[?]` for unlabelled ones; deleted samples left out);
+- `unsure/`: every sample without a label (in no group, or in a group without label);
+- `letters.csv` (Gujarati, Devanagari, Gujarati code points, transliteration, category, sample count, folder, example image), in alphabet order; `samples.csv` (page, line, reading position, box, ink, kind, source, group, label in both scripts, group status, distance, exported image, letter image in the book); both `utf-8-sig`;
+- `overview.html`: one example per class by category in alphabet order, Gujarati label large, Devanagari and count small, classes under `min_samples_warn` outlined; works offline (relative image links);
+- `summary.txt` (FR-10): pages, lines, letters, classes, classes with few samples (named), unsure, uploaded samples, skipped pages, characters kept in Devanagari, image mode.
+- The **Export** tab: image choice, destination (the book's folder or another new / empty folder, with **Browse…** in the window), **Export** (a background job), the summary, **Open the folder** (Finder / Explorer), where `overview.html` shows every letter.
 
-**Done when:** after labelling a few groups of the sample book, the export is complete and Gujarati shows correctly in Excel and in the browser on Windows and macOS.
-**Tests:** export of a small labelled synthetic book: folder names, `label.txt`, CSV columns and `utf-8-sig`, alphabet order in `overview.html`, `[?]` in line text, uploaded samples marked, nothing written outside the export folder.
+**Done when:** after labelling a few groups of the sample book, the export is complete and Gujarati shows correctly in Excel and in the browser on Windows and macOS. *Met on macOS for the files (sample book with three labels: 854 samples exported in 4.7 s, letters in alphabet order, Gujarati line texts, clean 64 x 64 images); Excel and Windows are checked with the C7 build.*
+**Tests (9):** backend (7): dataset folders, label files, sample counts; `letters.csv` in alphabet order with code points and example image; `samples.csv` with every live sample, the uploaded one marked, every image present; unsure count; line texts with Gujarati letters and `[?]`; overview order and the few-sample outline; summary numbers; groups with the same label form one class; `fixed64` and `normalized` images; refused image mode; a folder with files is refused and left untouched; the default folder; Western digits by setting; the export job through the API, open-folder and its 404; refused requests. Screen (2): export with the chosen images, the result and **Open the folder**; export into another folder and the error shown.
+
+**Changes from the original plan (C5g):**
+- **The export is a background job** with a summary, not a direct call: copying tens of thousands of images can take a while.
+- **"Open the folder"** opens the export in Finder / Explorer (`POST /api/app/open-folder`) instead of showing `overview.html` inside the app: the app serves files only with the session token, and the overview's relative image links work best opened from disk.
+- **Destination:** a new folder with the date and time in the book's folder by default, or a chosen folder that must be new or empty, so an export never overwrites anything.
+- **One class per label** (groups with the same label are merged in the export), and **`unsure/`** holds every sample without a label, also those in unlabelled groups.
+- **`samples.csv`** has the label in both scripts, the source, the group status and the distance to the group's centre (the plan's "confidence"; a real confidence needs the Phase 2 recognizer), plus both image paths.
+- **Reading order** is the x position within the line (see C5f), not the stored position.
 
 ### C6. Desktop GUI: merged into C5
 
@@ -618,9 +631,9 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C5d | App shell, Books, Capture | done | own window and browser | FR-1, Section 7 |
 | C5e | Group review and labeling | done | clean, labelled groups | FR-7, FR-8 |
 | C5f | Fixing cuts, adding samples | done | cropped / joined / split / uploaded samples | FR-8 |
-| C5g | Export | **next** | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
+| C5g | Export | done | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
 | C6 | GUI | merged into C5d | - | Section 7 |
-| C7 | Packaging | planned | `.app`, `.exe` with the React screen | Section 7 |
+| C7 | Packaging | **next** | `.app`, `.exe` with the React screen | Section 7 |
 | C8 | GitHub Actions | planned | CI (Python, API, React), builds, releases | Section 7 |
 | C9 | Label suggestions | planned | suggested labels (opt-in) | FR-7 |
 

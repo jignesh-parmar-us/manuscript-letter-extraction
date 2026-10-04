@@ -16,6 +16,7 @@ const JOB_NAMES: Record<Job["kind"], string> = {
   capture: "Capture",
   add_pages: "Adding new pages",
   recut_page: "Cutting a page again",
+  export: "Export",
 };
 
 export default function Capture({ book, onChanged }: Props) {

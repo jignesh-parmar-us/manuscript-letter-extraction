@@ -70,6 +70,17 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def open_path(path: Path) -> None:
+    """Show a folder in Finder / Explorer / the file manager."""
+    import subprocess
+    if sys.platform == "darwin":
+        subprocess.run(["open", str(path)], check=False)
+    elif os.name == "nt":
+        os.startfile(str(path))                                # noqa: S606 (Windows only)
+    else:
+        subprocess.run(["xdg-open", str(path)], check=False)
+
+
 @dataclass
 class AppContext:
     """What the screens need to know about how the app runs (GET /api/app)."""
@@ -77,6 +88,7 @@ class AppContext:
     settings_file: Optional[Path] = None
     pick_folder: Optional[Callable[[], Optional[str]]] = None   # folder dialog, window mode only
     static_dir: Path = field(default_factory=lambda: STATIC)
+    open_folder: Callable[[Path], None] = open_path            # replaced in tests
 
 
 def build(library_path: Path, token: str, context: AppContext):

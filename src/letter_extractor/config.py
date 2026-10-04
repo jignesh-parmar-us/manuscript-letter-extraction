@@ -103,6 +103,11 @@ class Config:
     digits: str = "gujarati"              # digits in Gujarati text: "gujarati" (૧૨૩) or "western" (123)
     mapping_file: str = ""                # own copy of the Devanagari -> Gujarati exceptions; "" = built-in
 
+    # ---- export (C5g, FR-9) ----------------------------------------------------------------------
+    dataset_image: str = "original"       # dataset images: "original" crop, "normalized" (black on white)
+                                          # or "fixed64" (normalized, 64 x 64)
+    min_samples_warn: int = 10            # classes with fewer samples are highlighted in overview.html
+
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
     red: InkParams = field(default_factory=lambda: InkParams(

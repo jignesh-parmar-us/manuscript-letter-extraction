@@ -17,6 +17,7 @@ Routes (all JSON unless noted):
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
              (the input page image)
   samples    POST /api/books/{id}/samples/{crop|join|split|upload}   (C5f)
+  export     POST /api/books/{id}/export (a job), POST /api/app/open-folder   (C5g)
   app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
              PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it
 """
@@ -40,8 +41,8 @@ from .centres import suggestions
 from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (BookCreate, BookRename, BookSettings, Crop, Force, GroupRef, Label, LibraryChoice, Merge,
-                      Move, SampleIds, Split, Status, Upload)
+from .schemas import (BookCreate, BookRename, BookSettings, Crop, ExportRequest, FolderPath, Force, GroupRef, Label,
+                      LibraryChoice, Merge, Move, SampleIds, Split, Status, Upload)
 
 MAX_PAGE = 500
 
@@ -165,6 +166,16 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/pages/{page_id}/recut", dependencies=auth, status_code=202)
     def recut(book_id: int, page_id: int, body: Force = Force()) -> Dict:
         return jobs.recut_page(book_id, page_id, force=body.force).as_dict()
+
+    @app.post("/api/books/{book_id}/export", dependencies=auth, status_code=202)
+    def export(book_id: int, body: ExportRequest = ExportRequest()) -> Dict:
+        from .export import IMAGE_MODES
+        if body.image is not None and body.image not in IMAGE_MODES:
+            raise HTTPException(400, f"Image mode must be one of {', '.join(IMAGE_MODES)}.")
+        folder = Path(body.folder).expanduser() if body.folder else None
+        if folder is not None and folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
+            raise HTTPException(400, f"The export folder must be new or empty: {folder}")
+        return jobs.export(book_id, folder, body.image).as_dict()
 
     @app.get("/api/jobs/{job_id}", dependencies=auth)
     def job(job_id: str) -> Dict:
@@ -362,6 +373,14 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         if context.pick_folder is None:
             raise HTTPException(501, "No folder dialog in the browser; type the folder path.")
         return {"path": context.pick_folder()}
+
+    @app.post("/api/app/open-folder", dependencies=auth)
+    def open_folder(body: FolderPath) -> Dict:
+        path = Path(body.path).expanduser()
+        if not path.is_dir():
+            raise HTTPException(404, f"No such folder: {path}")
+        context.open_folder(path)
+        return {"opened": str(path)}
 
     @app.patch("/api/books/{book_id}/settings", dependencies=auth)
     def book_settings(book_id: int, body: BookSettings) -> Dict:

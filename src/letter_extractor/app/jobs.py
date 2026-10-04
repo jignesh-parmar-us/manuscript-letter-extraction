@@ -21,7 +21,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page
+    kind: str                                  # capture | add_pages | recut_page | export
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -120,6 +120,13 @@ class Jobs:
                                      "cutting it again would replace them.")
         return self.start(book_id, "recut_page", lambda progress, cancel:
                           self.lib.recut_page(book_id, page_id, progress, cancel, force=force), total=1)
+
+    def export(self, book_id: int, folder=None, image=None) -> Job:
+        """Export the book's dataset (C5g); copying many images can take a while."""
+        from .export import export_book
+        self.lib.get_book(book_id)
+        return self.start(book_id, "export",
+                          lambda progress, cancel: export_book(self.lib, book_id, folder, image))
 
     def _images(self, book_id: int):
         from pathlib import Path

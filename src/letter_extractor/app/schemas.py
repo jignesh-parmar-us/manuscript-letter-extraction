@@ -67,3 +67,12 @@ class Split(BaseModel):
 class Upload(BaseModel):
     filename: str
     data: str                                     # the file, base64 encoded
+
+
+class ExportRequest(BaseModel):
+    folder: Optional[str] = None                  # None: <book>/exports/<date and time>
+    image: Optional[str] = None                   # original | normalized | fixed64; None: the book's setting
+
+
+class FolderPath(BaseModel):
+    path: str
