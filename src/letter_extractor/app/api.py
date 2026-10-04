@@ -60,7 +60,7 @@ def _sample_json(smp: Sample, book_id: int, token: str) -> Dict:
             "image": f"/files/books/{book_id}/{smp.image}?token={token}"}
 
 
-def _group_json(s, g: LetterGroup) -> Dict:
+def _group_json(s, g: LetterGroup, token: str) -> Dict:
     mem = s.scalars(select(Sample).where(Sample.group_id == g.id, Sample.deleted.is_(False))
                     .order_by(Sample.distance)).all()
     red = sum(m.ink == "red" for m in mem)
@@ -69,6 +69,7 @@ def _group_json(s, g: LetterGroup) -> Dict:
             "status": g.status, "locked": g.locked, "samples": len(mem), "red": red, "black": len(mem) - red,
             "spread": round(sum(dists) / len(dists), 3) if dists else None,
             "example_id": mem[0].id if mem else None,
+            "example_image": f"/files/books/{g.book_id}/{mem[0].image}?token={token}" if mem else None,
             "updated_at": g.updated_at.isoformat() if g.updated_at else None}
 
 
@@ -204,13 +205,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def groups(book_id: int) -> List[Dict]:
         with library.session() as s:
             book_or_404(s, book_id)
-            return [_group_json(s, g) for g in
+            return [_group_json(s, g, token) for g in
                     s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id).order_by(LetterGroup.code))]
 
     @app.get("/api/groups/{group_id}", dependencies=auth)
     def group(group_id: int) -> Dict:
         with library.session() as s:
-            return _group_json(s, group_or_404(s, group_id))
+            return _group_json(s, group_or_404(s, group_id), token)
 
     @app.get("/api/groups/{group_id}/samples", dependencies=auth)
     def group_samples(group_id: int, offset: int = 0, limit: int = Query(200, le=MAX_PAGE)) -> Dict:

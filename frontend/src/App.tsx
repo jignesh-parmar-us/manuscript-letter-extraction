@@ -34,7 +34,7 @@ export default function App() {
       <main>
         <ErrorBox error={error} onClose={() => setError(null)} />
         {bookId !== null && !Number.isNaN(bookId) ? (
-          <BookView bookId={bookId} tab={route[2] ?? "capture"} info={info} />
+          <BookView bookId={bookId} tab={route[2] ?? "capture"} sub={route[3]} info={info} />
         ) : (
           <Books info={info} onLibraryChanged={() => api.app().then(setInfo, setError)} />
         )}

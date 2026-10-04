@@ -271,3 +271,153 @@ pre.settings {
   max-width: 480px;
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
 }
+
+/* ---- review (C5e) ---- */
+.review {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.sidebar {
+  position: sticky;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100vh - 24px);
+}
+.sidebar select {
+  min-width: 0;
+  flex: 1;
+}
+.side-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 4px;
+}
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+  padding: 4px 8px;
+}
+.side-item.active {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.side-item.over {
+  outline: 2px dashed var(--accent);
+}
+.side-label {
+  flex: 1;
+  font-size: 18px;
+}
+.thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 3px;
+  display: inline-block;
+}
+.pane {
+  min-width: 0;
+}
+.group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.big-letter {
+  font-size: 30px;
+  line-height: 1.2;
+}
+.toolbar {
+  margin: 10px 0;
+}
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.tile {
+  position: relative;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: var(--panel);
+  cursor: pointer;
+  touch-action: none;
+}
+.tile img {
+  display: block;
+  height: 64px;
+  max-width: 160px;
+  border-bottom: 3px solid transparent;
+}
+.tile.ink-red img {
+  border-bottom-color: #d65a4a;
+}
+.tile.ink-black img {
+  border-bottom-color: #444;
+}
+.tile.selected {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.tile.dragging {
+  opacity: 0.4;
+}
+.suggestion {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  font-size: 12px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+.label-picker {
+  margin: 10px 0;
+}
+.label-input {
+  font-size: 20px;
+  min-width: 220px;
+}
+.label-check {
+  min-height: 40px;
+  margin-top: 4px;
+}
+.error-text {
+  color: var(--danger);
+}
+.palette {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 6px;
+  background: var(--panel);
+}
+.palette-row {
+  margin-top: 6px;
+}
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.key {
+  min-width: 38px;
+  font-size: 20px;
+  padding: 2px 6px;
+}

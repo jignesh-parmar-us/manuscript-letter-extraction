@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API) and C5d (app shell, Books and Capture screens) are done; C5e (group review and labeling) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens) and C5e (group review and labeling) are done; C5f (fixing cuts and adding samples) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -371,8 +371,8 @@ All times are stored in UTC and shown in local time.
 | C5b Unicode mapping | **done** | - |
 | C5c Backend API | **done** | C5a, C5b |
 | C5d App shell, Books and Capture screens | **done** | C5c |
-| C5e Group review and labeling | **next** | C5c, C5d |
-| C5f Fixing cuts and adding samples | planned | C5c, C5e |
+| C5e Group review and labeling | **done** | C5c, C5d |
+| C5f Fixing cuts and adding samples | **next** | C5c, C5e |
 | C5g Export | planned | C5a, C5b (can run before the screens) |
 
 Every sub-chunk below has the same parts: status, goal, files, what it does, done when, tests, and (once built) the changes from this plan.
@@ -502,20 +502,28 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 #### C5e. Group review and labeling
 
-**Status: planned.**
+**Status: done** (commit "Add the group review and labeling screen (C5e)"). A first review of the sample book by the user is still to come (see "Done when").
 **Goal:** clean and label all groups of a book without leaving the app (FR-7, FR-8).
-**Files:** `frontend/src/screens/Groups.tsx`, `GroupView.tsx`, `Unsure.tsx`, `components/SampleGrid.tsx`, `components/LabelPicker.tsx`; tests next to them; new tabs in `BookView.tsx` (`TABS`) and calls in `api.ts`, following the C5d patterns (`useConfirm`, `ErrorBox`, plain state). New dependencies (Node): `@dnd-kit/core` (drag and drop), `@tanstack/react-virtual` (large grids).
+**Files:** `frontend/src/screens/Review.tsx` (the tab: side list, drag and drop, undo / redo), `GroupView.tsx`, `SamplesView.tsx` (unsure and deleted samples), `components/SampleGrid.tsx`, `components/LabelPicker.tsx`, `components/selection.ts`, `components/usePagedSamples.ts`; review calls and types in `api.ts`; the tab in `BookView.tsx`; tests next to them (`reviewTestUtils.tsx` for a review context). Backend: the group list now carries `example_image`. New dependency (Node): `@dnd-kit/core`.
 
-**What it does:**
-- **Groups** list (`GET /api/books/{id}/groups`): code, label (Gujarati, with Devanagari on hover), sample count, red / black share, status, locked; filter (unlabelled, reviewed, large spread = possibly mixed; empty groups shown last with "dissolve"), sort.
-- **Group** view: samples as a grid, nearest to the centre first, only the visible part loaded; select by click, shift-click, box; **drag** to `Unsure` or to a group in the side list; **New group from selection**; **Merge** with another group; **Delete** (specks).
-- **Unsure** view: the same grid; select and **create a group**, or drop on a group; each sample shows its **suggested group**, accepted with one key.
-- **Label** a group: type in Devanagari or Gujarati, or the **on-screen picker** (consonant, halant for a conjunct, matra, anusvara / visarga; Devanagari / Gujarati switch); live check through the API; shown in both scripts with code points; mark **reviewed** / **lock**.
-- **Undo / redo** (Ctrl+Z / Cmd+Z, Shift for redo; `POST /undo`, `/redo`, counts returned with every action) and keyboard keys for the main actions; a history panel (`GET /history`).
-- All of these call the C5c actions (`move`, `new-group`, `merge`, `dissolve`, `label`, `status`, `delete`, `restore`); refused actions show the reason the API returns.
+**What it does:** a **Review groups** tab (`#/books/<id>/review/<group | unsure | deleted>`):
+- **Side list:** Undo / Redo buttons (with counts), **Unsure** (count), **Deleted samples**, then the groups with an example image, the label in Gujarati (or the code), sample count, ✓ reviewed, 🔒 locked. Filter: all, without label, labelled, not reviewed, **possibly mixed** (the 20% of groups with the largest spread), empty; sort by code, size or spread. Every group and **Unsure** is a **drop target**.
+- **Group view:** the label in both scripts, code, kind, counts (red / black), spread; **Reviewed** and **Locked** check boxes; the **label picker**; the samples nearest to the centre first, 200 at a time (**Show more**), images loaded lazily; select by click, Ctrl/Cmd+click, Shift+click (range), Ctrl/Cmd+A; **To Unsure** (U), **New group** (N, then opens it), **Move to group…**, **Delete** (Delete key); **Merge another group into this one**, **Dissolve group** (with confirmation). A locked group shows its samples but only allows unlocking.
+- **Drag and drop:** drag a sample (with the other selected ones) onto a group or Unsure in the side list; a drag starts after 6 px, so a click still selects.
+- **Unsure view:** each sample shows its **suggested group** (→ label); click it to accept, or select samples and **Accept suggestions** (A); **New group** (N), **Move to group…**, **Delete**. **Deleted samples** view: **Restore** (back to unsure).
+- **Label picker:** type in Gujarati or Devanagari, or open **Letters…**: a palette (vowels, consonants, conjunct shortcuts, vowel signs / halant / marks, digits, punctuation) shown in Gujarati or Devanagari; the label is checked 250 ms after each change (`/api/label`) and shown in both scripts with code points and category, or with the reason it is not a letter; **Save label** (or Enter), **Clear label**.
+- **Undo / redo:** Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z, and the buttons; every action reloads the side list, the view and the book's numbers.
 
-**Done when:** on the sample book, the mixed groups listed in `docs/TUNING.md` (ता / ना, नि / ति, नो / तो ...) can be cleaned and labelled in the app, and everything is still there after a restart.
-**Tests:** selection, drag and the label picker with a mocked API (Vitest); the picker builds क्षि and શ્રી correctly; a large group (2000 samples) stays responsive (render count check).
+**Done when:** on the sample book, the mixed groups listed in `docs/TUNING.md` (ता / ना, नि / ति, नो / तो ...) can be cleaned and labelled in the app, and everything is still there after a restart. *All actions this needs are in the screen and covered by tests (screen tests with a mocked backend; the backend actions and their persistence by the C5c tests); the user's first review of the sample book is the remaining check.*
+**Tests (18 new screen tests, 31 in total):** selection (click, Ctrl/Cmd+click, Shift range both ways); label picker (palette in both scripts builds क्षि and શ્રી, the live check is shown, a refused label cannot be saved, saving passes the typed text); group view (Shift-range selection moved to unsure, N makes a new group and opens it, Delete key, merge, a locked group refuses changes and can be unlocked, a 2000-sample group shows 200 then 400); unsure view (accept one suggestion, accept the selected suggestions with one move per group, restore deleted); review frame (Ctrl+Z undoes and enables Redo, filters and sorting). Breaking the Shift range or the per-group accept makes tests fail. Type check clean.
+
+**Changes from the original plan (C5e):**
+- **One "Review groups" tab** with the group list in a side bar, instead of a separate Groups list screen: the list is the drop target for dragging, so it has to be visible next to the samples. A **Deleted samples** view was added to restore samples.
+- **No virtual-scrolling library:** a group shows 200 samples, then 200 more on request, with lazily loaded images. This keeps a 2000-sample group fast without `@tanstack/react-virtual`; it can be added later if books get much larger.
+- **No box (rubber-band) selection:** click, Ctrl/Cmd+click, Shift+click and Ctrl/Cmd+A cover the cases; a box would conflict with dragging samples.
+- **"Possibly mixed"** is defined as the 20% of groups with the largest spread (mean distance of the samples to the group's centre).
+- **Accepting several suggestions** makes one move per suggested group, so each can be undone on its own.
+- **Backend:** the group list includes an example image URL (`example_image`), so the side list needs no extra request per group.
 
 #### C5f. Fixing cuts and adding samples
 
@@ -524,7 +532,7 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 **Files:** `app/samples.py` (new samples from a box, join, split, upload), routes in `app/api.py`, `frontend/src/screens/PageViewer.tsx`; `tests/test_samples.py`. New dependency (Node): `react-image-crop`. The new actions record their before / after states with the same mechanism as C5c (`actions._Change`), so undo, redo and history cover them too; new samples get a fingerprint, so C5c's suggestions work for them.
 
 **What it does:**
-- **Page / line viewer:** the page or one line with every sample's box, coloured by group; click a box to open its group.
+- **Page / line viewer:** a new **Pages** tab in `BookView.tsx` (`#/books/<id>/pages/<page id>`): the page or one line with every sample's box, coloured by group; click a box to open its group in the Review tab (`#/books/<id>/review/<group id>`). The page data comes from `GET /api/pages/{id}` (C5c), which already lists the lines and samples with boxes.
 - **Draw a box** on a line or page: a new sample from the ink inside the box (the page's C1 ink masks, computed on demand and cached in the book folder), source `cropped`; samples it overlaps are offered for deletion.
 - **Join** two neighbouring samples (union of their masks); **split** a sample at a column (drag a line); source `joined` / `split`; the old samples are kept as deleted, so undo works.
 - **Upload** a letter image: ink found with the C1 colour rules (no text block needed), source `uploaded`, no page position (shown as such; the export marks it).
@@ -598,8 +606,8 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C5b | Unicode mapping | done | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
 | C5c | Backend API | done | review actions, capture jobs, undo | FR-7, FR-8 |
 | C5d | App shell, Books, Capture | done | own window and browser | FR-1, Section 7 |
-| C5e | Group review and labeling | **next** | clean, labelled groups | FR-7, FR-8 |
-| C5f | Fixing cuts, adding samples | planned | cropped / joined / split / uploaded samples | FR-8 |
+| C5e | Group review and labeling | done | clean, labelled groups | FR-7, FR-8 |
+| C5f | Fixing cuts, adding samples | **next** | cropped / joined / split / uploaded samples | FR-8 |
 | C5g | Export | planned | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
 | C6 | GUI | merged into C5d | - | Section 7 |
 | C7 | Packaging | planned | `.app`, `.exe` with the React screen | Section 7 |

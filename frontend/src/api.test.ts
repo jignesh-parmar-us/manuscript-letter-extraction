@@ -22,7 +22,7 @@ describe("api", () => {
 
   it("turns an error answer into ApiError with the backend's message", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => reply(409, { detail: "has labels", code: "needs_confirmation" }));
-    const error = await request("POST", "/api/books/1/capture", {}).catch((e) => e);
+    const error = (await request("POST", "/api/books/1/capture", {}).catch((e) => e)) as ApiError;
     expect(error).toBeInstanceOf(ApiError);
     expect(error.message).toBe("has labels");
     expect(error.needsConfirmation).toBe(true);
@@ -30,7 +30,7 @@ describe("api", () => {
 
   it("joins validation messages", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => reply(422, { detail: [{ msg: "too short" }, { msg: "missing" }] }));
-    const error = await request("GET", "/x").catch((e) => e);
+    const error = (await request("GET", "/x").catch((e) => e)) as ApiError;
     expect(error.message).toBe("too short; missing");
     expect(error.needsConfirmation).toBe(false);
   });

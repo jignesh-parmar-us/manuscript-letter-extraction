@@ -126,6 +126,82 @@ export interface PageInfo {
   image: string;
 }
 
+export interface Group {
+  id: number;
+  code: string;
+  kind: "letter" | "danda" | "digit";
+  label_dev: string;
+  label_guj: string;
+  status: "auto" | "reviewed" | "labelled";
+  locked: boolean;
+  samples: number;
+  red: number;
+  black: number;
+  spread: number | null;
+  example_id: number | null;
+  example_image: string | null;
+  updated_at: string | null;
+}
+
+export interface Suggestion {
+  group_id: number;
+  code: string;
+  label_dev: string;
+  label_guj: string;
+  distance: number;
+}
+
+export interface Sample {
+  id: number;
+  page_id: number | null;
+  line: number;
+  pos: number;
+  box: [number, number, number, number];
+  ink: "red" | "black";
+  kind: string;
+  source: string;
+  group_id: number | null;
+  distance: number | null;
+  deleted: boolean;
+  rules: string;
+  image: string;
+  suggestion?: Suggestion | null;
+}
+
+export interface SamplePage {
+  total: number;
+  offset: number;
+  samples: Sample[];
+}
+
+/** Every action answers with what it did and the new undo / redo counts. */
+export interface ActionResult {
+  kind?: string;
+  group_id?: number;
+  undo: number;
+  redo: number;
+  [key: string]: unknown;
+}
+
+export interface LabelInfo {
+  ok: boolean;
+  error?: string;
+  devanagari?: string;
+  gujarati?: string;
+  code_points_devanagari?: string;
+  code_points_gujarati?: string;
+  category?: string;
+  kept_in_devanagari?: string[];
+}
+
+export interface HistoryItem {
+  id: number;
+  kind: string;
+  undone: boolean;
+  created_at: string;
+  [key: string]: unknown;
+}
+
 // ---- calls ----------------------------------------------------------------------------------
 
 export const api = {
@@ -149,6 +225,37 @@ export const api = {
     post<Job>(`/api/books/${id}/pages/${pageId}/recut`, { force }),
   job: (jobId: string) => get<Job>(`/api/jobs/${jobId}`),
   cancelJob: (jobId: string) => post<Job>(`/api/jobs/${jobId}/cancel`),
+
+  // review (C5e)
+  groups: (bookId: number) => get<Group[]>(`/api/books/${bookId}/groups`),
+  group: (groupId: number) => get<Group>(`/api/groups/${groupId}`),
+  groupSamples: (groupId: number, offset = 0, limit = 200) =>
+    get<SamplePage>(`/api/groups/${groupId}/samples?offset=${offset}&limit=${limit}`),
+  unsure: (bookId: number, offset = 0, limit = 200) =>
+    get<SamplePage>(`/api/books/${bookId}/unsure?offset=${offset}&limit=${limit}`),
+  deleted: (bookId: number, offset = 0, limit = 200) =>
+    get<SamplePage>(`/api/books/${bookId}/unsure?deleted=true&suggest=false&offset=${offset}&limit=${limit}`),
+  move: (bookId: number, sampleIds: number[], groupId: number | null) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/move`, { sample_ids: sampleIds, group_id: groupId }),
+  newGroup: (bookId: number, sampleIds: number[]) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/new-group`, { sample_ids: sampleIds }),
+  merge: (bookId: number, targetId: number, sourceIds: number[]) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/merge`, { target_id: targetId, source_ids: sourceIds }),
+  dissolve: (bookId: number, groupId: number) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/dissolve`, { group_id: groupId }),
+  label: (bookId: number, groupId: number, text: string) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/label`, { group_id: groupId, text }),
+  status: (bookId: number, groupId: number, change: { reviewed?: boolean; locked?: boolean }) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/status`, { group_id: groupId, ...change }),
+  deleteSamples: (bookId: number, sampleIds: number[]) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/delete`, { sample_ids: sampleIds }),
+  restoreSamples: (bookId: number, sampleIds: number[]) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/restore`, { sample_ids: sampleIds }),
+  undo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/undo`),
+  redo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/redo`),
+  history: (bookId: number) => get<HistoryItem[]>(`/api/books/${bookId}/history`),
+  checkLabel: (text: string, bookId?: number) =>
+    get<LabelInfo>(`/api/label?text=${encodeURIComponent(text)}${bookId ? `&book_id=${bookId}` : ""}`),
 };
 
 /** Local date and time of a timestamp from the backend (stored in UTC). */

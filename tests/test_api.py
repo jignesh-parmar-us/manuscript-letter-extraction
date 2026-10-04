@@ -193,7 +193,7 @@ class ReviewTests(ApiTestCase):
     def test_group_listing_fields(self):
         g = self.groups()[0]
         for key in ("id", "code", "kind", "label_dev", "label_guj", "status", "locked", "samples", "red", "black",
-                    "spread", "example_id"):
+                    "spread", "example_id", "example_image"):
             self.assertIn(key, g)
         self.assertEqual(g["samples"], g["red"] + g["black"])
 

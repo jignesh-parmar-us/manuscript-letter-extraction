@@ -5,16 +5,21 @@ import { api, AppInfo, Book } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
 import Capture from "./Capture";
+import Review from "./Review";
 
-export const TABS: { id: string; label: string }[] = [{ id: "capture", label: "Pages & capture" }];
+export const TABS: { id: string; label: string }[] = [
+  { id: "capture", label: "Pages & capture" },
+  { id: "review", label: "Review groups" },
+];
 
 interface Props {
   bookId: number;
   tab: string;
+  sub?: string; // e.g. the group shown in the Review tab
   info: AppInfo | null;
 }
 
-export default function BookView({ bookId, tab, info }: Props) {
+export default function BookView({ bookId, tab, sub, info }: Props) {
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -56,6 +61,7 @@ export default function BookView({ bookId, tab, info }: Props) {
       </nav>
       <ErrorBox error={error} onClose={() => setError(null)} />
       {tab === "capture" && <Capture book={book} info={info} onChanged={reload} />}
+      {tab === "review" && <Review book={book} view={sub} onChanged={reload} />}
     </section>
   );
 }
