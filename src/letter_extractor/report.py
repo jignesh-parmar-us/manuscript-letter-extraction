@@ -4,7 +4,9 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+
+import numpy as np
 
 STATUS_OK = "OK"
 STATUS_NO_TEXT = "NO_TEXT"
@@ -15,7 +17,8 @@ CSV_COLUMNS = ["file", "status", "message", "width", "height",
                "block_x", "block_y", "block_w", "block_h", "black_px", "red_px",
                "lines", "line_spacing", "pieces", "specks", "letters", "dandas", "digits", "seconds"]
 
-SAMPLE_COLUMNS = ["page", "line", "pos", "x", "y", "w", "h", "ink", "kind", "pieces", "rules", "image"]
+SAMPLE_COLUMNS = ["page", "line", "pos", "x", "y", "w", "h", "ink", "kind", "pieces", "rules", "image",
+                  "group_id", "distance"]
 
 
 @dataclass
@@ -40,6 +43,7 @@ class PageResult:
     digits: int = 0                   # ...of which verse-number digits
     seconds: float = 0.0
     samples: List[Dict] = field(default_factory=list, repr=False)   # one row per letter (samples.csv)
+    features: Optional[np.ndarray] = field(default=None, repr=False)  # one fingerprint per sample (C4)
 
 
 def write_report(results: List[PageResult], ignored: List[Path], out_dir: Path) -> Path:
@@ -59,10 +63,11 @@ def write_report(results: List[PageResult], ignored: List[Path], out_dir: Path) 
 
 def write_samples(results: List[PageResult], out_dir: Path) -> Path:
     """samples.csv: one row per letter sample, in page and reading order (FR-6). `image` is the
-    letter image relative to the output folder; `rules` lists the join / split rules applied."""
+    letter image relative to the output folder; `rules` lists the join / split rules applied;
+    `group_id` is the letter group (or "unsure") and `distance` the distance to its group's centre."""
     path = Path(out_dir) / "samples.csv"
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=SAMPLE_COLUMNS)
+        w = csv.DictWriter(f, fieldnames=SAMPLE_COLUMNS, restval="")
         w.writeheader()
         for r in results:
             w.writerows(r.samples)

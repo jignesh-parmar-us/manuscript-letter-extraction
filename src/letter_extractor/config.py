@@ -84,6 +84,21 @@ class Config:
     digit_max_width_ratio: float = 1.5    # up to two letters this narrow between dandas are a verse number
     letter_margin_px: int = 4             # margin around each letter image
 
+    # ---- grouping (C4, FR-7) ---------------------------------------------------------------
+    normalize_size: int = 48              # letters are compared as square images this size...
+    fp_blur: float = 1.0                  # ...blurred this much (px) so small shifts still match
+    fp_pixels: int = 24                   # the image part of a fingerprint is this many px square
+    fp_pixel_weight: float = 1.0          # weights of the image part, the stroke-direction (HOG) part
+    fp_hog_weight: float = 1.0            # and the letter-size part
+    fp_size_weight: float = 0.5
+    group_distance: float = 0.55          # samples closer than this (0 = same, 2 = opposite) share a group
+    group_rounds: int = 3                 # merge / reassign rounds after the first pass
+    group_outlier_distance: float = 0.5   # a sample further than this from its group's centre is unsure;
+                                          # also the limit for merging groups (90% of members within it)
+    group_max_merge: int = 5000           # groups are merged only up to this many (k x k distance matrix)
+    min_group_size: int = 2               # smaller groups are not groups: their samples go to "unsure"
+    group_max_shown: int = 20             # samples shown per group in groups.html
+
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
     red: InkParams = field(default_factory=lambda: InkParams(

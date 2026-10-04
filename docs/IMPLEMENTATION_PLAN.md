@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9)**. Each chunk ends with a CLI you can run on the sample pages, and output you can check by eye, before the next chunk starts.
 
-**Status:** C0, C1, C2, C3a and C3b are done (letter cutting: 92% of letters correct on the counted sample lines, see `docs/TUNING.md`). C4 (grouping) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 (labels, Gujarati mapping, CSV and HTML reports) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -19,7 +19,7 @@ Same stack as `manuscript-border-remover-app`, so code, packaging and CI can be 
 | Language | **Python 3.10+** (build with 3.13) | Same code on Windows and macOS. |
 | Image processing | **OpenCV** (`opencv-python-headless`) + **NumPy** | Thresholding, morphology, connected components and projections are built in and fast. |
 | Image I/O | **Pillow** | Unicode-safe paths on Windows. Never use `cv2.imread` / `cv2.imwrite`. |
-| Grouping | **scikit-learn** (added in C4 only) | Agglomerative clustering and HOG-like features without writing them by hand. |
+| Grouping | **NumPy** (was: scikit-learn) | Threshold clustering written for this project; see C4 for why scikit-learn was not used. |
 | GUI | **Tkinter** | Ships with Python, small installer, same as the border remover. |
 | Batch speed | `ProcessPoolExecutor` | Pages are independent up to the grouping step. |
 | Packaging | **PyInstaller** | `.exe` on Windows, `.app` on macOS (each built on its own OS). |
@@ -275,20 +275,34 @@ Each line is handled as a label image (every ink pixel carries its letter number
 
 **Goal:** put samples that look alike into groups across all pages, so the user labels groups instead of single letters.
 
-1. **Normalize** each letter: ink mask → black on white, crop to ink, pad to a square, resize to 48 × 48.
-2. **Fingerprint:** downsampled pixels plus HOG (`skimage`-free, written with OpenCV `HOGDescriptor` or NumPy gradients), L2-normalized.
-3. **Cluster:** agglomerative clustering (`sklearn`) with a distance threshold from `Config` (`group_distance`). Red and black samples share groups.
-4. **Unsure:** groups smaller than `min_group_size` and samples far from their group centre go to `unsure`.
-5. Order groups by size (biggest first) and give them stable IDs `g0001`, `g0002`, ...
+1. **Fingerprint** (`features.py`, computed in the page workers from each letter's ink mask, so paper tone and ink colour do not matter): crop to the ink, pad to a square, resize to 48 x 48, blur 1 px; then a 24 x 24 image part, a HOG part (stroke directions in 6 x 6 cells, 2 x 2 block normalization) and the letter's width and height relative to the line spacing. Each part is scaled to unit length, the whole vector too, so distances run from 0 (same) to 2.
+2. **Cluster** (`grouping.py`, plain NumPy), separately per kind (letters, dandas, digits); red and black share groups:
+   - first pass in reading order: a sample joins the nearest group centre within `group_distance` (0.55), otherwise starts a new group;
+   - merge: closest groups first while their centres are within `group_distance`, and only if 90% of the merged members stay within `group_outlier_distance` (0.5) of the new centre;
+   - reassign every sample to its nearest centre; merge and reassign repeat 3 times;
+   - centres are kept at unit length.
+3. **Unsure:** samples further than `group_outlier_distance` from their group's centre, and groups smaller than `min_group_size` (2).
+4. Groups are numbered by size, largest first (`g0001`, `g0002`, ...), ties by the first sample in reading order.
 
 **Output:**
-- `groups/g0001/<page>_L01_003.png`, ... (temporary review folders);
-- `unsure/`;
-- `samples.csv` gets `group_id` and `distance` columns;
-- `groups.html`: a simple page with one row per group showing up to 20 samples, to check the grouping.
+- `groups/g0001/<page>_L01_003.png`, ...: copies of the letter images, one folder per group (replaced on every run);
+- `unsure/<page>_L01_003.png`;
+- `samples.csv` gets `group_id` (or `unsure`) and `distance` (to the group's centre);
+- `groups.html`: one row per group with up to 20 samples (nearest to the centre first), sample counts and red / black split, then the unsure samples; hover a sample to see its page, line and position. Works offline;
+- the CLI prints the number of groups and unsure samples.
 
-**Done when:** on the two pages most groups contain a single letter. Look-alikes that merge (व/ब, घ/ध, म/भ) are noted for the review step.
-**Tests:** synthetic glyphs (rendered shapes plus noise) cluster into the right number of groups.
+**Done when:** on the two pages most groups contain a single letter. Look-alikes that merge (व/ब, घ/ध, म/भ) are noted for the review step. *Met: 54 groups and 236 unsure of 854 samples; about two thirds of the 30 largest groups hold one letter, the others join look-alikes (ता / ना / मा, नि / ति, नो / तो, त / न ...). Details in `docs/TUNING.md`.*
+**Tests:** synthetic glyphs (8 shapes with random size, stroke width, shift and slant) form exactly 8 pure groups; kinds never share a group; singletons are unsure; fingerprints ignore position; folders, `groups.html` and the `samples.csv` columns agree; on the sample pages there are 40-70 groups, under 35% unsure and no group with more than 15% of the samples. Disabling the compactness check or the unit-length centres makes the tests fail.
+**Performance:** 40,000 samples (about 100 pages) group in 41-77 s; per page 5-6 s on one worker.
+
+**Changes from the original plan:**
+- **No scikit-learn; NumPy clustering instead of agglomerative clustering.** Agglomerative clustering needs the distance between every pair of samples: 40,000 samples (about 100 pages) is 1.6 billion distances, far too much memory for a laptop, and the plan had already flagged scikit-learn's size for the installer (C7). The NumPy version needs memory for the groups only.
+- **Centres are kept at unit length.** With plain means, the centre of a large, varied group is a short vector close to every sample, and one group swallowed most of the letters.
+- **Merges must keep a group compact** (90% of members within `group_outlier_distance`). Without it, groups crept from letter to look-alike letter one merge at a time, and the result jumped between nearby settings.
+- **Outliers are removed once, at the end,** not during the rounds; doing it in every round made the result unstable.
+- **The fingerprint is sharper than first planned** (24 x 24 image part, 1 px blur, 6 x 6 HOG cells instead of 16 x 16, 1.5 px and 4 x 4): this separated वा / ना / ता, छे / के and म / न / स.
+- **HOG is computed with NumPy**, because OpenCV 5 no longer ships `cv2.HOGDescriptor` in the main package.
+- **Group folders hold copies** of the letter images (named `<page>_L01_003.png`), so a group can be looked through in any image viewer. In C5 the labelled `dataset/` folders replace them as the main output.
 
 ### C5. Labels, Gujarati mapping, CSV and HTML reports (FR-7, FR-9, FR-10)
 
@@ -331,7 +345,7 @@ Each line is handled as a label image (every ink pixel carries its letter number
 
 - `packaging/gui_entry.py` (with `freeze_support()`), `build_macos.sh`, `build_windows.bat`, copied from the border remover and renamed to `LetterExtractor`.
 - Bundle `data/mapping_dev_guj.csv` with `--add-data`; load it through a helper that works both from source and from the frozen app (`sys._MEIPASS`).
-- Check the size added by scikit-learn; if it is too large, replace the clustering with a small NumPy implementation.
+- No extra dependency to check: grouping is plain NumPy since C4 (scikit-learn was dropped).
 
 **Output:** `dist/LetterExtractor.app` (macOS), `dist/LetterExtractor/LetterExtractor.exe` (Windows).
 **Done when:** each build runs the two sample pages on a clean machine of its OS.
@@ -404,7 +418,9 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | `split_gap_frac` | C3b | 0.15 |
 | `letter_margin_px` | C3b | 4 |
 | `normalize_size` | C4 | 48 |
-| `group_distance` | C4 | to tune |
+| `fp_pixels`, `fp_blur` | C4 | 24, 1.0 |
+| `group_distance` | C4 | 0.55 |
+| `group_outlier_distance` | C4 | 0.5 |
 | `min_group_size` | C4 | 2 |
 | `digits` | C5 | `gujarati` (or `western`) |
 | `dataset_image` | C5 | `original` (or `normalized`, `fixed64`) |
@@ -433,7 +449,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | FR-4 Headline-break splitting | C3a | `pieces.py` |
 | FR-5 Join and split rules | C3b | `letters.py` |
 | FR-6 Letter samples, ink mask, reading order | C3b | `letters.py`, `report.py` |
-| FR-7 Grouping and labeling | C4, C5 | `features.py`, `grouping.py`, `labels.csv` |
+| FR-7 Grouping and labeling | C4, C5 | `features.py`, `grouping.py`, `groups.html`, `labels.csv` |
 | FR-8 Review screen | C9 | `review.py`, `gui.py` |
 | FR-9 Output folder | C5 | `dataset.py`, `overview.py`, `report.py`, `mapping.py` |
 | FR-10 Report | C0, C5 | `report.py` |
@@ -452,7 +468,8 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | Look-alike letters land in one group | Expected; split in review. A Phase 2 recognizer later suggests labels. |
 | Old letterforms (अ like ल्ल, ख like रव) cut in two | Conjuncts and broken letters joined by the "touches most" rule; the user can join cuts in C9. |
 | Too slow on hundreds of pages | Process pool for C1 to C3b; grouping on 48 × 48 fingerprints only. |
-| scikit-learn makes the installer large | Measure in C7; replace with a small NumPy clustering if needed. |
+| scikit-learn makes the installer large | Avoided: grouping is plain NumPy (C4). |
+| Many groups on very large batches | The merge step runs for up to `group_max_merge` (5000) groups after the first pass; beyond that only the first pass and reassignment run. Raise it, or group book by book. |
 
 ---
 

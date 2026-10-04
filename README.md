@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) and C3b (letters) are done: about 92% of letters are cut correctly on the sample pages ([docs/TUNING.md](docs/TUNING.md)). Grouping identical letters (C4) is next.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). Labels, the Gujarati mapping and the dataset (C5) are next.
 
 ## Install
 
@@ -37,7 +37,9 @@ The exit code is 0 if every page is OK, 1 if some pages failed, and 2 for a fold
 
 - `report.csv`: one row per file with status (`OK`, `NO_TEXT`, `FAILED`, `IGNORED`), message, page size, text block (`block_x/y/w/h`), black and red ink pixel counts, number of lines, line spacing, number of stroke pieces, specks dropped, letters, dandas, digits, and seconds. Files that cannot be read are `FAILED` and do not stop the run; files that are not images are `IGNORED`.
 - `letters/<page>/L01_003.png`: one image per letter (line 1, third letter), cut from the original page with a 4 px margin; ink of neighbouring letters is filled in from the paper around it.
-- `samples.csv`: one row per letter of all pages, in reading order: page, line, position, box (x, y, w, h), ink colour, kind (`letter`, `danda`, `digit`), number of stroke pieces joined, the join / split rules applied, and the image path.
+- `samples.csv`: one row per letter of all pages, in reading order: page, line, position, box (x, y, w, h), ink colour, kind (`letter`, `danda`, `digit`), number of stroke pieces joined, the join / split rules applied, the image path, the letter group (`group_id`, or `unsure`) and the distance to the group's centre.
+- `groups.html`: every group as a row of its samples (nearest to the group's centre first) with sample counts, then the unsure samples. Hover a sample to see its page, line and position. Opens offline in any browser.
+- `groups/g0001/`, ...: the letter images of each group, largest group first; `unsure/`: samples that fit no group (often letters that occur only once). Both are replaced on every run.
 - `lines/<page>_L01.png`, ...: one image per text line, cut from the original page with a small margin. Matras that reach into the neighbouring lines are kept; ink of the neighbouring lines is filled in from the paper around it.
 - `debug/<page>_ink.png` (with `--debug`): black ink in black, red ink in red, removed ruled lines in blue, everything outside the text block greyed out, text block outlined in green.
 - `debug/<page>_lines.png` (with `--debug`): each line's ink in its own colour (a matra in the wrong colour is on the wrong line), traced headlines as thin dark lines, boundaries between lines dashed.
@@ -88,10 +90,18 @@ Stroke pieces are joined and split by rules, in this order (details and the reas
 
 Black ink is cut almost perfectly; red ink, whose headlines run into each other, has most of the remaining errors. They are listed with their causes in [docs/TUNING.md](docs/TUNING.md).
 
+## How letters are grouped (C4)
+
+1. **Fingerprint:** each letter's ink is cropped, padded to a square and scaled to 48 x 48 px. Its fingerprint combines a 24 x 24 picture of the ink, the directions of its strokes (HOG) and its size relative to the line spacing. Paper tone and ink colour play no part, so red and black samples of a letter group together.
+2. **Clustering** (plain NumPy, no extra dependency): a sample joins the nearest group within `group_distance`, otherwise it starts a new one. Then close groups merge, but only if the merged group stays compact (`group_outlier_distance`); without that check, groups creep from letter to look-alike letter.
+3. **Unsure:** samples far from their group's centre, and groups of a single sample.
+
+Letters that look nearly the same in this hand (ता / ना, नि / ति, त / न) may share a group; they are split when labelling or in the review screen (C9). Raise `group_distance` for fewer groups and fewer unsure samples but more mixed groups; lower it for the opposite.
+
 ## Tests
 
 ```
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-Synthetic pages ([tests/synthetic.py](tests/synthetic.py)) check folder handling, ink masks line detection (sloped and wavy headlines within 2 px, detached marks on the right line) the first cut (gaps and thin joins cut, tiny gaps and continuous headlines not, a danda as its own piece, in red and black ink) and every letter rule (vowel bar, short-i hook, touching letters, upper and lower marks, double danda, visarga) against known values. The sample pages in `samples/` check the text block, ink colours, 11 lines per page and the number of letters and dandas on real scans.
+Synthetic pages ([tests/synthetic.py](tests/synthetic.py)) check folder handling, ink masks line detection (sloped and wavy headlines within 2 px, detached marks on the right line) the first cut (gaps and thin joins cut, tiny gaps and continuous headlines not, a danda as its own piece, in red and black ink) every letter rule (vowel bar, short-i hook, touching letters, upper and lower marks, double danda, visarga) and grouping (synthetic shapes form pure groups, kinds never mix, output folders and `groups.html` agree) against known values. The sample pages in `samples/` check the text block, ink colours, 11 lines per page and the number of letters and dandas on real scans.

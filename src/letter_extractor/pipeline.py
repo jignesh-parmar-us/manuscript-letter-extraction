@@ -11,9 +11,12 @@ from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
 import cv2
+import numpy as np
 
 from . import io_utils, report
 from .config import Config
+from .features import fingerprint, fingerprint_size
+from .grouping import group_samples, write_group_folders, write_groups_html
 from .letters import Letter, letter_image, letters_overlay, make_letters
 from .lines import LineLayout, detect_lines, line_image, lines_overlay
 from .pieces import Piece, pieces_overlay, split_lines
@@ -46,9 +49,10 @@ def _png(img, path: Path) -> None:
     io_utils.save_image(img, path, io_utils.ImageMeta(format="PNG"))
 
 
-def _write_letters(page: PreparedPage, letters: List[Letter], stem: str, out_dir: Path, cfg: Config,
-                   res: PageResult) -> None:
-    """letters/<page>/L01_003.png for every letter, and the page's rows for samples.csv."""
+def _write_letters(page: PreparedPage, letters: List[Letter], spacing: float, stem: str, out_dir: Path,
+                   cfg: Config, res: PageResult) -> None:
+    """letters/<page>/L01_003.png for every letter, the page's rows for samples.csv and the letters'
+    fingerprints for grouping."""
     folder = out_dir / "letters" / stem
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.glob("L[0-9][0-9]_[0-9][0-9][0-9].png"):   # letters of an earlier run
@@ -60,6 +64,8 @@ def _write_letters(page: PreparedPage, letters: List[Letter], stem: str, out_dir
         res.samples.append({"page": res.file, "line": L.line, "pos": L.pos, "x": x, "y": y, "w": w, "h": h,
                             "ink": L.ink, "kind": L.kind, "pieces": L.pieces, "rules": " ".join(L.rules),
                             "image": f"letters/{stem}/{name}"})
+    res.features = (np.stack([fingerprint(L.mask, spacing, cfg) for L in letters]) if letters
+                    else np.zeros((0, fingerprint_size(cfg)), np.float32))
     res.letters = len(letters)
     res.dandas = sum(L.kind == "danda" for L in letters)
     res.digits = sum(L.kind == "digit" for L in letters)
@@ -89,7 +95,7 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
             lines_dir.mkdir(exist_ok=True)
             for line in layout.lines:
                 _png(line_image(page, line, cfg), lines_dir / f"{src.stem}_L{line.index:02d}.png")
-            _write_letters(page, data.letters, src.stem, out_dir, cfg, res)
+            _write_letters(page, data.letters, layout.spacing, src.stem, out_dir, cfg, res)
         elif page.block is not None:
             res.status = report.STATUS_NO_TEXT
             res.message = "no text lines found"
@@ -104,6 +110,7 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
                 _png(pieces_overlay(page, layout, pieces, cfg), debug_dir / f"{src.stem}_pieces.png")
                 _png(letters_overlay(page, data.letters), debug_dir / f"{src.stem}_letters.png")
     except Exception as e:  # one page failing never stops the batch
+        res.samples, res.features = [], None          # a failed page contributes no samples
         res.status = report.STATUS_FAILED
         res.message = f"{type(e).__name__}: {e}"
         if cfg.debug:
@@ -134,8 +141,11 @@ def default_workers() -> int:
 
 def process_folder(input_dir: Path, output_dir: Path, cfg: Optional[Config] = None,
                    progress: Optional[ProgressFn] = None,
-                   cancel: Optional[Callable[[], bool]] = None) -> List[PageResult]:
-    """Process every supported image in `input_dir` (name order) and write report.csv to `output_dir`."""
+                   cancel: Optional[Callable[[], bool]] = None,
+                   summary: Optional[dict] = None) -> List[PageResult]:
+    """Process every supported image in `input_dir` (name order), then group the letters of all pages,
+    and write report.csv, samples.csv, groups/, unsure/ and groups.html to `output_dir`.
+    `summary`, if given, receives the run totals (samples, groups, unsure)."""
     cfg = cfg or Config()
     input_dir, output_dir = Path(input_dir), Path(output_dir)
     io_utils.validate_folders(input_dir, output_dir)
@@ -178,5 +188,25 @@ def process_folder(input_dir: Path, output_dir: Path, cfg: Optional[Config] = No
                     break
     ordered = [results[p.name] for p in images if p.name in results]
     report.write_report(ordered, ignored, output_dir)
+    totals = _group_letters(ordered, output_dir, cfg)
     report.write_samples(ordered, output_dir)
+    if summary is not None:
+        summary.update(totals)
     return ordered
+
+
+def _group_letters(results: List[PageResult], out_dir: Path, cfg: Config) -> dict:
+    """Group the letters of all pages (C4) and write the group folders and groups.html."""
+    usable = [r for r in results if r.features is not None and len(r.features) == len(r.samples) > 0]
+    rows = [row for r in usable for row in r.samples]
+    feats = [r.features for r in usable]
+    if not rows:
+        return {"samples": 0, "groups": 0, "unsure": 0}
+    X = np.concatenate(feats).astype(np.float32)
+    grouping = group_samples(X, [row["kind"] for row in rows], cfg)
+    for row, gid, d in zip(rows, grouping.group_id, grouping.distance):
+        row["group_id"] = gid
+        row["distance"] = "" if np.isnan(d) else f"{d:.3f}"
+    write_group_folders(out_dir, rows, grouping)
+    write_groups_html(out_dir, rows, grouping, cfg)
+    return {"samples": len(rows), "groups": len(grouping.groups), "unsure": len(grouping.unsure)}
