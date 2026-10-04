@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database) is done; C5b (Unicode mapping) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database) and C5b (Unicode mapping) are done; C5c (backend API) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -368,8 +368,8 @@ All times are stored in UTC and shown in local time.
 | Sub-chunk | Status | Depends on |
 |---|---|---|
 | C5a Library and database | **done** | C0-C4 |
-| C5b Unicode mapping | **next** | - |
-| C5c Backend API | planned | C5a, C5b |
+| C5b Unicode mapping | **done** | - |
+| C5c Backend API | **next** | C5a, C5b |
 | C5d App shell, Books and Capture screens | planned | C5c |
 | C5e Group review and labeling | planned | C5c, C5d |
 | C5f Fixing cuts and adding samples | planned | C5c, C5e |
@@ -402,22 +402,23 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 #### C5b. Unicode mapping (Section 4 of the requirements)
 
-**Status: next.**
+**Status: done** (commit "Add the Devanagari <-> Gujarati mapping and label check (C5b)").
 **Goal:** one module that turns a label typed in Devanagari **or** Gujarati into one canonical Devanagari label, checks that it is a single letter, and gives everything the screens and the export need: the Gujarati form, code points, category, alphabet order, a transliteration and a safe folder name.
 **Files:** `src/letter_extractor/mapping.py`, `src/letter_extractor/data/mapping_dev_guj.csv`, `tests/test_mapping.py`. No dependency on the database or the app: the CLI, the API and the export use the same functions.
 
 **The mapping (Section 4 of the requirements):**
-- **Default rule:** a Devanagari character U+0900-U+097F maps to the Gujarati character at +0x180 (क U+0915 -> ક U+0A95, ि U+093F -> િ U+0ABF), **if Unicode defines that Gujarati character**; conjuncts, halant and reph follow automatically (क्ष -> ક્ષ).
+- **Default rule:** a Devanagari character U+0900-U+097F maps to the Gujarati character at +0x180 (क U+0915 -> ક U+0A95, ि U+093F -> િ U+0ABF), **if Unicode gives that Gujarati character the same name** (GUJARATI instead of DEVANAGARI); conjuncts, halant and reph follow automatically (क्ष -> ક્ષ).
 - **Exceptions** in the editable `data/mapping_dev_guj.csv` (columns `devanagari`, `gujarati`, `note`), read once at start; a user's own copy can be given in the settings:
   - danda । and double danda ॥ stay Devanagari (Gujarati has none);
-  - Devanagari letters with no Gujarati equivalent (for example ऩ, ऱ, ऴ, the short e / o letters and signs, the stress and Vedic signs) are listed with an empty `gujarati` value, meaning "keep the Devanagari character" (decision 2), and are counted in the export summary;
-  - precomposed nukta letters (क़ ख़ ग़ ...) are first split into letter + nukta, which Gujarati has (ક઼).
+  - letters with no Gujarati letter but a nukta form - ऩ ऱ ऴ and क़ ख़ ग़ ज़ ड़ ढ़ फ़ य़ - are written as **letter + nukta**, which Gujarati has (ऩ -> ન઼, क़ -> ક઼) (decision 2);
+  - the remaining 32 characters with no Gujarati equivalent (short a / e / o and their signs, the inverted chandrabindu, stress and Vedic signs, ॲ, ॸ and the other late additions) are listed with an empty `gujarati` value, meaning "keep the Devanagari character"; `unmapped()` lists them in a label and the export summary counts them;
+  - candra e / o (ऍ ऑ) are listed explicitly, because Unicode names them LETTER in Devanagari and VOWEL in Gujarati.
 - **Digits:** १२३ -> ૧૨૩ by default, or 123 with the setting `digits = "western"` (decision 1).
 - **Back to Devanagari:** the reverse of the same table (Gujarati -> Devanagari), so a label typed in Gujarati is stored like one typed in Devanagari.
 
 **Labels (`canonical_label(text)`):**
-1. Unicode normalization (NFC), surrounding spaces removed; zero-width joiner / non-joiner removed (they only change how a conjunct is drawn, not which letter it is).
-2. Every Gujarati character converted to Devanagari; any other script (Latin, Arabic ...) is refused with a message.
+1. Unicode normalization (NFC); all spaces and the zero-width joiner / non-joiner removed (they only change how a conjunct is drawn, not which letter it is).
+2. Every Gujarati character converted to Devanagari, and Western digits to Devanagari digits; any other script (Latin, Arabic ...) and Gujarati characters with no Devanagari equivalent (for example the rupee sign) are refused with a message.
 3. The result must be **one akshara** (Section 3 of the requirements):
    - an independent vowel (अ ... औ, ऋ, ऍ, ऑ ...) with optional chandrabindu / anusvara / visarga;
    - or a consonant cluster: consonant (+ nukta), then any number of halant + consonant (this covers conjuncts and reph, for example क्ष, श्री, र्म), then either a vowel sign (matra) or a final halant, then optional chandrabindu / anusvara / visarga;
@@ -429,11 +430,21 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 - `to_gujarati(dev, digits)`, `to_devanagari(guj)`, `code_points(text)` ("U+0915 U+093F");
 - `category(label)`: `vowels`, `consonants` (one consonant, with or without matra and marks), `conjuncts` (two or more consonants), `digits`, `punctuation` - the dataset folders of FR-9;
 - `sort_key(label)`: alphabet order for the overview: vowels, consonants ક to હ (by the first consonant, then the matra in the usual order), conjuncts, digits, punctuation;
-- `transliterate(label)`: lower-case ASCII for folder names (`ki`, `ksha`, `shri`), readable only;
-- `safe_name(label)`: transliteration + Gujarati code points, for example `ki__U0A95-U0ABF` (FR-9). The code points make every name unique even where transliterations coincide, and the name is valid on Windows and macOS.
+- `transliterate(label)`: lower-case ASCII for folder names, readable only (कि `ki`, क्ष `kssa`, श्री `shrii`, क़ `kxa`; retroflex letters doubled: ट `tt`, ष `ss`);
+- `safe_name(label)`: transliteration + Gujarati code points, for example `ki__U0A95-U0ABF` (FR-9). The code points make every name unique even where transliterations coincide (also on case-insensitive disks), and the name uses only `A-Z a-z 0-9 _ -`;
+- `describe(text)`: everything the label field of the screen shows while typing (canonical form, both scripts, code points, category, safe name, characters kept in Devanagari, or the reason it is not a letter);
+- `mapping_for(cfg)`: the mapping a book's settings ask for (`digits`, `mapping_file`).
 
-**Done when:** every character of U+0900-U+097F either maps to a defined Gujarati character or is listed in the CSV; labels typed in either script give the same canonical label; all the examples of Section 4 of the requirements convert correctly; invalid labels are refused with a readable reason.
-**Tests:** round trips (क <-> ક, कि <-> કિ, क्ष <-> ક્ષ, श्री <-> શ્રી, र्म <-> ર્મ, । stays ।, १२ <-> ૧૨ or 12); Gujarati and Devanagari input give the same label; NFC and zero-width characters handled; refused labels (`कम`, `ि`, `ं`, `abc`, mixed scripts with two letters); every category and the alphabet order on a list of letters; safe names unique and limited to `[a-z0-9_-]`; editing the CSV changes the mapping; the table covers the whole Devanagari block.
+**Done when:** every character of U+0900-U+097F either maps to a defined Gujarati character or is listed in the CSV; labels typed in either script give the same canonical label; all the examples of Section 4 of the requirements convert correctly; invalid labels are refused with a readable reason. *Met.*
+**Tests (20):** round trips (क <-> ક, कि <-> કિ, क्ष <-> ક્ષ, श्री <-> શ્રી, र्म <-> ર્મ, ज्ञा <-> જ્ઞા, । stays ।, १२ <-> ૧૨ or 12); nukta forms; the offset positions that are other characters (U+0971, U+097A-F) are never used, even with an empty table; the whole Devanagari block is covered; every mapped character round-trips; an edited table and the `digits` / `mapping_file` settings take effect; Gujarati and Devanagari input give the same label; NFC, spaces and zero-width characters handled; refused labels with their reasons (`कम` "क + म", `ि`, `ं`, `्क`, `abc`, mixed scripts, `१२`, `कि।`); categories; alphabet order; transliteration; safe names unique (also case-insensitively), portable and short. Removing the name rule, the cleaning or the one-digit limit makes a test fail.
+
+**Changes from the original plan (C5b):**
+- **Same-name rule instead of "the Gujarati code point exists".** For 9 characters the +0x180 position holds a different character (U+0971 + 0x180 is the Gujarati rupee sign, U+097A-F + 0x180 are Gujarati nukta signs), so a plain offset would silently produce wrong letters.
+- **Rare letters get a Gujarati nukta form** instead of staying Devanagari: ऩ ऱ ऴ and the eight nukta letters are written as letter + nukta, which Gujarati supports; only characters with no Gujarati form at all stay Devanagari. Decision 2 is updated accordingly.
+- **Lenient input:** spaces inside a label and Western digits are accepted (removed / converted), because they are easy to type by mistake and cannot change which letter is meant.
+- **A label holds one digit** (verse numbers are cut into one sample per digit by C3b).
+- **Transliteration examples** are `kssa` and `shrii` rather than `ksha` and `shri`: a fixed letter-by-letter table (retroflex letters doubled) instead of a hand-made spelling, so it never needs exceptions. Safe names contain upper-case code points (`U0A95`), as in the example of FR-9.
+- **Two helpers added for later chunks:** `describe()` (the label field of C5c / C5e) and `mapping_for()` (a book's settings).
 
 #### C5c. Backend API
 
@@ -448,7 +459,7 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 - **Reading:** pages, lines, groups (code, label, counts, red / black share, status, spread), a group's samples (nearest to the centre first, in pages of e.g. 200), unsure samples with suggestions.
 - **Review actions** (`actions.py`), each in one transaction and written to the `action` table with what is needed to undo it: move samples to a group or to unsure; new group from samples; merge groups; set or clear a label (through `canonical_label` of C5b; the response shows Devanagari, Gujarati, code points); mark reviewed / lock; delete and restore samples. Group centres and sample distances are recomputed from the stored fingerprints after every change. **Undo** (and redo) of the last actions of a book.
 - **Images:** letter, mask, line and page images served from the library folder and the book's input folder only (no other paths).
-- **Mapping helper:** `GET /api/label?text=...` checks a label while it is typed.
+- **Mapping helper:** `GET /api/label?text=...` returns `mapping.describe()` (C5b) for a label while it is typed, with the book's mapping (`mapping_for(book settings)`); labels are saved through `canonical_label()`, and the group stores `label_dev` and `label_guj`.
 - **Local only:** listens on `127.0.0.1`; every request carries a random token created at start, so other web pages open in the browser cannot call the API.
 
 **Done when:** every action needed by C5e and C5f works through the API on the sample book, undo restores the exact state, a capture shows progress and can be cancelled.
@@ -507,6 +518,7 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 **Files:** `app/export.py`, an Export button in the screens (after C5d), `tests/test_export.py`. Can be built and tested before the screens, from the library API.
 
 **What it does** (to `exports/<date>/` in the book folder, or a chosen folder):
+- uses C5b's `category()`, `sort_key()`, `safe_name()`, `transliterate()` and `unmapped()` with the book's mapping (`mapping_for`);
 - `dataset/<category>/<safe name>/`: every sample of each **labelled** group (`original` crop by default; `normalized` black on white and `fixed64` 64 x 64 as options), `label.txt` with the Gujarati label; categories from C5b;
 - `lines/<page>_L01.png` + `.txt`: Gujarati text of each line from the labelled letters in reading order (`[?]` for unlabelled ones);
 - `letters.csv` (Gujarati label, Devanagari form, code points, transliteration, category, sample count, example image), `samples.csv` (as now, plus label, source and group status), `overview.html` (one example per class in alphabet order, classes under `min_samples_warn` highlighted, works offline), `unsure/` (unlabelled samples), `summary.txt` (pages, lines, letters, classes, classes with few samples, unsure, skipped files, letters with no Gujarati equivalent).
@@ -561,8 +573,8 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C3b | Letters | done | `letters/`, `samples.csv` | FR-5, FR-6 |
 | C4 | Grouping | done | `groups/`, `unsure/`, `groups.html` | FR-7 |
 | C5a | Library and database | done | `library.db`, books | FR-7, FR-8 |
-| C5b | Unicode mapping | **next** | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
-| C5c | Backend API | planned | review actions, capture jobs, undo | FR-7, FR-8 |
+| C5b | Unicode mapping | done | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
+| C5c | Backend API | **next** | review actions, capture jobs, undo | FR-7, FR-8 |
 | C5d | App shell, Books, Capture | planned | own window and browser | FR-1, Section 7 |
 | C5e | Group review and labeling | planned | clean, labelled groups | FR-7, FR-8 |
 | C5f | Fixing cuts, adding samples | planned | cropped / joined / split / uploaded samples | FR-8 |
@@ -668,7 +680,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 From Section 9 of the requirements, with a proposed default:
 
 1. **Digits:** Gujarati (૧૨૩) by default, Western as a setting.
-2. **Rare letters** with no Gujarati equivalent: keep the Devanagari character and list it in the summary until a rule is chosen.
+2. **Rare letters** with no Gujarati letter: **decided in C5b:** written as Gujarati letter + nukta where Gujarati has the base letter (ऩ -> ન઼, ऱ -> ર઼, ऴ -> ળ઼, क़ -> ક઼ ...); characters with no Gujarati form at all are kept in Devanagari and listed in the summary. The rule can be changed in `data/mapping_dev_guj.csv`.
 3. **Anusvara and visarga:** proposed as part of the letter class (કં), open for confirmation; the mapping and grouping work either way.
 4. **Red and black ink:** share classes; the ink colour is kept in `samples.csv`.
 5. **Cloud use:** offline only for Phase 1; AI suggestions are a C9 opt-in.

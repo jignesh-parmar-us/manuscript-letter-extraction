@@ -1,0 +1,51 @@
+# Devanagari -> Gujarati exceptions. Every other character maps to the Gujarati character with the
+# same Unicode name (Devanagari code point + 0x180). An empty 'gujarati' value keeps the Devanagari
+# character. Edit this file (or a copy given as the mapping_file setting) to change a rule.
+devanagari,gujarati,note
+।,।,"danda: Gujarati has none, the Devanagari danda is used (requirements, Section 4)"
+॥,॥,double danda: as danda
+ऍ,ઍ,"candra e: named LETTER in Devanagari, VOWEL in Gujarati"
+ऑ,ઑ,"candra o: named LETTER in Devanagari, VOWEL in Gujarati"
+ऩ,ન઼,Letter Nnna: no Gujarati letter; written as letter + nukta
+ऱ,ર઼,Letter Rra: no Gujarati letter; written as letter + nukta
+ऴ,ળ઼,Letter Llla: no Gujarati letter; written as letter + nukta
+क़,ક઼,Letter Qa: no Gujarati letter; written as letter + nukta
+ख़,ખ઼,Letter Khha: no Gujarati letter; written as letter + nukta
+ग़,ગ઼,Letter Ghha: no Gujarati letter; written as letter + nukta
+ज़,જ઼,Letter Za: no Gujarati letter; written as letter + nukta
+ड़,ડ઼,Letter Dddha: no Gujarati letter; written as letter + nukta
+ढ़,ઢ઼,Letter Rha: no Gujarati letter; written as letter + nukta
+फ़,ફ઼,Letter Fa: no Gujarati letter; written as letter + nukta
+य़,ય઼,Letter Yya: no Gujarati letter; written as letter + nukta
+ऀ,,"Sign Inverted Candrabindu: no Gujarati equivalent, kept in Devanagari"
+ऄ,,"Letter Short A: no Gujarati equivalent, kept in Devanagari"
+ऎ,,"Letter Short E: no Gujarati equivalent, kept in Devanagari"
+ऒ,,"Letter Short O: no Gujarati equivalent, kept in Devanagari"
+ऺ,,"Vowel Sign Oe: no Gujarati equivalent, kept in Devanagari"
+ऻ,,"Vowel Sign Ooe: no Gujarati equivalent, kept in Devanagari"
+ॆ,,"Vowel Sign Short E: no Gujarati equivalent, kept in Devanagari"
+ॊ,,"Vowel Sign Short O: no Gujarati equivalent, kept in Devanagari"
+ॎ,,"Vowel Sign Prishthamatra E: no Gujarati equivalent, kept in Devanagari"
+ॏ,,"Vowel Sign Aw: no Gujarati equivalent, kept in Devanagari"
+॑,,"Stress Sign Udatta: no Gujarati equivalent, kept in Devanagari"
+॒,,"Stress Sign Anudatta: no Gujarati equivalent, kept in Devanagari"
+॓,,"Grave Accent: no Gujarati equivalent, kept in Devanagari"
+॔,,"Acute Accent: no Gujarati equivalent, kept in Devanagari"
+ॕ,,"Vowel Sign Candra Long E: no Gujarati equivalent, kept in Devanagari"
+ॖ,,"Vowel Sign Ue: no Gujarati equivalent, kept in Devanagari"
+ॗ,,"Vowel Sign Uue: no Gujarati equivalent, kept in Devanagari"
+ॱ,,"Sign High Spacing Dot: no Gujarati equivalent, kept in Devanagari"
+ॲ,,"Letter Candra A: no Gujarati equivalent, kept in Devanagari"
+ॳ,,"Letter Oe: no Gujarati equivalent, kept in Devanagari"
+ॴ,,"Letter Ooe: no Gujarati equivalent, kept in Devanagari"
+ॵ,,"Letter Aw: no Gujarati equivalent, kept in Devanagari"
+ॶ,,"Letter Ue: no Gujarati equivalent, kept in Devanagari"
+ॷ,,"Letter Uue: no Gujarati equivalent, kept in Devanagari"
+ॸ,,"Letter Marwari Dda: no Gujarati equivalent, kept in Devanagari"
+ॹ,,"Letter Zha: no Gujarati equivalent, kept in Devanagari"
+ॺ,,"Letter Heavy Ya: no Gujarati equivalent, kept in Devanagari"
+ॻ,,"Letter Gga: no Gujarati equivalent, kept in Devanagari"
+ॼ,,"Letter Jja: no Gujarati equivalent, kept in Devanagari"
+ॽ,,"Letter Glottal Stop: no Gujarati equivalent, kept in Devanagari"
+ॾ,,"Letter Ddda: no Gujarati equivalent, kept in Devanagari"
+ॿ,,"Letter Bba: no Gujarati equivalent, kept in Devanagari"

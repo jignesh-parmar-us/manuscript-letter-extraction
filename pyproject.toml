@@ -17,4 +17,5 @@ letter-extractor = "letter_extractor.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"letter_extractor" = ["data/*.csv"]
 "letter_extractor.app" = ["migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]

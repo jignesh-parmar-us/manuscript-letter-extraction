@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database) is done; see the plan for C5b-C5g.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database) and C5b (Devanagari / Gujarati labels) are done; see the plan for C5c-C5g.
 
 ## Install
 
@@ -100,6 +100,19 @@ Black ink is cut almost perfectly; red ink, whose headlines run into each other,
 3. **Unsure:** samples far from their group's centre, and groups of a single sample.
 
 Letters that look nearly the same in this hand (ता / ना, नि / ति, त / न) may share a group; they are split when labelling or in the review screen (C9). Raise `group_distance` for fewer groups and fewer unsure samples but more mixed groups; lower it for the opposite.
+
+## Labels and the Gujarati mapping (C5b)
+
+Every letter group gets a label: one letter (akshara) such as क, कि, क्ष, श्री, र्म, a digit or a danda. It can be typed in **Devanagari or Gujarati** (कि and કિ are the same label); it is stored in Devanagari and shown in Gujarati.
+
+```python
+from letter_extractor.mapping import describe, to_gujarati
+describe("કિ")      # {'ok': True, 'devanagari': 'कि', 'gujarati': 'કિ', 'category': 'consonants', 'safe_name': 'ki__U0A95-U0ABF', ...}
+describe("कम")      # {'ok': False, 'error': 'more than one letter: क + म'}
+to_gujarati("श्री॥१")  # 'શ્રી॥૧'
+```
+
+The mapping follows Section 4 of the requirements: each Devanagari character becomes the Gujarati character with the same Unicode name; dandas stay Devanagari; letters without a Gujarati letter (ऩ ऱ ऴ, क़ ...) are written as letter + nukta; characters with no Gujarati form at all are kept in Devanagari. The exceptions are in the editable file [data/mapping_dev_guj.csv](src/letter_extractor/data/mapping_dev_guj.csv); a book can use its own copy (`mapping_file` setting), and digits can be Gujarati (૧૨૩, default) or Western (`digits: "western"`).
 
 ## The library of books (C5a, used by the app)
 

@@ -99,6 +99,10 @@ class Config:
     min_group_size: int = 2               # smaller groups are not groups: their samples go to "unsure"
     group_max_shown: int = 20             # samples shown per group in groups.html
 
+    # ---- labels and the Gujarati mapping (C5b) -----------------------------------------------
+    digits: str = "gujarati"              # digits in Gujarati text: "gujarati" (૧૨૩) or "western" (123)
+    mapping_file: str = ""                # own copy of the Devanagari -> Gujarati exceptions; "" = built-in
+
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
     red: InkParams = field(default_factory=lambda: InkParams(
