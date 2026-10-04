@@ -52,3 +52,18 @@ class LibraryChoice(BaseModel):
 
 class BookSettings(BaseModel):
     settings: Optional[Dict[str, Any]] = None     # overrides of the default Config; None: defaults
+
+
+class Crop(BaseModel):
+    page_id: int
+    box: List[int] = Field(min_length=4, max_length=4)   # x, y, w, h in page pixels
+
+
+class Split(BaseModel):
+    sample_id: int
+    x: int                                        # page column to cut at
+
+
+class Upload(BaseModel):
+    filename: str
+    data: str                                     # the file, base64 encoded

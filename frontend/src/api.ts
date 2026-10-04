@@ -202,6 +202,34 @@ export interface HistoryItem {
   [key: string]: unknown;
 }
 
+export interface LineInfo {
+  id: number;
+  number: number;
+  box: [number, number, number, number];
+  ink: string;
+  image: string;
+}
+
+export interface PageDetail {
+  id: number;
+  book_id: number;
+  file: string;
+  width: number;
+  height: number;
+  status: string;
+  message: string;
+  line_spacing: number;
+  image: string;
+  lines: LineInfo[];
+  samples: Sample[];
+}
+
+export interface NewSampleResult extends ActionResult {
+  sample?: { id: number; page_id: number | null; box: number[]; source: string };
+  samples?: { id: number }[];
+  overlapping?: number[];
+}
+
 // ---- calls ----------------------------------------------------------------------------------
 
 export const api = {
@@ -254,6 +282,17 @@ export const api = {
   undo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/undo`),
   redo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/redo`),
   history: (bookId: number) => get<HistoryItem[]>(`/api/books/${bookId}/history`),
+  // fixing cuts and adding samples (C5f)
+  page: (pageId: number) => get<PageDetail>(`/api/pages/${pageId}`),
+  crop: (bookId: number, pageId: number, box: [number, number, number, number]) =>
+    post<NewSampleResult>(`/api/books/${bookId}/samples/crop`, { page_id: pageId, box }),
+  join: (bookId: number, sampleIds: number[]) =>
+    post<NewSampleResult>(`/api/books/${bookId}/samples/join`, { sample_ids: sampleIds }),
+  split: (bookId: number, sampleId: number, x: number) =>
+    post<NewSampleResult>(`/api/books/${bookId}/samples/split`, { sample_id: sampleId, x }),
+  upload: (bookId: number, filename: string, data: string) =>
+    post<NewSampleResult>(`/api/books/${bookId}/samples/upload`, { filename, data }),
+
   checkLabel: (text: string, bookId?: number) =>
     get<LabelInfo>(`/api/label?text=${encodeURIComponent(text)}${bookId ? `&book_id=${bookId}` : ""}`),
 };
@@ -262,4 +301,12 @@ export const api = {
 export function localTime(iso: string | null | undefined): string {
   if (!iso) return "–";
   return new Date(iso).toLocaleString();
+}
+
+/** The contents of a file as base64 (for uploads). */
+export async function fileToBase64(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }

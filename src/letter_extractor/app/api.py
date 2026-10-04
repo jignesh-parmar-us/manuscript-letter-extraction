@@ -16,6 +16,7 @@ Routes (all JSON unless noted):
   labels     GET /api/label?text=...&book_id=...
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
              (the input page image)
+  samples    POST /api/books/{id}/samples/{crop|join|split|upload}   (C5f)
   app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
              PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it
 """
@@ -34,13 +35,13 @@ from sqlalchemy import func, select
 from .. import __version__
 from ..config import Config, load_config
 from ..mapping import describe, mapping_for
-from . import actions
+from . import actions, samples as manual
 from .centres import suggestions
 from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (BookCreate, BookRename, BookSettings, Force, GroupRef, Label, LibraryChoice, Merge, Move,
-                      SampleIds, Status)
+from .schemas import (BookCreate, BookRename, BookSettings, Crop, Force, GroupRef, Label, LibraryChoice, Merge,
+                      Move, SampleIds, Split, Status, Upload)
 
 MAX_PAGE = 500
 
@@ -279,6 +280,23 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/actions/restore", dependencies=auth)
     def a_restore(book_id: int, body: SampleIds) -> Dict:
         return after(book_id, actions.restore_samples(library, book_id, body.sample_ids))
+
+    # ---- fixing cuts and adding samples (C5f) ----------------------------------------------------------
+    @app.post("/api/books/{book_id}/samples/crop", dependencies=auth)
+    def s_crop(book_id: int, body: Crop) -> Dict:
+        return after(book_id, manual.crop_sample(library, book_id, body.page_id, tuple(body.box)))
+
+    @app.post("/api/books/{book_id}/samples/join", dependencies=auth)
+    def s_join(book_id: int, body: SampleIds) -> Dict:
+        return after(book_id, manual.join_samples(library, book_id, body.sample_ids))
+
+    @app.post("/api/books/{book_id}/samples/split", dependencies=auth)
+    def s_split(book_id: int, body: Split) -> Dict:
+        return after(book_id, manual.split_sample(library, book_id, body.sample_id, body.x))
+
+    @app.post("/api/books/{book_id}/samples/upload", dependencies=auth)
+    def s_upload(book_id: int, body: Upload) -> Dict:
+        return after(book_id, manual.upload_sample(library, book_id, body.filename, body.data))
 
     @app.post("/api/books/{book_id}/undo", dependencies=auth)
     def a_undo(book_id: int) -> Dict:

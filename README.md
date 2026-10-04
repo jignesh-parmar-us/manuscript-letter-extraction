@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database), C5b (Devanagari / Gujarati labels) C5c (backend API with review actions and undo), C5d (the app window with the Books and Capture screens) and C5e (the group review and labeling screen) are done; fixing cuts (C5f) and the export (C5g) come next.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database), C5b (Devanagari / Gujarati labels) C5c (backend API with review actions and undo), C5d (the app window with the Books and Capture screens), C5e (the group review and labeling screen) and C5f (fixing cuts in a page viewer) are done; the export (C5g) comes next.
 
 ## Install
 
@@ -145,6 +145,8 @@ python -m letter_extractor.app --library "/path/to/My Library"   # another libra
 The **Books** screen lists the books of the library and creates new ones (a name and the folder with the page images). A book's **Pages & capture** tab cuts the pages into letters with a progress bar, adds new pages later, cuts single pages again, and holds the book's settings.
 
 The **Review groups** tab is where the letters are sorted and labelled: the groups on the left (with filters such as *without label* or *possibly mixed*), the chosen group's samples on the right. Select samples (click, Ctrl/Cmd+click, Shift+click) and send them to **Unsure** (U), a **new group** (N), another group, or delete them; or drag them onto a group in the list. Label a group by typing in Gujarati or Devanagari, or with the on-screen letters; it is checked as you type. Unsure samples show a suggested group to accept with one click. Ctrl/Cmd+Z undoes, Shift+Ctrl/Cmd+Z redoes.
+
+The **Pages** tab shows a page with a box around every sample, to fix wrong cuts: **Draw a box** around ink that should be one letter (it becomes a new sample, and the samples it covers can be deleted), **Join** selected samples, **Split** a sample where you click, or **Upload letter image…** for a letter the cutting missed. New samples start in Unsure with a suggested group. Everything can be undone.
 
 If `npm install` fails with `EACCES` on `~/.npm`, an earlier `sudo npm` left root-owned files in npm's cache: run `sudo chown -R $(id -u):$(id -g) ~/.npm` once (or add `--cache /some/other/folder`).
 

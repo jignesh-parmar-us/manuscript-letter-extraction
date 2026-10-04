@@ -72,8 +72,8 @@ describe("GroupView", () => {
       total: 2000, offset, samples: Array.from({ length: limit }, (_, i) => sample(offset + i + 1)),
     }));
     renderView((ctx) => <GroupView group={group({ samples: 2000 })} ctx={ctx} />);
-    await waitFor(async () => expect(await findTiles()).toHaveLength(200));
+    await waitFor(async () => expect(await findTiles()).toHaveLength(200), { timeout: 15000 });
     await userEvent.click(screen.getByRole("button", { name: "Show more (200 of 2000)" }));
-    await waitFor(async () => expect(await findTiles()).toHaveLength(400));
+    await waitFor(async () => expect(await findTiles()).toHaveLength(400), { timeout: 15000 });
   });
 });

@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens) and C5e (group review and labeling) are done; C5f (fixing cuts and adding samples) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling) and C5f (fixing cuts and adding samples) are done; C5g (export) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -372,8 +372,8 @@ All times are stored in UTC and shown in local time.
 | C5c Backend API | **done** | C5a, C5b |
 | C5d App shell, Books and Capture screens | **done** | C5c |
 | C5e Group review and labeling | **done** | C5c, C5d |
-| C5f Fixing cuts and adding samples | **next** | C5c, C5e |
-| C5g Export | planned | C5a, C5b (can run before the screens) |
+| C5f Fixing cuts and adding samples | **done** | C5c, C5e |
+| C5g Export | **next** | C5a, C5b (can run before the screens) |
 
 Every sub-chunk below has the same parts: status, goal, files, what it does, done when, tests, and (once built) the changes from this plan.
 
@@ -527,19 +527,29 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 #### C5f. Fixing cuts and adding samples
 
-**Status: planned.**
+**Status: done** (commit "Add fixing cuts and adding samples: page viewer, box, join, split, upload (C5f)"). Fixing the cutting errors of the sample book by hand is the user's first check (see "Done when").
 **Goal:** fix the cutting errors of C3b by hand (FR-8: "fix a wrong cut ... must be quick") and add letters the cutting missed.
-**Files:** `app/samples.py` (new samples from a box, join, split, upload), routes in `app/api.py`, `frontend/src/screens/PageViewer.tsx`; `tests/test_samples.py`. New dependency (Node): `react-image-crop`. The new actions record their before / after states with the same mechanism as C5c (`actions._Change`), so undo, redo and history cover them too; new samples get a fingerprint, so C5c's suggestions work for them.
+**Files:** `app/samples.py` (page ink cache, box, join, split, upload), routes in `app/api.py`, schemas, `actions._Change.created`; `frontend/src/screens/PageViewer.tsx` (the **Pages** tab), calls in `api.ts` (`page`, `crop`, `join`, `split`, `upload`, `fileToBase64`); `tests/test_samples.py`, `frontend/src/screens/PageViewer.test.tsx`.
 
 **What it does:**
-- **Page / line viewer:** a new **Pages** tab in `BookView.tsx` (`#/books/<id>/pages/<page id>`): the page or one line with every sample's box, coloured by group; click a box to open its group in the Review tab (`#/books/<id>/review/<group id>`). The page data comes from `GET /api/pages/{id}` (C5c), which already lists the lines and samples with boxes.
-- **Draw a box** on a line or page: a new sample from the ink inside the box (the page's C1 ink masks, computed on demand and cached in the book folder), source `cropped`; samples it overlaps are offered for deletion.
-- **Join** two neighbouring samples (union of their masks); **split** a sample at a column (drag a line); source `joined` / `split`; the old samples are kept as deleted, so undo works.
-- **Upload** a letter image: ink found with the C1 colour rules (no text block needed), source `uploaded`, no page position (shown as such; the export marks it).
-- Every new sample gets its image, mask, fingerprint and a suggested group.
+- **Page ink:** the page's black and red ink masks from page preparation (C1), computed when first needed and cached in `<book>/cache/<page>_ink.npz` (checked against the page's checksum).
+- **Draw a box** (`POST /samples/crop`): the ink inside the box, cropped to the ink, becomes a new sample (source `cropped`) on the line it overlaps most; the samples it covers by at least 30% are returned, and the screen offers to delete them.
+- **Join** (`POST /samples/join`): two or more samples of one page become one sample with their ink together (source `joined`); the old samples are marked deleted.
+- **Split** (`POST /samples/split`): a sample is cut at a page column into the ink left of it and from it on (source `split`); the old sample is marked deleted.
+- **Upload** (`POST /samples/upload`, the file as base64): the ink of the image is found with C1's colour rules against the paper of the image border; the sample has no page position (source `uploaded`; the file name is kept).
+- Every new sample gets its image (other ink inpainted away, as in C3b), ink mask and fingerprint, starts unsure, and so gets a suggested group in the Unsure view. All four are review actions: undo hides the new samples and brings the old ones back, redo does the reverse.
+- **Pages** tab (`#/books/<id>/pages/<page id>`): the page list and **Upload letter image…** on the left; the page with a box per sample (coloured by group, unsure dashed grey; zoom 25-100%, scrollable); tools **Select** (click, Shift or Ctrl/Cmd+click), **Draw a box**, **Split** (click inside the selected sample); **Join (n)**, **Delete**, **Undo** / **Redo**; for one selected sample its image, source, line and group, with **Open group** (to the Review tab).
 
-**Done when:** on the sample book, the cutting errors listed in `docs/TUNING.md` (ज्ञा + नं, the split श्री, a split ॥ ...) can be fixed in the viewer, and the fixed samples group with their letters.
-**Tests:** a box around a known synthetic letter gives exactly its ink; join and split give the expected masks; uploaded images get a mask and fingerprint; undo of each.
+**Done when:** on the sample book, the cutting errors listed in `docs/TUNING.md` (ज्ञा + नं, the split श्री, a split ॥ ...) can be fixed in the viewer, and the fixed samples group with their letters. *All tools are in the screen and covered by tests; a box around a letter gives exactly its ink and is suggested that letter's group. Fixing the sample book's errors is the user's first check.*
+**Tests (15):** backend (10): a box around a known synthetic letter gives its exact box and ink, overlaps the old sample, is suggested its letter's group; the ink cache gives the same sample; empty and tiny boxes are refused; join gives the ink of both, split gives two parts that add up to the whole; samples of different pages, a single sample and cuts outside the sample are refused; an uploaded image gets its ink box, fingerprint and file name, and undo hides it; non-images and blank images are refused; the routes (with 400 / 404). Undo and redo restore the exact state for box, join and split; skipping the "created" record makes them fail. Screen (5): a box per sample (unsure dashed, colour per group); join of a Shift-selection; a box drawn at half size reaches the API in page coordinates, then "Delete them"; split at the clicked page column; upload sends the file as base64.
+
+**Changes from the original plan (C5f):**
+- **No `react-image-crop`:** boxes are drawn on an SVG layer over the page (the same layer that shows the samples), which also gives zoom and the split click in page coordinates; about 30 lines instead of a dependency.
+- **The page ink is cached** per page in the book folder (the plan said "computed on demand"), because preparing a 3684 x 1808 page takes a few seconds and the same page is usually fixed several times.
+- **Undo of new samples hides them** (they are recorded as deleted before the action) instead of removing their rows, so undo and redo use the same mechanism as every other action. Undone new samples appear in the Deleted samples view.
+- **Uploads are sent as base64 in JSON**, not as a multipart form, so no extra Python package (`python-multipart`) is needed.
+- **New samples keep position 0 within their line**; reading order for the export (C5g) is taken from the box position (line, then x), which is correct for every sample.
+- **Screen tests get 20 s each** (`testTimeout`): on a busy machine (as during development, load average above 30) the heavier screen tests needed more than the 5 s default.
 
 #### C5g. Export (FR-9, FR-10)
 
@@ -550,7 +560,7 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 **What it does** (to `exports/<date>/` in the book folder, or a chosen folder):
 - uses C5b's `category()`, `sort_key()`, `safe_name()`, `transliterate()` and `unmapped()` with the book's mapping (`mapping_for`);
 - `dataset/<category>/<safe name>/`: every sample of each **labelled** group (`original` crop by default; `normalized` black on white and `fixed64` 64 x 64 as options), `label.txt` with the Gujarati label; categories from C5b;
-- `lines/<page>_L01.png` + `.txt`: Gujarati text of each line from the labelled letters in reading order (`[?]` for unlabelled ones);
+- `lines/<page>_L01.png` + `.txt`: Gujarati text of each line from the labelled letters in reading order (by line, then by the x position of the box, so cropped, joined and split samples fall into place; `[?]` for unlabelled ones; deleted samples left out);
 - `letters.csv` (Gujarati label, Devanagari form, code points, transliteration, category, sample count, example image), `samples.csv` (as now, plus label, source and group status), `overview.html` (one example per class in alphabet order, classes under `min_samples_warn` highlighted, works offline), `unsure/` (unlabelled samples), `summary.txt` (pages, lines, letters, classes, classes with few samples, unsure, skipped files, letters with no Gujarati equivalent).
 
 **Done when:** after labelling a few groups of the sample book, the export is complete and Gujarati shows correctly in Excel and in the browser on Windows and macOS.
@@ -607,8 +617,8 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C5c | Backend API | done | review actions, capture jobs, undo | FR-7, FR-8 |
 | C5d | App shell, Books, Capture | done | own window and browser | FR-1, Section 7 |
 | C5e | Group review and labeling | done | clean, labelled groups | FR-7, FR-8 |
-| C5f | Fixing cuts, adding samples | **next** | cropped / joined / split / uploaded samples | FR-8 |
-| C5g | Export | planned | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
+| C5f | Fixing cuts, adding samples | done | cropped / joined / split / uploaded samples | FR-8 |
+| C5g | Export | **next** | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
 | C6 | GUI | merged into C5d | - | Section 7 |
 | C7 | Packaging | planned | `.app`, `.exe` with the React screen | Section 7 |
 | C8 | GitHub Actions | planned | CI (Python, API, React), builds, releases | Section 7 |

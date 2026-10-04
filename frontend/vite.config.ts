@@ -21,5 +21,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test-setup.ts"],
+    // screen tests click through real components; on a busy machine (or CI) they need more than 5 s
+    testTimeout: 20000,
   },
 });

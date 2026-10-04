@@ -5,11 +5,13 @@ import { api, AppInfo, Book } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
 import Capture from "./Capture";
+import PageViewer from "./PageViewer";
 import Review from "./Review";
 
 export const TABS: { id: string; label: string }[] = [
   { id: "capture", label: "Pages & capture" },
   { id: "review", label: "Review groups" },
+  { id: "pages", label: "Pages" },
 ];
 
 interface Props {
@@ -62,6 +64,9 @@ export default function BookView({ bookId, tab, sub, info }: Props) {
       <ErrorBox error={error} onClose={() => setError(null)} />
       {tab === "capture" && <Capture book={book} info={info} onChanged={reload} />}
       {tab === "review" && <Review book={book} view={sub} onChanged={reload} />}
+      {tab === "pages" && (
+        <PageViewer book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} onChanged={reload} />
+      )}
     </section>
   );
 }

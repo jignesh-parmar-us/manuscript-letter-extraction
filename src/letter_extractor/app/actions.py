@@ -79,6 +79,11 @@ class _Change:
     def touch_sample(self, smp: Sample) -> None:
         self.samples_before.setdefault(smp.id, _sample_state(smp))
 
+    def created(self, smp: Sample) -> None:
+        """A sample made by this action (C5f): before it, the sample "did not exist", which is
+        recorded as deleted, so undo hides it and redo shows it again."""
+        self.samples_before[smp.id] = {"group_id": None, "deleted": True, "kind": smp.kind, "distance": None}
+
     def group(self, group_id: int, editing_lock: bool = False) -> LetterGroup:
         g = self.s.get(LetterGroup, int(group_id))
         if g is None or g.book_id != self.book_id:
