@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with a CLI you can run on the sample pages, and output you can check by eye, before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database) is done; C5b (Unicode mapping) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -364,10 +364,17 @@ Input pages are **referenced, never copied or changed**: the database keeps each
 
 #### C5a. Library and database
 
-- SQLAlchemy models and the first Alembic migration; create / open the library; create, list, rename and delete books.
-- **Import a run:** run the existing pipeline for a book (`process_folder`, unchanged) and store pages, lines, samples (with masks and fingerprints) and the automatic groups.
-- **Done when:** a book made from `samples/` holds 2 pages, 22 lines, 854 samples and the same groups as `groups.html`; closing and reopening gives the same data.
-- **Tests:** create / reopen a library; import is complete and repeatable; a moved input page is reported; the input folder is unchanged.
+- SQLAlchemy models (`app/db.py`) and the first Alembic migration (`app/migrations/versions/0001_initial.py`); `Library(path)` creates or opens the library and brings the database to the newest migration; create, list, rename and delete books (deleting removes the book's rows and its folder in the library, never the input pages).
+- **Capture:** `Library.capture(book)` runs the existing pipeline into the book's folder and stores pages (with SHA-256), lines, samples (with ink masks and fingerprints) and the automatic groups. It replaces the book's earlier results and **refuses** when the book holds manual work (labels, reviewed or locked groups, user actions, cropped / uploaded samples) unless `force=True`.
+- `Library.check_pages(book)` lists input pages that are missing, changed (checksum) or new.
+- **Done when:** a book made from `samples/` holds 2 pages, 22 lines, 854 samples and the same groups as `groups.html`; closing and reopening gives the same data. *Met: 2 pages, 22 lines, 854 samples, 54 groups, 236 unsure; capture takes about 12 s.*
+- **Tests (12):** the migration creates exactly the schema of the models; reopening keeps the data; times are UTC; books are created, listed, renamed, deleted, with bad names and folders refused; a book keeps its settings; capture stores every page, line, sample, mask, fingerprint and group and leaves the input folder unchanged; capturing again is repeatable; manual work blocks a new capture; missing, changed and new pages are reported; the sample pages give 2 pages, 22 lines and 40-70 groups. Switching off foreign keys or dropping an index from the migration makes a test fail.
+
+**Changes from the original plan (C5a):**
+- **The pipeline gained three switches for the app**, all off by default so the CLI's output is unchanged: `save_masks` (each letter's ink mask as `L01_003_mask.png`; later steps re-fingerprint and crop from it), `write_groups` (the app keeps groups in the database, so no `groups/` copies or `groups.html`), and each page result now carries its lines (`lines_info`).
+- **Capture replaces the whole book's results for now.** Re-cutting single pages while keeping reviewed work (as described above) needs the review actions and comes with C5c / C5f; until then a capture over manual work is refused.
+- **Small schema additions:** `letter_group.kind` (letters, dandas and digits never share a group) and `sample.line_number` (kept for uploaded and cropped samples too); timestamps are stored as UTC (`UTCDateTime`), because SQLite keeps no time zone.
+- **Development uses a virtual environment** (`.venv`); `sqlalchemy` and `alembic` are now in `requirements.txt` and `pyproject.toml`, and the migrations ship as package data.
 
 #### C5b. Unicode mapping (Section 4 of the requirements)
 
@@ -502,6 +509,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | `group_distance` | C4 | 0.55 |
 | `group_outlier_distance` | C4 | 0.5 |
 | `min_group_size` | C4 | 2 |
+| `save_masks`, `write_groups` | C5a | `False`, `True` (the app sets `True`, `False`) |
 | `digits` | C5 | `gujarati` (or `western`) |
 | `dataset_image` | C5 | `original` (or `normalized`, `fixed64`) |
 | `min_samples_warn` | C5 | 10 |

@@ -44,6 +44,7 @@ class PageResult:
     seconds: float = 0.0
     samples: List[Dict] = field(default_factory=list, repr=False)   # one row per letter (samples.csv)
     features: Optional[np.ndarray] = field(default=None, repr=False)  # one fingerprint per sample (C4)
+    lines_info: List[Dict] = field(default_factory=list, repr=False)  # one entry per line (for the app)
 
 
 def write_report(results: List[PageResult], ignored: List[Path], out_dir: Path) -> Path:
@@ -67,7 +68,7 @@ def write_samples(results: List[PageResult], out_dir: Path) -> Path:
     `group_id` is the letter group (or "unsure") and `distance` the distance to its group's centre."""
     path = Path(out_dir) / "samples.csv"
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=SAMPLE_COLUMNS, restval="")
+        w = csv.DictWriter(f, fieldnames=SAMPLE_COLUMNS, restval="", extrasaction="ignore")
         w.writeheader()
         for r in results:
             w.writerows(r.samples)

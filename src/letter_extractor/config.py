@@ -107,6 +107,8 @@ class Config:
     # ---- batch ------------------------------------------------------------------------
     workers: int = 0                  # 0 = automatic
     debug: bool = False
+    save_masks: bool = False          # also write each letter's ink mask (L01_003_mask.png); the app needs them
+    write_groups: bool = True         # write groups/, unsure/ and groups.html (the app keeps groups in its database)
 
 
 def _apply(obj: Any, values: Dict[str, Any], where: str) -> None:

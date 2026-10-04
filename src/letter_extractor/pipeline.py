@@ -12,6 +12,7 @@ from typing import Callable, List, Optional, Tuple
 
 import cv2
 import numpy as np
+from PIL import Image
 
 from . import io_utils, report
 from .config import Config
@@ -55,15 +56,21 @@ def _write_letters(page: PreparedPage, letters: List[Letter], spacing: float, st
     fingerprints for grouping."""
     folder = out_dir / "letters" / stem
     folder.mkdir(parents=True, exist_ok=True)
-    for old in folder.glob("L[0-9][0-9]_[0-9][0-9][0-9].png"):   # letters of an earlier run
-        old.unlink()
+    for pattern in ("L[0-9][0-9]_[0-9][0-9][0-9].png", "L[0-9][0-9]_[0-9][0-9][0-9]_mask.png"):
+        for old in folder.glob(pattern):              # letters of an earlier run
+            old.unlink()
     for L in letters:
         name = f"L{L.line:02d}_{L.pos:03d}.png"
         _png(letter_image(page, L, cfg), folder / name)
         x, y, w, h = L.box
-        res.samples.append({"page": res.file, "line": L.line, "pos": L.pos, "x": x, "y": y, "w": w, "h": h,
-                            "ink": L.ink, "kind": L.kind, "pieces": L.pieces, "rules": " ".join(L.rules),
-                            "image": f"letters/{stem}/{name}"})
+        row = {"page": res.file, "line": L.line, "pos": L.pos, "x": x, "y": y, "w": w, "h": h,
+               "ink": L.ink, "kind": L.kind, "pieces": L.pieces, "rules": " ".join(L.rules),
+               "image": f"letters/{stem}/{name}"}
+        if cfg.save_masks:
+            mask_name = f"L{L.line:02d}_{L.pos:03d}_mask.png"
+            Image.fromarray(L.mask.astype(np.uint8) * 255).save(folder / mask_name)
+            row["mask"] = f"letters/{stem}/{mask_name}"
+        res.samples.append(row)
     res.features = (np.stack([fingerprint(L.mask, spacing, cfg) for L in letters]) if letters
                     else np.zeros((0, fingerprint_size(cfg)), np.float32))
     res.letters = len(letters)
@@ -95,6 +102,9 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
             lines_dir.mkdir(exist_ok=True)
             for line in layout.lines:
                 _png(line_image(page, line, cfg), lines_dir / f"{src.stem}_L{line.index:02d}.png")
+                lx, ly, lw, lh = line.box
+                res.lines_info.append({"number": line.index, "x": lx, "y": ly, "w": lw, "h": lh, "ink": line.ink,
+                                       "image": f"lines/{src.stem}_L{line.index:02d}.png"})
             _write_letters(page, data.letters, layout.spacing, src.stem, out_dir, cfg, res)
         elif page.block is not None:
             res.status = report.STATUS_NO_TEXT
@@ -110,7 +120,7 @@ def process_file(src: Path, out_dir: Path, cfg: Config) -> PageResult:
                 _png(pieces_overlay(page, layout, pieces, cfg), debug_dir / f"{src.stem}_pieces.png")
                 _png(letters_overlay(page, data.letters), debug_dir / f"{src.stem}_letters.png")
     except Exception as e:  # one page failing never stops the batch
-        res.samples, res.features = [], None          # a failed page contributes no samples
+        res.samples, res.features, res.lines_info = [], None, []   # a failed page contributes nothing
         res.status = report.STATUS_FAILED
         res.message = f"{type(e).__name__}: {e}"
         if cfg.debug:
@@ -207,6 +217,7 @@ def _group_letters(results: List[PageResult], out_dir: Path, cfg: Config) -> dic
     for row, gid, d in zip(rows, grouping.group_id, grouping.distance):
         row["group_id"] = gid
         row["distance"] = "" if np.isnan(d) else f"{d:.3f}"
-    write_group_folders(out_dir, rows, grouping)
-    write_groups_html(out_dir, rows, grouping, cfg)
+    if cfg.write_groups:
+        write_group_folders(out_dir, rows, grouping)
+        write_groups_html(out_dir, rows, grouping, cfg)
     return {"samples": len(rows), "groups": len(grouping.groups), "unsure": len(grouping.unsure)}

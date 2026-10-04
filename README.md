@@ -4,15 +4,18 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). Labels, the Gujarati mapping and the dataset (C5) are next.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database) is done; see the plan for C5b-C5g.
 
 ## Install
 
-Python 3.10 or newer on Windows or macOS.
+Python 3.10 or newer on Windows or macOS. Use a virtual environment:
 
 ```
-pip install -r requirements.txt
+python3 -m venv .venv                      (Windows: py -3 -m venv .venv)
+.venv/bin/pip install -r requirements.txt  (Windows: .venv\Scripts\pip install -r requirements.txt)
 ```
+
+The commands below use `python`; run them with `.venv/bin/python` (Windows: `.venv\Scripts\python`) or after activating the environment.
 
 ## Use
 
@@ -97,6 +100,23 @@ Black ink is cut almost perfectly; red ink, whose headlines run into each other,
 3. **Unsure:** samples far from their group's centre, and groups of a single sample.
 
 Letters that look nearly the same in this hand (ता / ना, नि / ति, त / न) may share a group; they are split when labelling or in the review screen (C9). Raise `group_distance` for fewer groups and fewer unsure samples but more mixed groups; lower it for the opposite.
+
+## The library of books (C5a, used by the app)
+
+The review app keeps its work in a **library folder** (default `Documents/Manuscript Letters`) with a SQLite database (`library.db`) and one folder per book. Until the app screens exist (C5d), it can be used from Python:
+
+```python
+from pathlib import Path
+from letter_extractor.app.library import Library
+
+lib = Library(Path("~/Documents/Manuscript Letters").expanduser())
+book = lib.create_book("My manuscript", Path("pages"))     # input pages are only read, never changed
+print(lib.capture(book.id))                                # cut, group and store: pages, lines, samples, groups
+print(lib.list_books())
+print(lib.check_pages(book.id))                            # missing / changed / new input pages
+```
+
+Capturing a book again replaces its automatic results; it is refused once the book holds manual work (labels, reviewed groups), unless `force=True`.
 
 ## Tests
 
