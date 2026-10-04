@@ -180,6 +180,14 @@ class Library:
         if folder.exists() and folder.resolve().parent == books:
             shutil.rmtree(folder)
 
+    def set_book_config(self, book_id: int, cfg: Config) -> None:
+        """New settings for the book's next capture or re-cut (what is in the book does not change)."""
+        with self.session() as s:
+            book = s.get(Book, book_id)
+            if book is None:
+                raise NotFound(f"No book with id {book_id}.")
+            book.settings = json.dumps(dataclasses.asdict(cfg))
+
     def book_config(self, book: Book) -> Config:
         return load_config(None, **json.loads(book.settings))
 

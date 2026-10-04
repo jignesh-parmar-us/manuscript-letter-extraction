@@ -16,6 +16,8 @@ Routes (all JSON unless noted):
   labels     GET /api/label?text=...&book_id=...
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
              (the input page image)
+  app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
+             PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it
 """
 from __future__ import annotations
 
@@ -25,7 +27,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
 from .. import __version__
@@ -36,7 +39,8 @@ from .centres import suggestions
 from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import BookCreate, BookRename, Force, GroupRef, Label, Merge, Move, SampleIds, Status
+from .schemas import (BookCreate, BookRename, BookSettings, Force, GroupRef, Label, LibraryChoice, Merge, Move,
+                      SampleIds, Status)
 
 MAX_PAGE = 500
 
@@ -68,7 +72,10 @@ def _group_json(s, g: LetterGroup) -> Dict:
             "updated_at": g.updated_at.isoformat() if g.updated_at else None}
 
 
-def create_app(library: Library, token: str) -> FastAPI:
+def create_app(library: Library, token: str, context=None) -> FastAPI:
+    """`context` (main.AppContext) tells the screens how the app runs; tests may leave it out."""
+    from .main import AppContext, save_settings
+    context = context or AppContext()
     app = FastAPI(title="Manuscript Letter Extraction", version=__version__)
     jobs = Jobs(library)
     app.state.library, app.state.jobs, app.state.token = library, jobs, token
@@ -316,5 +323,50 @@ def create_app(library: Library, token: str) -> FastAPI:
     @app.get("/api/version")
     def version() -> Dict:
         return {"version": __version__}
+
+    # ---- the app itself (C5d) -------------------------------------------------------------------------
+    @app.get("/api/app", dependencies=auth)
+    def app_info() -> Dict:
+        return {"version": __version__, "library": str(library.root), "mode": context.mode,
+                "can_pick_folder": context.pick_folder is not None}
+
+    @app.post("/api/app/library", dependencies=auth)
+    def choose_library(body: LibraryChoice) -> Dict:
+        path = Path(body.path).expanduser()
+        if path.exists() and not path.is_dir():
+            raise HTTPException(400, f"Not a folder: {path}")
+        save_settings({"library": str(path)}, context.settings_file)
+        return {"library": str(path), "restart_needed": path.resolve() != library.root.resolve()}
+
+    @app.post("/api/app/pick-folder", dependencies=auth)
+    def pick_folder() -> Dict:
+        if context.pick_folder is None:
+            raise HTTPException(501, "No folder dialog in the browser; type the folder path.")
+        return {"path": context.pick_folder()}
+
+    @app.patch("/api/books/{book_id}/settings", dependencies=auth)
+    def book_settings(book_id: int, body: BookSettings) -> Dict:
+        try:
+            cfg = load_config(None, **body.settings) if body.settings else Config()
+        except (ValueError, TypeError) as e:
+            raise HTTPException(400, f"Settings: {e}")
+        library.set_book_config(book_id, cfg)
+        return get_book(book_id)
+
+    # ---- the screen ------------------------------------------------------------------------------------
+    index = context.static_dir / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    def screen():
+        if not index.is_file():
+            return HTMLResponse("<h1>The screen is not built</h1><p>Run <code>npm run build</code> in frontend/.</p>",
+                                status_code=503)
+        html = index.read_text(encoding="utf-8")
+        tag = f"<script>window.__TOKEN__ = {json.dumps(token)};</script>"
+        return HTMLResponse(html.replace("</head>", tag + "</head>", 1),
+                            headers={"Cache-Control": "no-store"})
+
+    if (context.static_dir / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=context.static_dir / "assets"), name="assets")
 
     return app

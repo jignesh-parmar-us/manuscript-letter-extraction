@@ -44,3 +44,11 @@ class Label(GroupRef):
 class Status(GroupRef):
     reviewed: Optional[bool] = None
     locked: Optional[bool] = None
+
+
+class LibraryChoice(BaseModel):
+    path: str
+
+
+class BookSettings(BaseModel):
+    settings: Optional[Dict[str, Any]] = None     # overrides of the default Config; None: defaults

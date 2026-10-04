@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping) and C5c (backend API) are done; C5d (app shell, Books and Capture screens) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API) and C5d (app shell, Books and Capture screens) are done; C5e (group review and labeling) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -370,8 +370,8 @@ All times are stored in UTC and shown in local time.
 | C5a Library and database | **done** | C0-C4 |
 | C5b Unicode mapping | **done** | - |
 | C5c Backend API | **done** | C5a, C5b |
-| C5d App shell, Books and Capture screens | **next** | C5c |
-| C5e Group review and labeling | planned | C5c, C5d |
+| C5d App shell, Books and Capture screens | **done** | C5c |
+| C5e Group review and labeling | **next** | C5c, C5d |
 | C5f Fixing cuts and adding samples | planned | C5c, C5e |
 | C5g Export | planned | C5a, C5b (can run before the screens) |
 
@@ -478,23 +478,33 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 #### C5d. App shell, Books and Capture screens
 
-**Status: planned.**
+**Status: done** (commit "Add the app window with the Books and Capture screens (C5d)"). The window mode still needs a first look on macOS by the user (and on Windows with the C7 build); the browser mode was checked through a real server.
 **Goal:** the app starts like a desktop app, in its own window or in the browser, and handles books and capture.
-**Files:** `app/main.py`; `frontend/` (Vite + React + TypeScript): `src/api.ts` (the one way to call the backend), `src/screens/Books.tsx`, `src/screens/Capture.tsx`; `tests/test_main.py`; frontend tests in `frontend/src/**/*.test.tsx`. New dependencies: `pywebview` (Python); React, TypeScript, Vite, Vitest, Testing Library (Node, development only).
+**Files:** `app/main.py` (launcher), `app/__main__.py`, additions to `app/api.py` (app info, library, folder dialog, book settings, serving the screen), `app/schemas.py`, `app/library.py` (`set_book_config`); `frontend/`: `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/api.ts`, `src/route.ts`, `src/styles.css`, `src/components/` (`ErrorBox`, `Confirm`, `useJob`), `src/screens/` (`Books`, `BookView`, `Capture`) with tests next to them; `tests/test_main.py`. New dependencies: `pywebview` (Python); React 19, TypeScript 7, Vite 8, Vitest 5, Testing Library, jsdom (Node, development only).
 
 **What it does:**
-- `app/main.py`: on first start, ask for the library folder (default `Documents/Manuscript Letters`) and remember it in the user's settings; create a random session token; start `create_app(library, token)` (C5c) with uvicorn on `127.0.0.1` with a free port; serve the built screen at `/` with the token written into the page, so `src/api.ts` sends it as `X-Token` and adds `?token=` to image URLs (C5c returns image URLs with it already); open **its own window** (pywebview) or, with `--browser` or from the menu, the **default browser**. If the window engine is missing (old Windows without WebView2), open the browser instead.
-- **Books** screen: the books (name, pages, samples, groups, labelled share, unsure, last change in local time); create (name, input folder: a folder dialog in the window, a path field in the browser); open, rename, delete (with confirmation); page problems (missing, changed, new) shown on the book.
-- **Capture** screen: settings (defaults; load a config file), Start, progress (polling `GET /api/jobs/{id}`: pages done of total, per-page status as in `report.csv`), Cancel, summary; a 409 `needs_confirmation` answer shows the "has manual work" confirmation and repeats the call with `force`; add new pages / re-cut a page (C5c jobs).
+- **Start:** `python -m letter_extractor.app` (own window) or `--browser`; `--library DIR` chooses and remembers the library folder (otherwise the remembered one, otherwise `Documents/Manuscript Letters`); `--port`. The launcher creates a session token, starts the backend on `127.0.0.1` in a background thread, and opens the window (pywebview) or the browser. If the window cannot start, it falls back to the browser.
+- **Serving the screen:** `GET /` returns the built `index.html` with `window.__TOKEN__` written into it; `/assets/` serves the scripts and styles. If the screen is not built, `/` says how to build it.
+- **App endpoints:** `GET /api/app` (version, library folder, window / browser, folder dialog available), `POST /api/app/library` (remember another library folder; used at the next start), `POST /api/app/pick-folder` (native folder dialog in the window; 501 in the browser), `PATCH /api/books/{id}/settings` (settings for the next capture or re-cut; null = defaults).
+- **Books** screen (`#/`): table of books (pages, letters, groups, labelled with percentage, unsure, last change in local time), open, inline rename, delete with confirmation; **New book** form (name, folder of page images, with **Browse…** in the window); the library folder with "change…".
+- **Book** view (`#/books/<id>/<tab>`): name and numbers, tabs (`TABS` in `BookView.tsx`; C5e adds its tabs there).
+- **Pages & capture** tab: page folder and last capture; **Capture letters** / **Capture again**; **Add new pages (n)** when new image files are found; missing or changed pages listed; progress panel (pages done of total, last page, Cancel, failed pages, summary); the 409 answer becomes a confirmation dialog, then the same call with `force`; the pages table with **Cut again** per page; settings: load a JSON settings file, back to the defaults, the full settings shown.
 
-**Done when:** a book can be created from `samples/`, captured with visible progress, closed and reopened, in window and in browser mode on macOS, and in the Windows build (C7).
-**Tests:** the backend serves the built screen and refuses requests without the token (Python); Books list, create form and capture progress with a mocked API (Vitest); type check.
+**Done when:** a book can be created from `samples/`, captured with visible progress, closed and reopened, in window and in browser mode on macOS, and in the Windows build (C7). *Met for the browser mode through tests and a real server (the built screen, token and assets are served; the API answers). The window mode is built (pywebview, folder dialog, browser fallback) but needs a first manual check.*
+**Tests (22):** Python (9): settings file round trip and a broken file ignored; library folder from the argument, the remembered value, or the default; free port; the screen is served with the token and no caching, assets are served; a missing build answers 503 with the build command; app info and the folder dialog (501 in the browser, the path in the window); a chosen library is remembered and says whether a restart is needed; book settings saved, refused when wrong, reset to defaults; app endpoints need the token. Screen (13, Vitest): the API client sends the token, turns errors into `ApiError` (message, needs-confirmation, validation messages), handles 204; Books lists books with numbers, creates and opens a book, asks before deleting, renames inline, offers **Browse…** only in the window; Capture follows a job to its summary, asks before discarding manual work and repeats with `force`, adds new pages, cancels. Type check (`tsc`) clean.
+
+**Changes from the original plan (C5d):**
+- **The library folder is not asked for at first start**; the app uses the remembered folder or the default, and it can be changed on the Books screen (used at the next start) or with `--library`. Asking before anything is shown would need a screen without a library behind it.
+- **Book settings can be changed after creation** (`PATCH /api/books/{id}/settings`, "Load settings file…", "Back to the defaults"); the plan only mentioned loading a config file for a capture.
+- **No router or state library:** screens are chosen by the part of the address after `#` (`route.ts`), state is plain `useState` / `useEffect`, and all backend calls go through `api.ts`, to keep the code easy for a team new to React.
+- **No `window.prompt` / `window.confirm`:** the app window (WebKit on macOS) does not reliably show them; renaming is inline and confirmations use the app's own dialog (`Confirm.tsx`).
+- **npm cache:** `~/.npm` on this machine contains files owned by root (from an install with `sudo`), so `npm install` fails with EACCES; the fix is `sudo chown -R $(id -u):$(id -g) ~/.npm` (for the user to run), or `npm install --cache <other folder>`.
 
 #### C5e. Group review and labeling
 
 **Status: planned.**
 **Goal:** clean and label all groups of a book without leaving the app (FR-7, FR-8).
-**Files:** `frontend/src/screens/Groups.tsx`, `GroupView.tsx`, `Unsure.tsx`, `components/SampleGrid.tsx`, `components/LabelPicker.tsx`; tests next to them. New dependencies (Node): `@dnd-kit/core` (drag and drop), `@tanstack/react-virtual` (large grids).
+**Files:** `frontend/src/screens/Groups.tsx`, `GroupView.tsx`, `Unsure.tsx`, `components/SampleGrid.tsx`, `components/LabelPicker.tsx`; tests next to them; new tabs in `BookView.tsx` (`TABS`) and calls in `api.ts`, following the C5d patterns (`useConfirm`, `ErrorBox`, plain state). New dependencies (Node): `@dnd-kit/core` (drag and drop), `@tanstack/react-virtual` (large grids).
 
 **What it does:**
 - **Groups** list (`GET /api/books/{id}/groups`): code, label (Gujarati, with Devanagari on hover), sample count, red / black share, status, locked; filter (unlabelled, reviewed, large spread = possibly mixed; empty groups shown last with "dissolve"), sort.
@@ -546,7 +556,7 @@ The planned Tkinter window (folders, Run, progress, open the output) is the C5d 
 
 **Goal:** a downloadable app for both platforms.
 
-- Build the React screen first (`npm ci && npm run build` into `app/static/`), then PyInstaller with an `app_entry.py` (with `freeze_support()`) that starts the app; `build_macos.sh` and `build_windows.bat` from the border remover, renamed to `LetterExtractor`.
+- Build the React screen first (`npm ci && npm run build` in `frontend/`, which writes `src/letter_extractor/app/static/`), then PyInstaller with an `app_entry.py` (with `freeze_support()`) that calls `letter_extractor.app.main.main()`; `build_macos.sh` and `build_windows.bat` from the border remover, renamed to `LetterExtractor`. pywebview needs its platform parts collected (PyInstaller hooks for `webview`; on macOS the `pyobjc` frameworks).
 - Bundle `data/mapping_dev_guj.csv`, the built screen and the Alembic migrations with `--add-data`; load them through a helper that works from source and from the frozen app (`sys._MEIPASS`).
 - The CLI stays available (`LetterExtractor --cli ...` or a separate console executable).
 - **Windows:** pywebview uses Microsoft Edge WebView2, preinstalled on current Windows 10 and 11; if missing, the app opens in the browser instead. **macOS** uses the built-in WebKit.
@@ -561,7 +571,7 @@ The planned Tkinter window (folders, Run, progress, open the output) is the C5d 
 
 - Copy `.github/workflows/build.yml` from the border remover and extend it:
   - `test` job on `ubuntu-latest`, Python 3.10 and 3.13: `python -m unittest discover -s tests` (core and API);
-  - `frontend` job: `npm ci`, type check, unit tests (Vitest), `npm run build`; the build is passed to the platform builds;
+  - `frontend` job (Node 22): `npm ci`, `npm run typecheck`, `npm test` (Vitest), `npm run build`; the built `app/static/` is passed to the platform builds;
   - `build` job on `macos-latest` and `windows-latest` (needs both), zip and upload the app;
   - `release` job on `v*` tags, attaches both zips to a GitHub release.
 - Smoke step: run the CLI on `samples/` and check 22 lines; create a library and import `samples/` through the API.
@@ -587,8 +597,8 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C5a | Library and database | done | `library.db`, books | FR-7, FR-8 |
 | C5b | Unicode mapping | done | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
 | C5c | Backend API | done | review actions, capture jobs, undo | FR-7, FR-8 |
-| C5d | App shell, Books, Capture | **next** | own window and browser | FR-1, Section 7 |
-| C5e | Group review and labeling | planned | clean, labelled groups | FR-7, FR-8 |
+| C5d | App shell, Books, Capture | done | own window and browser | FR-1, Section 7 |
+| C5e | Group review and labeling | **next** | clean, labelled groups | FR-7, FR-8 |
 | C5f | Fixing cuts, adding samples | planned | cropped / joined / split / uploaded samples | FR-8 |
 | C5g | Export | planned | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
 | C6 | GUI | merged into C5d | - | Section 7 |

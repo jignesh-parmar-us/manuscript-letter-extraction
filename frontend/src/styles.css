@@ -1,0 +1,273 @@
+/* One stylesheet for the whole app. Colours are variables, switched for dark mode. */
+:root {
+  --bg: #f6f4f0;
+  --panel: #ffffff;
+  --text: #22201d;
+  --muted: #6b665e;
+  --line: #e2ddd4;
+  --accent: #8a3b12;
+  --accent-text: #ffffff;
+  --danger: #b42318;
+  --ok: #1f7a3d;
+  --warn: #9a6700;
+  --selected: #f3d9c6;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a18;
+    --panel: #24221f;
+    --text: #eeeae4;
+    --muted: #a39d93;
+    --line: #3a3732;
+    --accent: #e0915f;
+    --accent-text: #1b1a18;
+    --danger: #f97066;
+    --ok: #4cc27a;
+    --warn: #e6b450;
+    --selected: #5a3b26;
+    --shadow: none;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Gujarati", "Noto Sans Devanagari", sans-serif;
+}
+h1 {
+  font-size: 22px;
+  margin: 4px 0;
+}
+h2 {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+code {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.app .top {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-weight: 700;
+  font-size: 16px;
+}
+main {
+  padding: 16px 20px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 13px;
+}
+.strong {
+  font-weight: 600;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.row.between {
+  justify-content: space-between;
+}
+.row.end {
+  justify-content: flex-end;
+}
+
+button,
+.button {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+button.danger {
+  color: var(--danger);
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+}
+input,
+select {
+  font: inherit;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  min-width: 260px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  box-shadow: var(--shadow);
+}
+.card.subtle {
+  background: transparent;
+  box-shadow: none;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.field > span:first-child {
+  font-size: 13px;
+  color: var(--muted);
+}
+.field input {
+  flex: 1;
+}
+
+table.list {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 12px 0;
+}
+table.list th,
+table.list td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.list th {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+td.actions {
+  white-space: nowrap;
+  text-align: right;
+}
+td.actions button {
+  margin-left: 4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin: 12px 0;
+}
+.tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 8px 12px;
+}
+.tab.active {
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.error {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+.warnings {
+  color: var(--warn);
+  margin: 8px 0 0;
+}
+.badge {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.badge.ok {
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+.badge.warn {
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+progress {
+  width: 100%;
+  height: 10px;
+  margin: 8px 0;
+  accent-color: var(--accent);
+}
+pre.settings {
+  max-height: 300px;
+  overflow: auto;
+  font-size: 12px;
+  background: var(--bg);
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.dialog {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 16px 18px;
+  max-width: 480px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}

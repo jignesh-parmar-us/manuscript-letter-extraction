@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Cut every letter out of scanned Devanagari manuscript pages, group identical letters and build a labeled dataset."
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "pillow>=10.2", "sqlalchemy>=2.0",
-                "alembic>=1.13", "fastapi>=0.110", "uvicorn>=0.29"]
+                "alembic>=1.13", "fastapi>=0.110", "uvicorn>=0.29", "pywebview>=5"]
 
 [project.optional-dependencies]
 test = ["httpx>=0.27"]
@@ -16,9 +16,13 @@ test = ["httpx>=0.27"]
 [project.scripts]
 letter-extractor = "letter_extractor.cli:main"
 
+[project.gui-scripts]
+letter-extractor-app = "letter_extractor.app.main:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "letter_extractor" = ["data/*.csv"]
-"letter_extractor.app" = ["migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
+"letter_extractor.app" = ["migrations/*.py", "migrations/*.mako", "migrations/versions/*.py", "static/*.html",
+                         "static/assets/*"]

@@ -229,3 +229,6 @@ out/
 
 # macOS
 .DS_Store
+
+# The built React screen (rebuilt from frontend/ with `npm run build`)
+src/letter_extractor/app/static/

@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database), C5b (Devanagari / Gujarati labels) and C5c (backend API with review actions and undo) are done; the screens come next (C5d-C5f).
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database), C5b (Devanagari / Gujarati labels) C5c (backend API with review actions and undo) and C5d (the app window with the Books and Capture screens) are done; the review screens come next (C5e-C5f).
 
 ## Install
 
@@ -130,6 +130,23 @@ print(lib.check_pages(book.id))                            # missing / changed /
 ```
 
 Capturing a book again replaces its automatic results; it is refused once the book holds manual work (labels, reviewed groups), unless `force=True`.
+
+## The app (C5d)
+
+Build the screen once (and after every change in `frontend/`), then start the app:
+
+```
+cd frontend && npm install && npm run build && cd ..
+python -m letter_extractor.app               # its own window
+python -m letter_extractor.app --browser     # or in the web browser
+python -m letter_extractor.app --library "/path/to/My Library"   # another library folder (remembered)
+```
+
+The **Books** screen lists the books of the library and creates new ones (a name and the folder with the page images). A book's **Pages & capture** tab cuts the pages into letters with a progress bar, adds new pages later, cuts single pages again, and holds the book's settings.
+
+If `npm install` fails with `EACCES` on `~/.npm`, an earlier `sudo npm` left root-owned files in npm's cache: run `sudo chown -R $(id -u):$(id -g) ~/.npm` once (or add `--cache /some/other/folder`).
+
+For screen development: `npm run dev` in `frontend/` serves the screen with live reload and passes API calls to a backend on port 8765 (`python -m letter_extractor.app --browser --port 8765`). `npm test` runs the screen tests, `npm run typecheck` the type check.
 
 ## The backend API (C5c)
 
