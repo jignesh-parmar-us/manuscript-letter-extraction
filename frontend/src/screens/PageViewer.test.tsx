@@ -45,6 +45,22 @@ describe("PageViewer", () => {
     expect(screen.getByTestId("box-1")).toHaveAttribute("stroke", groupColour(5));
   });
 
+  it("keeps the box layer the size of the image at every zoom", async () => {
+    render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
+    await screen.findByTestId("box-1");
+    for (const zoom of ["0.25", "0.5", "0.75", "1"]) {
+      await userEvent.selectOptions(screen.getByLabelText("Zoom"), zoom);
+      const img = screen.getByAltText("p1.png");
+      const frame = img.parentElement as HTMLElement;     // the box layer fills this frame
+      const z = Number(zoom);
+      expect(img).toHaveAttribute("width", String(1000 * z));
+      expect(img).toHaveAttribute("height", String(500 * z));
+      expect(frame.style.width).toBe(`${1000 * z}px`);
+      expect(frame.style.height).toBe(`${500 * z}px`);
+    }
+    expect(screen.getByLabelText("Samples on the page")).toHaveAttribute("viewBox", "0 0 1000 500");
+  });
+
   it("joins the selected samples", async () => {
     vi.mocked(api.join).mockResolvedValue({ ...ok, sample: { id: 9, page_id: 3, box: [], source: "joined" } });
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);

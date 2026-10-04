@@ -242,8 +242,14 @@ export default function PageViewer({ book, pageId, onChanged }: Props) {
               </div>
             )}
             <div className="page-scroll">
-            <div className="page-canvas" style={{ width: page.width * zoom }}>
-              <img src={page.image} alt={page.file} width={page.width * zoom} draggable={false} />
+            <div className="page-canvas" style={{ width: page.width * zoom, height: page.height * zoom }}>
+              <img
+                src={page.image}
+                alt={page.file}
+                width={page.width * zoom}
+                height={page.height * zoom}
+                draggable={false}
+              />
               <svg
                 ref={svgRef}
                 viewBox={`0 0 ${page.width} ${page.height}`}

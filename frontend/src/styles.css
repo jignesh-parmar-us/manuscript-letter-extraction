@@ -430,13 +430,15 @@ pre.settings {
   border-radius: 6px;
 }
 .page-canvas {
+  /* exactly the size of the zoomed page (set inline); the .page-scroll around it scrolls. Never cap
+     its width: the box layer is sized to this element and must match the image. */
   position: relative;
-  max-width: 100%;
-  overflow: visible;
+  flex: none;
   margin-top: 8px;
 }
 .page-canvas img {
   display: block;
+  max-width: none;
   user-select: none;
 }
 .overlay {
