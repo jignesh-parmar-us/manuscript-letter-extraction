@@ -3,12 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, Book, PageDetail } from "../api";
 import PageViewer, { groupColour } from "./PageViewer";
-import { sample } from "./reviewTestUtils";
+import { group, sample } from "./reviewTestUtils";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { pages: vi.fn(), page: vi.fn(), groups: vi.fn(), crop: vi.fn(), join: vi.fn(), split: vi.fn(),
-    upload: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn(), redo: vi.fn() } };
+    upload: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn(), redo: vi.fn(), move: vi.fn(), newGroup: vi.fn() } };
 });
 
 const book = { id: 1 } as Book;
@@ -68,6 +68,31 @@ describe("PageViewer", () => {
     await waitFor(() => expect(screen.getByTestId("box-3")).toHaveClass("selected"));
     expect(screen.getByTestId("box-1")).not.toHaveClass("selected");
     expect(scrollTo).toHaveBeenCalledWith({ left: 110, top: 40 });   // centre (220, 80) at 50%, view 0 x 0
+  });
+
+  it("puts the selected samples in a group without leaving the page", async () => {
+    vi.mocked(api.groups).mockResolvedValue([
+      group({ id: 5, code: "g0005", samples: 2 }),
+      group({ id: 6, code: "g0006", label_dev: "क", label_guj: "ક", samples: 9 }),
+      group({ id: 7, code: "g0007", locked: true, samples: 4 }),
+    ]);
+    vi.mocked(api.move).mockResolvedValue(ok);
+    vi.mocked(api.newGroup).mockResolvedValue({ ...ok, group_id: 8 });
+    render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByTestId("box-2"));              // an unsure sample
+    const picker = screen.getByLabelText("Move selected to group");
+    const names = [...picker.querySelectorAll("option")].map((o) => o.textContent);
+    expect(names).toEqual(["Move to group…", "ક (g0006) · 9", "g0005 · 2"]);   // labelled first, locked left out
+    expect(screen.getByRole("button", { name: "To Unsure" })).toBeDisabled();
+    await userEvent.selectOptions(picker, "6");
+    await userEvent.click(screen.getByRole("button", { name: "Move" }));
+    expect(api.move).toHaveBeenCalledWith(1, [2], 6);
+    expect(await screen.findByText(/moved to ક/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("box-1"), { shiftKey: true });
+    await userEvent.click(screen.getByRole("button", { name: "New group" }));
+    expect(api.newGroup).toHaveBeenCalledWith(1, [2, 1]);
+    await userEvent.click(screen.getByRole("button", { name: "To Unsure" }));
+    expect(api.move).toHaveBeenLastCalledWith(1, [2, 1], null);
   });
 
   it("joins the selected samples", async () => {

@@ -1,7 +1,8 @@
 // "Pages" tab: a page with a box around every sample, to fix wrong cuts quickly (FR-8).
 // Address: #/books/<id>/pages/<page id>[/<sample id>]; with a sample id, that sample is selected and
 // scrolled into view (double-click on a letter in Review opens it here).
-//   Select   click a box (Shift or Ctrl/Cmd+click for more); Join, Delete, Open its group
+//   Select   click a box (Shift or Ctrl/Cmd+click for more); Join, Delete, Open its group, and put the
+//            selection in a group (Move to group, New group, To Unsure) without leaving the page
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
 //   Split    click inside the selected sample where it should be cut in two
 // Boxes are coloured by group; unsure samples have a dashed grey box.
@@ -37,6 +38,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const [drawing, setDrawing] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [message, setMessage] = useState<string>("");
   const [offer, setOffer] = useState<number[]>([]);
+  const [moveTo, setMoveTo] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
   const [dialog, confirm] = useConfirm();
@@ -165,7 +167,37 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     }
   }
 
+  /** Put the selected samples in a group (null: Unsure), or in a new group of their own. */
+  async function regroup(groupId: number | null | "new") {
+    const ids = [...selected];
+    const r = await act(() => (groupId === "new" ? api.newGroup(book.id, ids) : api.move(book.id, ids, groupId)));
+    if (r) {
+      setMoveTo("");
+      const g = groupId === "new" ? null : groupId === null ? null : groups.get(groupId);
+      setMessage(
+        groupId === "new"
+          ? `${ids.length} sample(s) put in a new group.`
+          : groupId === null
+            ? `${ids.length} sample(s) moved to Unsure.`
+            : `${ids.length} sample(s) moved to ${g ? g.label_guj || g.code : "the group"}.`,
+      );
+    }
+  }
+
   const sel = page?.samples.filter((s) => selected.has(s.id)) ?? [];
+  // Groups to move into: labelled ones first in alphabet order, then the others, largest first.
+  // Locked groups refuse changes, so they are left out.
+  const targets = [...groups.values()]
+    .filter((g) => !g.locked && (g.samples > 0 || g.label_dev))
+    .sort((a, b) =>
+      a.label_dev && b.label_dev
+        ? a.label_guj.localeCompare(b.label_guj, "gu")
+        : a.label_dev
+          ? -1
+          : b.label_dev
+            ? 1
+            : b.samples - a.samples,
+    );
   const single = sel.length === 1 ? sel[0] : null;
   const singleGroup = single?.group_id ? groups.get(single.group_id) : undefined;
 
@@ -247,16 +279,38 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                 <button onClick={() => setOffer([])}>Keep them</button>
               </div>
             )}
-            {single && (
-              <div className="card row">
-                <img src={single.image} alt="selected sample" className="selected-sample" />
-                <span className="small">
-                  {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line} ·{" "}
-                  {singleGroup ? `group ${singleGroup.label_guj || singleGroup.code}` : "unsure"}
-                </span>
+            {sel.length > 0 && (
+              <div className="card row" aria-label="Selected samples">
+                {sel.slice(0, 8).map((s) => (
+                  <img key={s.id} src={s.image} alt={`selected sample ${s.id}`} className="selected-sample" />
+                ))}
+                {sel.length > 8 && <span className="muted small">+{sel.length - 8}</span>}
+                {single ? (
+                  <span className="small">
+                    {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line} ·{" "}
+                    {singleGroup ? `group ${singleGroup.label_guj || singleGroup.code}` : "unsure"}
+                  </span>
+                ) : (
+                  <span className="small">{sel.length} selected</span>
+                )}
                 {singleGroup && (
                   <button onClick={() => go(`/books/${book.id}/review/${singleGroup.id}`)}>Open group</button>
                 )}
+                <select aria-label="Move selected to group" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+                  <option value="">Move to group…</option>
+                  {targets.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.label_guj ? `${g.label_guj} (${g.code})` : g.code} · {g.samples}
+                    </option>
+                  ))}
+                </select>
+                <button disabled={!moveTo} onClick={() => regroup(Number(moveTo))}>
+                  Move
+                </button>
+                <button onClick={() => regroup("new")}>New group</button>
+                <button disabled={sel.every((s) => s.group_id === null)} onClick={() => regroup(null)}>
+                  To Unsure
+                </button>
               </div>
             )}
             <div className="page-scroll" ref={scrollRef}>
