@@ -14,7 +14,7 @@ import GroupView from "./GroupView";
 import SamplesView from "./SamplesView";
 
 type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "empty";
-type Sort = "code" | "size" | "spread";
+type Sort = "code" | "label" | "size" | "spread";
 
 interface Props {
   book: Book;
@@ -127,6 +127,7 @@ export default function Review({ book, view, onChanged }: Props) {
             </select>
             <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
               <option value="code">by code</option>
+              <option value="label">by label (Unicode)</option>
               <option value="size">by size</option>
               <option value="spread">by spread</option>
             </select>
@@ -200,10 +201,25 @@ export function filterGroups(groups: Group[], filter: Filter): Group[] {
   return candidates.filter((g) => (g.spread as number) >= limit);
 }
 
+/** Plain code point order (not the language's collation). */
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 export function sortGroups(groups: Group[], sort: Sort): Group[] {
   const out = [...groups];
   if (sort === "size") out.sort((a, b) => b.samples - a.samples);
   else if (sort === "spread") out.sort((a, b) => (b.spread ?? 0) - (a.spread ?? 0));
+  else if (sort === "label")
+    // labelled groups in Unicode code point order of the label (the letter order of the script),
+    // then the unlabelled ones by code
+    out.sort((a, b) =>
+      a.label_dev && b.label_dev
+        ? cmp(a.label_dev, b.label_dev) || cmp(a.code, b.code)
+        : a.label_dev
+          ? -1
+          : b.label_dev
+            ? 1
+            : cmp(a.code, b.code),
+    );
   else out.sort((a, b) => a.code.localeCompare(b.code));
   return out;
 }

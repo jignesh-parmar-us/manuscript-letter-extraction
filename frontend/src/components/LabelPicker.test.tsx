@@ -48,6 +48,19 @@ describe("LabelPicker", () => {
     expect(onSave).toHaveBeenCalledWith("ક્ષિ");
   });
 
+  it("hides the letters once the label is saved, not when saving failed", async () => {
+    const onSave = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(<LabelPicker bookId={1} current={{ dev: "", guj: "" }} onSave={onSave} />);
+    await userEvent.click(screen.getByRole("button", { name: "Letters…" }));
+    await userEvent.click(screen.getByRole("button", { name: "ક" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await userEvent.click(await screen.findByRole("button", { name: "Save label" }));
+    expect(screen.getByRole("button", { name: "Hide letters" })).toBeInTheDocument();   // refused: still open
+    await userEvent.click(screen.getByRole("button", { name: "Save label" }));
+    expect(screen.getByRole("button", { name: "Letters…" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ક" })).not.toBeInTheDocument();
+  });
+
   it("shows why a label is refused and does not save it", async () => {
     render(<LabelPicker bookId={1} current={{ dev: "", guj: "" }} onSave={async () => {}} />);
     await userEvent.type(screen.getByLabelText("Label"), "कम");

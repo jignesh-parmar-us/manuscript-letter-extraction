@@ -42,11 +42,11 @@ interface Props {
   bookId: number;
   current: { dev: string; guj: string };
   disabled?: boolean;
-  onSave: (text: string) => Promise<void>;
+  onSave: (text: string) => Promise<boolean | void>; // false: not saved (the letters stay open)
   saveText?: string; // the save button's text (default "Save label")
   canClear?: boolean; // offer "Clear label" when there is a label (default true)
   groupId?: number; // the group being labelled (not counted as "another group with this label")
-  onMerge?: (target: LabelUser) => Promise<void>; // merge the group into the one that has the label
+  onMerge?: (target: LabelUser) => Promise<boolean | void>; // merge the group into the one that has the label
 }
 
 export default function LabelPicker(props: Props) {
@@ -81,7 +81,7 @@ export default function LabelPicker(props: Props) {
   async function save(value: string) {
     setSaving(true);
     try {
-      await onSave(value);
+      if ((await onSave(value)) !== false) setOpen(false); // saved: hide the letters
     } finally {
       setSaving(false);
     }
@@ -150,7 +150,7 @@ export default function LabelPicker(props: Props) {
                   onClick={async () => {
                     setSaving(true);
                     try {
-                      await onMerge(g);
+                      if ((await onMerge(g)) !== false) setOpen(false);
                     } finally {
                       setSaving(false);
                     }

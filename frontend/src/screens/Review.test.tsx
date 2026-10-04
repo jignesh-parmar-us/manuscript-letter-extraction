@@ -43,5 +43,13 @@ describe("Review", () => {
     expect(filterGroups(groups, "mixed").map((g) => g.id)).toEqual([2]);
     expect(sortGroups(groups, "size").map((g) => g.id)).toEqual([1, 2, 3]);
     expect(sortGroups(groups, "spread").map((g) => g.id)).toEqual([2, 1, 3]);
+    const labelled = [
+      group({ id: 1, code: "g0001", label_dev: "ख" }),
+      group({ id: 2, code: "g0002" }),
+      group({ id: 3, code: "g0003", label_dev: "अ" }),
+      group({ id: 4, code: "g0004", label_dev: "कि" }),
+      group({ id: 5, code: "g0005", label_dev: "क" }),
+    ];
+    expect(sortGroups(labelled, "label").map((g) => g.id)).toEqual([3, 5, 4, 1, 2]);   // अ क कि ख, then unlabelled
   });
 });
