@@ -193,6 +193,15 @@ export interface LabelInfo {
   code_points_gujarati?: string;
   category?: string;
   kept_in_devanagari?: string[];
+  letters?: number; // aksharas: 1 for a letter, more for a word
+  used_by?: LabelUser[]; // groups of the book that have this label (when asked with a book)
+}
+
+export interface LabelUser {
+  id: number;
+  code: string;
+  locked: boolean;
+  samples: number;
 }
 
 export interface HistoryItem {

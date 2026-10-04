@@ -13,7 +13,7 @@ Routes (all JSON unless noted):
              /api/groups/{id}/samples, /api/books/{id}/unsure, /api/samples/{id}
   actions    POST /api/books/{id}/actions/{move|new-group|merge|dissolve|label|status|delete|restore},
              POST /api/books/{id}/undo | /redo, GET /api/books/{id}/history
-  labels     GET /api/label?text=...&book_id=...
+  labels     GET /api/label?text=...&book_id=...   (with a book: `used_by`, the groups with that label)
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
              (the input page image)
   samples    POST /api/books/{id}/samples/{crop|join|split|upload}   (C5f)
@@ -330,7 +330,16 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.get("/api/label", dependencies=auth)
     def label(text: str, book_id: Optional[int] = None) -> Dict:
         cfg = library.book_config(library.get_book(book_id)) if book_id else Config()
-        return describe(text, mapping_for(cfg))
+        info = describe(text, mapping_for(cfg), words=True)
+        if info["ok"] and book_id:
+            with library.session() as s:
+                same = s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id,
+                                                           LetterGroup.label_dev == info["devanagari"])
+                                 .order_by(LetterGroup.code)).all()
+                info["used_by"] = [{"id": g.id, "code": g.code, "locked": g.locked,
+                                    "samples": s.scalar(select(func.count()).select_from(Sample).where(
+                                        Sample.group_id == g.id, Sample.deleted.is_(False)))} for g in same]
+        return info
 
     # ---- files ---------------------------------------------------------------------------------------
     @app.get("/files/books/{book_id}/{path:path}", dependencies=auth)

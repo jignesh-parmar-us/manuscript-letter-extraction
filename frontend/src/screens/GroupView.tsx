@@ -101,8 +101,15 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         bookId={bookId}
         current={{ dev: group.label_dev, guj: group.label_guj }}
         disabled={locked}
+        groupId={group.id}
         onSave={async (text) => {
           await act(() => api.label(bookId, group.id, text));
+        }}
+        onMerge={async (target) => {
+          if (await confirm(`Merge ${group.code} (${group.samples} samples) into ${target.code}?`, "Merge")) {
+            const r = await act(() => api.merge(bookId, target.id, [group.id]));
+            if (r) go(`/books/${bookId}/review/${target.id}`);
+          }
         }}
       />
       {locked && <p className="muted small">The group is locked: unlock it to change it.</p>}

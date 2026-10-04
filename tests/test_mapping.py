@@ -121,6 +121,20 @@ class LabelTests(unittest.TestCase):
                 canonical_label(text)
             self.assertIn(reason, str(e.exception), text)
 
+    def test_words_only_when_asked(self):
+        self.assertEqual(canonical_label("નમઃ", words=True), "नमः")
+        self.assertEqual(canonical_label("१२", words=True), "१२")
+        self.assertEqual(mp.letters("श्रीकृष्ण"), ["श्री", "कृ", "ष्ण"])
+        for text, reason in {"काि": "'ि' needs a letter before it (after 'का')", "ि": "needs a letter",
+                             "क" * 13: "at most 12"}.items():
+            with self.assertRaises(LabelError, msg=text) as e:
+                canonical_label(text, words=True)
+            self.assertIn(reason, str(e.exception))
+        self.assertEqual(category("श्रीकृष्ण"), "words")
+        long = safe_name("श्रीकृष्णाय")
+        self.assertRegex(long, r"^shriikrissnnaaya__h[0-9a-f]{10}$")
+        self.assertNotEqual(long, safe_name("श्रीकृष्णः"))
+
     def test_gujarati_character_without_devanagari(self):
         with self.assertRaises(LabelError):
             canonical_label("૱")                     # Gujarati rupee sign

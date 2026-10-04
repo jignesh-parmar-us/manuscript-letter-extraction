@@ -101,7 +101,10 @@ class ExportTests(unittest.TestCase):
     def test_groups_with_the_same_label_are_one_class(self):
         groups = appbook.groups_with_members(self.lib, self.book)
         third = sorted(groups, key=lambda g: -len(groups[g]))[2]
-        A.set_label(self.lib, self.book, third, "क")
+        with self.lib.session() as s:            # the app refuses this now, but older libraries may have it
+            g = s.get(LetterGroup, third)
+            g.label_dev, g.label_guj, g.status = "क", "ક", "labelled"
+            s.commit()
         r = export_book(self.lib, self.book, self.tmp / "e")
         self.assertEqual(r["classes"], 2)
         self.assertEqual(len(list((self.tmp / "e" / "dataset" / "consonants" / "ka__U0A95").glob("*.png"))),

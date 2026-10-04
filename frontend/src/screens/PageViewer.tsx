@@ -185,8 +185,9 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     }
   }
 
-  /** Give the selected samples a label: move them to the group with that label (the largest, if
-   *  several; locked ones cannot take samples), or to a new group that gets the label. */
+  /** Give the selected samples a label: move them to the group with that label (the largest
+   *  unlocked one, if several), or to a new group that gets the label. One label, one group: if only
+   *  a locked group has it, nothing is done (the picker says so). */
   async function labelSelected(text: string) {
     const ids = [...selected];
     const info = await api.checkLabel(text, book.id).catch((e) => {
@@ -194,12 +195,15 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
       return null;
     });
     if (!info?.ok || !info.devanagari) return;
-    const same = [...groups.values()]
-      .filter((g) => !g.locked && g.label_dev === info.devanagari)
-      .sort((a, b) => b.samples - a.samples)[0];
-    if (same) {
-      if (await act(() => api.move(book.id, ids, same.id)))
-        setMessage(`${ids.length} sample(s) moved to the group ${info.gujarati} (${same.code}).`);
+    const users = info.used_by ?? [];
+    const into = users.filter((g) => !g.locked).sort((a, b) => b.samples - a.samples)[0];
+    if (into) {
+      if (await act(() => api.move(book.id, ids, into.id)))
+        setMessage(`${ids.length} sample(s) moved to the group ${info.gujarati} (${into.code}).`);
+      return;
+    }
+    if (users.length) {
+      setError(new Error(`The group ${users[0].code} with the label ${info.gujarati} is locked; unlock it first.`));
       return;
     }
     const made = await act(() => api.newGroup(book.id, ids));

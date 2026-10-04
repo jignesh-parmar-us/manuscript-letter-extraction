@@ -13,11 +13,14 @@ nukta signs. Everything else comes from the editable table `data/mapping_dev_guj
 
 A label must be **one akshara**: an independent vowel, or a consonant cluster (consonants joined by
 halant, so conjuncts and reph) with at most one vowel sign or a final halant, then optional
-chandrabindu / anusvara / visarga; or a digit, danda, double danda, avagraha or Om.
+chandrabindu / anusvara / visarga; or a digit, danda, double danda, avagraha or Om. The review app
+also allows a **word**: up to `MAX_WORD` such aksharas in a row (`words=True`), for samples that are
+a whole word (a cut that could not be split, an abbreviation); they form the category `words`.
 """
 from __future__ import annotations
 
 import csv
+import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -45,7 +48,8 @@ MARKS = "ऀँंः॒॑॓॔"          # (inverted) chandrabindu, anusvara,
 DIGITS = "".join(chr(c) for c in range(0x0966, 0x0970))
 PUNCTUATION = "।॥ऽॐ॰"                      # । ॥ ऽ ॐ ॰
 
-CATEGORIES = ("vowels", "consonants", "conjuncts", "digits", "punctuation")
+CATEGORIES = ("vowels", "consonants", "conjuncts", "digits", "punctuation", "words")
+MAX_WORD = 12                       # aksharas in a word label
 _MATRA_SET = frozenset(MATRAS)
 _CONSONANT_SET = frozenset(CONSONANTS)
 
@@ -180,9 +184,10 @@ def _split(dev: str) -> List[str]:
     return [unicodedata.normalize("NFC", nfd[m.start():m.end()]) for m in _TOKEN.finditer(classes)]
 
 
-def canonical_label(text: str, mapping: Optional[Mapping] = None) -> str:
+def canonical_label(text: str, mapping: Optional[Mapping] = None, words: bool = False) -> str:
     """The canonical (Devanagari, NFC) form of a label typed in Devanagari or Gujarati.
-    Raises LabelError with a readable reason if the text is not one letter."""
+    Raises LabelError with a readable reason if the text is not one letter (with `words`: not one
+    letter or a word of whole letters)."""
     m = mapping or load_mapping()
     t = _clean(text)
     if not t:
@@ -202,12 +207,24 @@ def canonical_label(text: str, mapping: Optional[Mapping] = None) -> str:
     parts = _split(dev)
     if classes[0] in "MBHN":
         raise LabelError(f"'{parts[0]}' needs a letter before it")
-    raise LabelError("more than one letter: " + " + ".join(parts))
+    if not words:
+        raise LabelError("more than one letter: " + " + ".join(parts))
+    for i, part in enumerate(parts):
+        if not _AKSHARA.fullmatch("".join(_cls(c) for c in unicodedata.normalize("NFD", part))):
+            raise LabelError(f"'{part}' needs a letter before it (after '{parts[i - 1]}')")
+    if len(parts) > MAX_WORD:
+        raise LabelError(f"a word label can have at most {MAX_WORD} letters, this one has {len(parts)}")
+    return dev
 
 
-def is_label(text: str, mapping: Optional[Mapping] = None) -> bool:
+def letters(label: str) -> List[str]:
+    """The aksharas of a label (one for a letter, several for a word)."""
+    return _split(label)
+
+
+def is_label(text: str, mapping: Optional[Mapping] = None, words: bool = False) -> bool:
     try:
-        canonical_label(text, mapping)
+        canonical_label(text, mapping, words)
         return True
     except LabelError:
         return False
@@ -223,6 +240,8 @@ def to_devanagari(text: str, mapping: Optional[Mapping] = None) -> str:
 
 def category(label: str) -> str:
     """Dataset category of a canonical label (FR-9)."""
+    if len(_split(label)) > 1:
+        return "words"
     nfd = unicodedata.normalize("NFD", label)
     classes = "".join(_cls(c) for c in nfd)
     if classes.startswith("D"):
@@ -297,8 +316,12 @@ def transliterate(label: str) -> str:
 
 def safe_name(label: str, mapping: Optional[Mapping] = None) -> str:
     """Folder name valid on Windows and macOS: transliteration + Gujarati code points
-    (कि -> ki__U0A95-U0ABF). The code points make it unique."""
+    (कि -> ki__U0A95-U0ABF). The code points make it unique. Long labels (words) would make paths
+    too long for Windows, so above 8 code points a short hash of them replaces the list."""
     guj = to_gujarati(label, mapping)
+    if len(guj) > 8:
+        digest = hashlib.sha1(guj.encode("utf-8")).hexdigest()[:10]
+        return f"{transliterate(label)[:40]}__h{digest}"
     return f"{transliterate(label)}__" + "-".join(f"U{ord(c):04X}" for c in guj)
 
 
@@ -309,16 +332,16 @@ def unmapped(text: str, mapping: Optional[Mapping] = None) -> List[str]:
     return [ch for ch in unicodedata.normalize("NFC", text) if ch in m.kept]
 
 
-def describe(text: str, mapping: Optional[Mapping] = None) -> Dict:
+def describe(text: str, mapping: Optional[Mapping] = None, words: bool = False) -> Dict:
     """Everything the screens show for a label being typed: canonical form, both scripts, code
-    points, category; or the reason it is not a letter."""
+    points, category, its letters; or the reason it is not a letter."""
     m = mapping or load_mapping()
     try:
-        dev = canonical_label(text, m)
+        dev = canonical_label(text, m, words)
     except LabelError as e:
         return {"ok": False, "error": str(e)}
     guj = m.gujarati(dev)
     return {"ok": True, "devanagari": dev, "gujarati": guj, "code_points_devanagari": code_points(dev),
             "code_points_gujarati": code_points(guj), "category": category(dev),
             "transliteration": transliterate(dev), "safe_name": safe_name(dev, m),
-            "kept_in_devanagari": unmapped(dev, m)}
+            "kept_in_devanagari": unmapped(dev, m), "letters": len(_split(dev))}

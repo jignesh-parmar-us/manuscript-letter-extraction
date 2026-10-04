@@ -101,13 +101,30 @@ class ActionRuleTests(ActionTestCase):
             self.assertEqual((g.label_dev, g.label_guj, g.status), ("श्री", "શ્રી", "labelled"))
         before = self.state()
         with self.assertRaises(A.ActionError) as e:
-            A.set_label(self.lib, self.book, self.g1, "कम")
-        self.assertIn("क + म", str(e.exception))
+            A.set_label(self.lib, self.book, self.g1, "काि")              # a vowel sign with no letter
+        self.assertIn("'ि' needs a letter before it", str(e.exception))
         self.assertEqual(self.state(), before, "a refused action must change nothing")
         A.set_label(self.lib, self.book, self.g1, "")
         with self.lib.session() as s:
             g = s.get(LetterGroup, self.g1)
             self.assertEqual((g.label_dev, g.status), ("", "reviewed"))
+
+    def test_word_labels(self):
+        A.set_label(self.lib, self.book, self.g1, "નમઃ")                  # a whole word, typed in Gujarati
+        with self.lib.session() as s:
+            self.assertEqual(s.get(LetterGroup, self.g1).label_dev, "नमः")
+        with self.assertRaises(A.ActionError):
+            A.set_label(self.lib, self.book, self.g2, "क" * 13)            # longer than MAX_WORD
+
+    def test_one_group_per_label(self):
+        A.set_label(self.lib, self.book, self.g1, "क")
+        before = self.state()
+        with self.assertRaises(A.ActionError) as e:
+            A.set_label(self.lib, self.book, self.g2, "ક")                 # the same letter, typed in Gujarati
+        self.assertIn("already the label of group", str(e.exception))
+        self.assertEqual(self.state(), before)
+        A.set_label(self.lib, self.book, self.g1, "क")                     # its own label again is fine
+        A.merge_groups(self.lib, self.book, self.g1, [self.g2])           # what the screen offers instead
 
     def test_locked_group_refuses_changes(self):
         A.set_status(self.lib, self.book, self.g1, locked=True)

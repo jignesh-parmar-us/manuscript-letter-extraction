@@ -102,7 +102,9 @@ describe("PageViewer", () => {
       group({ id: 7, code: "g0007", label_dev: "ख", label_guj: "ખ", locked: true, samples: 4 }),
     ]);
     vi.mocked(api.checkLabel).mockImplementation(async (text) =>
-      text === "ક" ? { ok: true, devanagari: "क", gujarati: "ક" } : { ok: true, devanagari: "ख", gujarati: "ખ" });
+      text === "ક"
+        ? { ok: true, devanagari: "क", gujarati: "ક", used_by: [{ id: 6, code: "g0006", locked: false, samples: 9 }] }
+        : { ok: true, devanagari: "ग", gujarati: "ગ", used_by: [] });
     vi.mocked(api.move).mockResolvedValue(ok);
     vi.mocked(api.newGroup).mockResolvedValue({ ...ok, group_id: 8 });
     vi.mocked(api.label).mockResolvedValue(ok);
@@ -116,12 +118,12 @@ describe("PageViewer", () => {
     expect(api.move).toHaveBeenCalledWith(1, [2], 6);                   // the existing ક group
     expect(api.newGroup).not.toHaveBeenCalled();
     await userEvent.clear(input);
-    await userEvent.type(input, "ખ");                                   // its group is locked
+    await userEvent.type(input, "ગ");                                   // no group has it yet
     await waitFor(() => expect(labelIt).toBeEnabled());
     await userEvent.click(labelIt);
-    await waitFor(() => expect(api.label).toHaveBeenCalledWith(1, 8, "ખ"));
+    await waitFor(() => expect(api.label).toHaveBeenCalledWith(1, 8, "ગ"));
     expect(api.newGroup).toHaveBeenCalledWith(1, [2]);
-    expect(await screen.findByText(/new group labelled ખ/)).toBeInTheDocument();
+    expect(await screen.findByText(/new group labelled ગ/)).toBeInTheDocument();
   });
 
   it("joins the selected samples", async () => {

@@ -55,4 +55,34 @@ describe("LabelPicker", () => {
     expect(await screen.findByText("more than one letter: क + म")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save label" })).toBeDisabled();
   });
+
+  it("takes a word, and offers a merge instead of a second group with the same label", async () => {
+    vi.mocked(api.checkLabel).mockResolvedValue({
+      ok: true, devanagari: "नमः", gujarati: "નમઃ", code_points_gujarati: "U+0AA8 U+0AAE U+0A83", category: "words",
+      letters: 2, used_by: [{ id: 5, code: "g0005", locked: false, samples: 3 }, { id: 6, code: "g0006", locked: false, samples: 9 }],
+    });
+    const onSave = vi.fn(async () => {});
+    const onMerge = vi.fn(async () => {});
+    render(<LabelPicker bookId={1} groupId={5} current={{ dev: "", guj: "" }} onSave={onSave} onMerge={onMerge} />);
+    await userEvent.type(screen.getByLabelText("Label"), "નમઃ");
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(await screen.findByText(/words \(2 letters\)/)).toBeInTheDocument();
+    expect(screen.getByText(/already the label of g0006 \(9\)\./)).toBeInTheDocument();   // its own group is not counted
+    expect(screen.getByRole("button", { name: "Save label" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Merge into g0006" }));
+    expect(onMerge).toHaveBeenCalledWith(expect.objectContaining({ id: 6 }));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("for samples, says which group they go into, and refuses a locked one", async () => {
+    vi.mocked(api.checkLabel).mockResolvedValue({
+      ok: true, devanagari: "क", gujarati: "ક", category: "consonants", letters: 1,
+      used_by: [{ id: 7, code: "g0007", locked: true, samples: 4 }],
+    });
+    render(<LabelPicker bookId={1} current={{ dev: "", guj: "" }} saveText="Label it" onSave={async () => {}} />);
+    await userEvent.type(screen.getByLabelText("Label"), "ક");
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(await screen.findByText(/g0007 with this label is locked/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Label it" })).toBeDisabled();
+  });
 });

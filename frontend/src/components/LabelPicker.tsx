@@ -1,8 +1,11 @@
 // Label of a group: typed in Devanagari or Gujarati (any keyboard), or built with the on-screen
 // palette (consonant, halant for a conjunct, then a vowel sign, then a mark). The backend checks the
 // label while it is typed (mapping.describe) and shows it in both scripts with its code points.
+// A label can be one letter or a word (several letters). One label belongs to one group: if another
+// group has it, the picker offers "Merge into" that group (onMerge) instead of saving, or, for samples
+// (no onMerge), says which group they will go into.
 import { useEffect, useState } from "react";
-import { api, LabelInfo } from "../api";
+import { api, LabelInfo, LabelUser } from "../api";
 
 type Script = "gujarati" | "devanagari";
 
@@ -42,9 +45,12 @@ interface Props {
   onSave: (text: string) => Promise<void>;
   saveText?: string; // the save button's text (default "Save label")
   canClear?: boolean; // offer "Clear label" when there is a label (default true)
+  groupId?: number; // the group being labelled (not counted as "another group with this label")
+  onMerge?: (target: LabelUser) => Promise<void>; // merge the group into the one that has the label
 }
 
-export default function LabelPicker({ bookId, current, disabled, onSave, saveText = "Save label", canClear = true }: Props) {
+export default function LabelPicker(props: Props) {
+  const { bookId, current, disabled, onSave, saveText = "Save label", canClear = true, groupId, onMerge } = props;
   const [text, setText] = useState(current.guj);
   const [script, setScript] = useState<Script>("gujarati");
   const [info, setInfo] = useState<LabelInfo | null>(null);
@@ -67,7 +73,7 @@ export default function LabelPicker({ bookId, current, disabled, onSave, saveTex
       live = false;
       window.clearTimeout(timer);
     };
-  }, [text, bookId]);
+  }, [text, bookId, current.dev]); // also after a save: which groups have the label changed
 
   const add = (ch: string) => setText((t) => t + (script === "gujarati" ? toGujarati(ch) : ch));
   const backspace = () => setText((t) => Array.from(t).slice(0, -1).join(""));
@@ -82,6 +88,11 @@ export default function LabelPicker({ bookId, current, disabled, onSave, saveTex
   }
 
   const unchanged = info?.ok && info.devanagari === current.dev;
+  const others = (info?.ok && info.used_by?.filter((g) => g.id !== groupId)) || [];
+  const free = others.filter((g) => !g.locked).sort((a, b) => b.samples - a.samples);
+  // a group cannot take a label another group has; samples can only go into an unlocked group
+  const blocked = onMerge ? others.length > 0 : others.length > 0 && free.length === 0;
+  const canSave = !disabled && !saving && info?.ok && !unchanged && !blocked;
 
   return (
     <div className="label-picker">
@@ -94,10 +105,10 @@ export default function LabelPicker({ bookId, current, disabled, onSave, saveTex
           placeholder="Type in ગુજરાતી or देवनागरी"
           disabled={disabled}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && info?.ok && !unchanged) save(text);
+            if (e.key === "Enter" && canSave) save(text);
           }}
         />
-        <button className="primary" disabled={disabled || saving || !info?.ok || unchanged} onClick={() => save(text)}>
+        <button className="primary" disabled={!canSave} onClick={() => save(text)}>
           {saveText}
         </button>
         {canClear && current.dev && (
@@ -114,7 +125,8 @@ export default function LabelPicker({ bookId, current, disabled, onSave, saveTex
           <span>
             <span className="big-letter">{info.gujarati}</span> <span className="big-letter">{info.devanagari}</span>{" "}
             <span className="muted">
-              {info.category} · {info.code_points_gujarati}
+              {info.category}
+              {info.letters && info.letters > 1 ? ` (${info.letters} letters)` : ""} · {info.code_points_gujarati}
               {info.kept_in_devanagari && info.kept_in_devanagari.length > 0 &&
                 ` · kept in Devanagari: ${info.kept_in_devanagari.join(" ")}`}
             </span>
@@ -122,6 +134,44 @@ export default function LabelPicker({ bookId, current, disabled, onSave, saveTex
         )}
         {info && !info.ok && <span className="error-text">{info.error}</span>}
       </div>
+      {others.length > 0 && (
+        <div className="label-used row small" role="status">
+          {onMerge ? (
+            <>
+              <span className="error-text">
+                {info?.gujarati} is already the label of {others.map((g) => `${g.code} (${g.samples})`).join(", ")}.
+                One label belongs to one group:
+              </span>
+              {others.map((g) => (
+                <button
+                  key={g.id}
+                  disabled={disabled || saving || g.locked}
+                  title={g.locked ? `${g.code} is locked; unlock it first` : undefined}
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await onMerge(g);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  Merge into {g.code}
+                  {g.locked ? " (locked)" : ""}
+                </button>
+              ))}
+            </>
+          ) : free.length > 0 ? (
+            <span className="muted">
+              → into the group {free[0].code} ({free[0].samples} samples)
+            </span>
+          ) : (
+            <span className="error-text">
+              The group {others[0].code} with this label is locked; unlock it first.
+            </span>
+          )}
+        </div>
+      )}
       {open && (
         <div className="palette">
           <div className="row">

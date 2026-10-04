@@ -166,7 +166,7 @@ Rules that carry over from Phase 1:
   - at least `suggest_min_votes` samples (3) were read;
   - the winner has at least `suggest_min_share` (0.6) of the weighted votes.
 
-  The suggestion is stored on the group (`suggested_dev`, share, count). **Labelled groups and groups with a rejected suggestion are skipped.** A new run replaces open suggestions only.
+  The suggestion is stored on the group (`suggested_dev`, share, count). A sample can also match several OCR aksharas in a row (a whole word that was not cut); its reading is then the word, so a word label can be suggested too. If another group already has the suggested label, the suggestion is shown as **"merge into gXXXX"**, because one label belongs to one group. **Labelled groups and groups with a rejected suggestion are skipped.** A new run replaces open suggestions only.
 - **Unsure samples:** each gets its own reading as a suggestion if its confidence is at least `suggest_min_confidence` (80).
 - **Job:** `POST /api/books/{id}/suggest {"engine": "tesseract"}`. It is cancellable, with progress per line, and one job per book as in Phase 1. Its result gives lines read, lines refused, samples matched, groups with a suggestion, and seconds.
 
@@ -231,6 +231,7 @@ Rules that carry over from Phase 1:
 **Files:** `ocr/train.py`, `ocr/classifier.py`, `app/migrations/versions/0003_models_dictionary.py` (`Model`), `app/suggest.py` (engine `classifier`), `frontend/src/screens/Models.tsx`, a `train` command in `cli.py`, `requirements-train.txt`, `tests/test_classifier.py`.
 
 **What it does:**
+- **Word labels** (category `words`, a sample that is a whole word) are left out of the letter classifier; conversion (C16) still uses them through their group's label.
 - **Training set:** every labelled, non-deleted sample of the chosen books, as 64 × 64 normalised ink images. This is the same image as the C5g export's `fixed64` mode. Classes with fewer than `min_class_samples` (5) samples are left out and listed.
 - **Held-out test set** (FR-11): 15% of each class, chosen by page, so test letters come from pages the network has not seen. It is never used for training.
 - **Network:** a small CNN (3 convolution blocks + 1 dense layer, about 300k weights). Small random shifts, rotations (±5°), thickness changes and noise are added during training, because one hand varies and the dataset is small. Training stops early when the test loss stops improving. On a laptop CPU it takes minutes, not hours, for a few thousand samples.

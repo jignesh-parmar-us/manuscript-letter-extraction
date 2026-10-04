@@ -230,9 +230,14 @@ def set_label(lib: Library, book_id: int, group_id: int, text: str) -> Dict:
         g = ch.group(group_id)
         if text.strip():
             try:
-                dev = canonical_label(text, m)
+                dev = canonical_label(text, m, words=True)
             except LabelError as e:
                 raise ActionError(f"Not a letter: {e}") from e
+            other = s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id, LetterGroup.id != g.id,
+                                                        LetterGroup.label_dev == dev)).first()
+            if other is not None:                       # one group per label: merge instead
+                raise ActionError(f"'{m.gujarati(dev)}' is already the label of group {other.code}; "
+                                  f"merge this group into it instead.")
             g.label_dev, g.label_guj, g.status = dev, m.gujarati(dev), "labelled"
         else:
             g.label_dev = g.label_guj = ""

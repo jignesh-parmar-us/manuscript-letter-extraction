@@ -153,9 +153,9 @@ class ReviewTests(ApiTestCase):
         self.assertEqual(self.get(f"/api/groups/{new_id}").status_code, 404)
         r = self.post(f"/api/books/{self.book}/actions/label", {"group_id": g1["id"], "text": "કિ"}).json()
         self.assertEqual((r["label_dev"], r["label_guj"]), ("कि", "કિ"))
-        bad = self.post(f"/api/books/{self.book}/actions/label", {"group_id": g1["id"], "text": "कम"})
+        bad = self.post(f"/api/books/{self.book}/actions/label", {"group_id": g2["id"], "text": "कि"})
         self.assertEqual(bad.status_code, 400)
-        self.assertIn("क + म", bad.json()["detail"])
+        self.assertIn("already the label of group", bad.json()["detail"])
         self.post(f"/api/books/{self.book}/actions/status", {"group_id": g2["id"], "reviewed": True, "locked": True})
         locked = self.post(f"/api/books/{self.book}/actions/dissolve", {"group_id": g2["id"]})
         self.assertEqual(locked.status_code, 400)
@@ -191,6 +191,13 @@ class ReviewTests(ApiTestCase):
         self.assertEqual((ok["ok"], ok["devanagari"], ok["category"]), (True, "क्ष", "conjuncts"))
         bad = self.get("/api/label", params={"text": "ि"}).json()
         self.assertFalse(bad["ok"])
+        self.assertEqual(ok["used_by"], [])
+        g = self.groups()[0]
+        self.post(f"/api/books/{self.book}/actions/label", {"group_id": g["id"], "text": "क्ष"})
+        used = self.get("/api/label", params={"text": "क्ष", "book_id": self.book}).json()["used_by"]
+        self.assertEqual([(u["id"], u["samples"]) for u in used], [(g["id"], g["samples"])])
+        word = self.get("/api/label", params={"text": "નમઃ"}).json()
+        self.assertEqual((word["ok"], word["category"], word["letters"]), (True, "words", 2))
 
     def test_group_listing_fields(self):
         g = self.groups()[0]
