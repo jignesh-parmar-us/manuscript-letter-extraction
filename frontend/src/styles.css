@@ -471,6 +471,28 @@ pre.settings {
   stroke-width: 4;
   fill: color-mix(in srgb, var(--accent) 15%, transparent);
 }
+/* the sample opened from Review (double-click): a ring around it that flashes, then stays */
+.focus-ring {
+  fill: color-mix(in srgb, #ffb000 22%, transparent);
+  stroke: #ff8a00;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  animation: focus-flash 0.5s ease-in-out 8 alternate;
+}
+@keyframes focus-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-ring {
+    animation: none;
+  }
+}
 .drawing {
   fill: color-mix(in srgb, var(--accent) 20%, transparent);
   stroke: var(--accent);

@@ -1,6 +1,7 @@
 // "Pages" tab: a page with a box around every sample, to fix wrong cuts quickly (FR-8).
 // Address: #/books/<id>/pages/<page id>[/<sample id>]; with a sample id, that sample is selected and
-// scrolled into view (double-click on a letter in Review opens it here).
+// scrolled into view with a flashing ring around it (double-click on a letter in Review opens it here);
+// the ring goes when another box is clicked.
 //   Select   click a box (Shift or Ctrl/Cmd+click for more); Join, Delete, Open its group, and put the
 //            selection in a group (Label, Move to group, New group, To Unsure) without leaving the page
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
@@ -40,6 +41,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const [message, setMessage] = useState<string>("");
   const [offer, setOffer] = useState<number[]>([]);
   const [moveTo, setMoveTo] = useState("");
+  const [focusId, setFocusId] = useState<number | null>(null); // the sample with the ring
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
   const [dialog, confirm] = useConfirm();
@@ -64,6 +66,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     setSelected(new Set());
     setOffer([]);
     setMessage("");
+    setFocusId(null);
   }, [pageId]);
   // Opened for one sample: select it and bring it to the middle of the view, once.
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     if (!s) return;
     shown.current = key;
     setSelected(new Set([s.id]));
+    setFocusId(s.id);
     const box = scrollRef.current;
     box?.scrollTo?.({
       left: (s.box[0] + s.box[2] / 2) * zoom - box.clientWidth / 2,
@@ -106,6 +110,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
 
   function clickBox(s: Sample, e: MouseEvent) {
     e.stopPropagation();
+    setFocusId(null);
     if (mode === "split") {
       if (selected.size === 1 && selected.has(s.id)) split(s, toPage(e)[0]);
       return;
@@ -386,6 +391,23 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                     <title>{s.group_id ? groups.get(s.group_id)?.label_guj || groups.get(s.group_id)?.code : "unsure"}</title>
                   </rect>
                 ))}
+                {(() => {
+                  const f = focusId !== null ? page.samples.find((x) => x.id === focusId) : undefined;
+                  if (!f) return null;
+                  const pad = Math.max(12, Math.round(f.box[3] * 0.35)); // bigger than the box, so it stands out
+                  return (
+                    <rect
+                      key={f.id} // a new sample restarts the flashing
+                      className="focus-ring"
+                      data-testid="focus-ring"
+                      x={f.box[0] - pad}
+                      y={f.box[1] - pad}
+                      width={f.box[2] + 2 * pad}
+                      height={f.box[3] + 2 * pad}
+                      rx={pad}
+                    />
+                  );
+                })()}
                 {drawing && (
                   <rect
                     className="drawing"

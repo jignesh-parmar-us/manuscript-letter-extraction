@@ -69,6 +69,10 @@ describe("PageViewer", () => {
     await waitFor(() => expect(screen.getByTestId("box-3")).toHaveClass("selected"));
     expect(screen.getByTestId("box-1")).not.toHaveClass("selected");
     expect(scrollTo).toHaveBeenCalledWith({ left: 110, top: 40 });   // centre (220, 80) at 50%, view 0 x 0
+    const ring = screen.getByTestId("focus-ring");                    // around box 3: 200,50 40x60, pad 21
+    expect([ring.getAttribute("x"), ring.getAttribute("y"), ring.getAttribute("width")]).toEqual(["179", "29", "82"]);
+    fireEvent.click(screen.getByTestId("box-1"));
+    expect(screen.queryByTestId("focus-ring")).not.toBeInTheDocument();
   });
 
   it("puts the selected samples in a group without leaving the page", async () => {
