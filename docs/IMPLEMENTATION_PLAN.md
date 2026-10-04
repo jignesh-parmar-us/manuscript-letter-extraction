@@ -4,7 +4,7 @@ Desktop app that reads scanned manuscript pages, cuts out every letter (akshara)
 
 This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10). Phases 2 and 3 (OCR training and conversion) are out of scope, but the output is designed for them (`dataset/`, `lines/`, reading order in `samples.csv`).
 
-The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with a CLI you can run on the sample pages, and output you can check by eye, before the next chunk starts.
+The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
 **Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database) is done; C5b (Unicode mapping) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
@@ -66,9 +66,11 @@ manuscript-letter-extraction/
 │   ├── pipeline.py        # process_page(), process_folder()
 │   └── app/               # the review app backend                        (C5)
 │       ├── db.py          # SQLAlchemy models: books, pages, samples, groups, actions (C5a)
-│       ├── library.py     # library folder, create / open books, import a run       (C5a)
+│       ├── library.py     # library folder, create / open books, capture            (C5a)
 │       ├── api.py         # FastAPI routes                                          (C5c)
+│       ├── actions.py     # review actions and undo                                 (C5c)
 │       ├── jobs.py        # extraction in the background, progress                  (C5c)
+│       ├── samples.py     # new samples from a box, join, split, upload             (C5f)
 │       ├── export.py      # dataset/, lines/, CSV files, overview.html             (C5g)
 │       ├── main.py        # start the server, open the window or the browser       (C5d)
 │       └── static/        # the built React screen (not in git)
@@ -109,10 +111,11 @@ input pages
   → C3a first cut       headline breaks → stroke pieces
   → C3b letters         join / split rules, attach marks, ink mask per letter
   → C4 group            shape fingerprints, clustering across all pages
-  → C5 write output     labels, Gujarati mapping, dataset/, lines/, CSV, HTML
+  → C5 review app       store in the book's database (C5a), review and label groups (C5c-C5f),
+                        Gujarati mapping (C5b), export dataset/, lines/, CSV, HTML (C5g)
 ```
 
-Steps C1 to C3b run per page in parallel. C4 and C5 run once over all pages.
+Steps C1 to C3b run per page in parallel. C4 runs once over all pages. C5 keeps the result per book in the library and adds the manual work.
 
 Data passed between steps (plain dataclasses, each in the module that makes it; `pipeline.PageData` holds them all for one page):
 
@@ -151,7 +154,7 @@ class Letter:                  # letters.py (C3b)
     rules: list[str]           # join / split rules applied (for tuning)
 ```
 
-Group, label and confidence are not stored on the letter: they are added in C4 and C5 as columns of `samples.csv`.
+Group, label and confidence are not stored on the letter: C4 adds the group as a column of `samples.csv`, and in the app (C5) groups and labels live in the book's database (`sample.group_id`, `letter_group.label_dev` / `label_guj`).
 
 Every stage can save a **debug overlay** to `<output>/debug/` (`--debug`). These overlays are how each chunk is checked and tuned.
 
@@ -332,9 +335,10 @@ Each line is handled as a label image (every ink pixel carries its letter number
 ```
 <library>/
   library.db                 the SQLite database
-  books/<book id>/
+  books/<id>-<name>/            for example books/0001-sample-book/
     letters/<page>/L01_003.png   letter images (+ L01_003_mask.png, the ink mask)
     lines/<page>_L01.png         line images
+    report.csv, samples.csv      the pipeline's reports of the last capture
     debug/                       overlays, when switched on
     exports/<date>/              exported datasets (C5g)
 ```
@@ -348,14 +352,30 @@ Input pages are **referenced, never copied or changed**: the database keeps each
 | `book` | name, input folder, settings (a copy of `Config`, so a book keeps the settings it was cut with), created / changed |
 | `page` | book, file name, checksum, size, status and message (as in `report.csv`), line spacing |
 | `line` | page, number, box, ink colour, line image |
-| `sample` | page, line, position, box, ink, kind, pieces, rules, image and mask files, fingerprint (BLOB), **source** (`auto`, `cropped`, `joined`, `split`, `uploaded`), deleted flag |
-| `letter_group` | book, code (`g0001`), label in Devanagari, label in Gujarati, status (`auto`, `reviewed`, `labelled`), locked |
+| `sample` | page, line (and line number), position, box, ink, kind, pieces, rules, image and mask files, fingerprint (BLOB), **source** (`auto`, `cropped`, `joined`, `split`, `uploaded`), deleted flag, distance to the group's centre |
+| `letter_group` | book, code (`g0001`), kind (letter, danda, digit), label in Devanagari, label in Gujarati, status (`auto`, `reviewed`, `labelled`), locked |
 | `sample.group_id` | the sample's group; empty means **unsure** |
 | `action` | every change by the user (what, which samples / groups, before and after) for **undo** and history |
+
+All times are stored in UTC and shown in local time.
 
 **Labels.** Stored in Devanagari (one canonical form, so the same letter typed in either script is the same class); the Gujarati label is derived through `mapping.py` and shown everywhere. Input:
 - type in either script (the keyboard's own layout), or use the **on-screen picker** (consonant, then halant for a conjunct, then matra, anusvara / visarga), with a Devanagari / Gujarati switch;
 - the app checks that the label is **one akshara** (for example क, कि, क्ष, श्री, र्म) or a danda / digit, and shows its Unicode code points.
+
+**Sub-chunks and status:**
+
+| Sub-chunk | Status | Depends on |
+|---|---|---|
+| C5a Library and database | **done** | C0-C4 |
+| C5b Unicode mapping | **next** | - |
+| C5c Backend API | planned | C5a, C5b |
+| C5d App shell, Books and Capture screens | planned | C5c |
+| C5e Group review and labeling | planned | C5c, C5d |
+| C5f Fixing cuts and adding samples | planned | C5c, C5e |
+| C5g Export | planned | C5a, C5b (can run before the screens) |
+
+Every sub-chunk below has the same parts: status, goal, files, what it does, done when, tests, and (once built) the changes from this plan.
 
 **Re-running extraction must not lose manual work:**
 - adding pages to a book only adds samples; new samples are **suggested** for existing labelled groups (nearest group centre within `group_distance`) but stay unsure until confirmed;
@@ -363,6 +383,10 @@ Input pages are **referenced, never copied or changed**: the database keeps each
 - labelled groups are never renumbered or merged automatically.
 
 #### C5a. Library and database
+
+**Status: done** (commit "Add the library of books with a SQLite database (C5a)").
+**Goal:** keep everything found in a book in a database, so a book can be captured once and reopened later.
+**Files:** `app/db.py`, `app/library.py`, `app/migrations/`, `tests/test_library.py`.
 
 - SQLAlchemy models (`app/db.py`) and the first Alembic migration (`app/migrations/versions/0001_initial.py`); `Library(path)` creates or opens the library and brings the database to the newest migration; create, list, rename and delete books (deleting removes the book's rows and its folder in the library, never the input pages).
 - **Capture:** `Library.capture(book)` runs the existing pipeline into the book's folder and stores pages (with SHA-256), lines, samples (with ink masks and fingerprints) and the automatic groups. It replaces the book's earlier results and **refuses** when the book holds manual work (labels, reviewed or locked groups, user actions, cropped / uploaded samples) unless `force=True`.
@@ -378,46 +402,117 @@ Input pages are **referenced, never copied or changed**: the database keeps each
 
 #### C5b. Unicode mapping (Section 4 of the requirements)
 
-- `mapping.py`: Devanagari -> Gujarati (fixed offset +0x180) and back, with the exceptions in the editable `data/mapping_dev_guj.csv` (danda, digits as Gujarati or Western, rare letters such as ऴ ऩ ऱ); akshara check; transliteration and safe folder names (`ki__U0A95-U0ABF`).
-- **Tests:** round trips (क <-> ક, कि <-> કિ, क्ष <-> ક્ષ, । stays ।, १२ <-> ૧૨), Gujarati input gives the same canonical label as Devanagari input, invalid labels are refused, safe names are unique.
+**Status: next.**
+**Goal:** one module that turns a label typed in Devanagari **or** Gujarati into one canonical Devanagari label, checks that it is a single letter, and gives everything the screens and the export need: the Gujarati form, code points, category, alphabet order, a transliteration and a safe folder name.
+**Files:** `src/letter_extractor/mapping.py`, `src/letter_extractor/data/mapping_dev_guj.csv`, `tests/test_mapping.py`. No dependency on the database or the app: the CLI, the API and the export use the same functions.
+
+**The mapping (Section 4 of the requirements):**
+- **Default rule:** a Devanagari character U+0900-U+097F maps to the Gujarati character at +0x180 (क U+0915 -> ક U+0A95, ि U+093F -> િ U+0ABF), **if Unicode defines that Gujarati character**; conjuncts, halant and reph follow automatically (क्ष -> ક્ષ).
+- **Exceptions** in the editable `data/mapping_dev_guj.csv` (columns `devanagari`, `gujarati`, `note`), read once at start; a user's own copy can be given in the settings:
+  - danda । and double danda ॥ stay Devanagari (Gujarati has none);
+  - Devanagari letters with no Gujarati equivalent (for example ऩ, ऱ, ऴ, the short e / o letters and signs, the stress and Vedic signs) are listed with an empty `gujarati` value, meaning "keep the Devanagari character" (decision 2), and are counted in the export summary;
+  - precomposed nukta letters (क़ ख़ ग़ ...) are first split into letter + nukta, which Gujarati has (ક઼).
+- **Digits:** १२३ -> ૧૨૩ by default, or 123 with the setting `digits = "western"` (decision 1).
+- **Back to Devanagari:** the reverse of the same table (Gujarati -> Devanagari), so a label typed in Gujarati is stored like one typed in Devanagari.
+
+**Labels (`canonical_label(text)`):**
+1. Unicode normalization (NFC), surrounding spaces removed; zero-width joiner / non-joiner removed (they only change how a conjunct is drawn, not which letter it is).
+2. Every Gujarati character converted to Devanagari; any other script (Latin, Arabic ...) is refused with a message.
+3. The result must be **one akshara** (Section 3 of the requirements):
+   - an independent vowel (अ ... औ, ऋ, ऍ, ऑ ...) with optional chandrabindu / anusvara / visarga;
+   - or a consonant cluster: consonant (+ nukta), then any number of halant + consonant (this covers conjuncts and reph, for example क्ष, श्री, र्म), then either a vowel sign (matra) or a final halant, then optional chandrabindu / anusvara / visarga;
+   - or one digit, a danda, a double danda, avagraha ऽ or Om ॐ.
+   Anything else (two letters, a matra on its own, a mark without a letter) is refused with a reason that the screen shows (for example "two letters: क + म").
+4. Returned: the canonical Devanagari label; the Gujarati form, code points and category are computed from it.
+
+**Other functions:**
+- `to_gujarati(dev, digits)`, `to_devanagari(guj)`, `code_points(text)` ("U+0915 U+093F");
+- `category(label)`: `vowels`, `consonants` (one consonant, with or without matra and marks), `conjuncts` (two or more consonants), `digits`, `punctuation` - the dataset folders of FR-9;
+- `sort_key(label)`: alphabet order for the overview: vowels, consonants ક to હ (by the first consonant, then the matra in the usual order), conjuncts, digits, punctuation;
+- `transliterate(label)`: lower-case ASCII for folder names (`ki`, `ksha`, `shri`), readable only;
+- `safe_name(label)`: transliteration + Gujarati code points, for example `ki__U0A95-U0ABF` (FR-9). The code points make every name unique even where transliterations coincide, and the name is valid on Windows and macOS.
+
+**Done when:** every character of U+0900-U+097F either maps to a defined Gujarati character or is listed in the CSV; labels typed in either script give the same canonical label; all the examples of Section 4 of the requirements convert correctly; invalid labels are refused with a readable reason.
+**Tests:** round trips (क <-> ક, कि <-> કિ, क्ष <-> ક્ષ, श्री <-> શ્રી, र्म <-> ર્મ, । stays ।, १२ <-> ૧૨ or 12); Gujarati and Devanagari input give the same label; NFC and zero-width characters handled; refused labels (`कम`, `ि`, `ं`, `abc`, mixed scripts with two letters); every category and the alphabet order on a list of letters; safe names unique and limited to `[a-z0-9_-]`; editing the CSV changes the mapping; the table covers the whole Devanagari block.
 
 #### C5c. Backend API
 
-- FastAPI routes (JSON) for books, pages, lines, samples and groups; letter, line and page images served from the library folder; the review actions (move samples, new group from samples, merge groups, split a group, label, mark reviewed, delete a sample, undo).
-- **Capture in the background** (`jobs.py`): extraction runs in a worker process with progress (pages done, current page), which the screen polls; it can be cancelled.
-- **Tests:** every route with FastAPI's test client on a small synthetic book; undo restores the state exactly; two quick actions in a row are both kept.
+**Status: planned.**
+**Goal:** everything the screens do, available and tested as a local web API, before any screen exists.
+**Files:** `app/api.py` (FastAPI routes), `app/actions.py` (review actions and undo, usable without HTTP), `app/jobs.py` (capture in the background), `app/schemas.py` (request and response types), `tests/test_api.py`, `tests/test_actions.py`. New dependencies: `fastapi`, `uvicorn`, `httpx` (tests).
+
+**What it does:**
+- **Books:** list, create, rename, delete; page problems (`check_pages`).
+- **Capture in the background** (`jobs.py`): one worker process per job; progress (pages done, current page, messages) polled by the screen; cancel. Capture over manual work returns a clear "needs confirmation" answer.
+- **Keeping manual work when pages change** (moved here from C5a): **add new pages** (cut only the new files; their samples get a *suggested* group, nearest centre within `group_distance`, and stay unsure until confirmed) and **re-cut one page** (asks first when it has reviewed samples; replaces only that page's samples).
+- **Reading:** pages, lines, groups (code, label, counts, red / black share, status, spread), a group's samples (nearest to the centre first, in pages of e.g. 200), unsure samples with suggestions.
+- **Review actions** (`actions.py`), each in one transaction and written to the `action` table with what is needed to undo it: move samples to a group or to unsure; new group from samples; merge groups; set or clear a label (through `canonical_label` of C5b; the response shows Devanagari, Gujarati, code points); mark reviewed / lock; delete and restore samples. Group centres and sample distances are recomputed from the stored fingerprints after every change. **Undo** (and redo) of the last actions of a book.
+- **Images:** letter, mask, line and page images served from the library folder and the book's input folder only (no other paths).
+- **Mapping helper:** `GET /api/label?text=...` checks a label while it is typed.
+- **Local only:** listens on `127.0.0.1`; every request carries a random token created at start, so other web pages open in the browser cannot call the API.
+
+**Done when:** every action needed by C5e and C5f works through the API on the sample book, undo restores the exact state, a capture shows progress and can be cancelled.
+**Tests:** every route with FastAPI's test client on a small synthetic book; each action and its undo (state before == state after undo); suggestions for new pages; re-cut keeps reviewed samples of other pages; paths outside the library are refused; requests without the token are refused.
 
 #### C5d. App shell, Books and Capture screens
 
-- `app/main.py` starts the backend on `127.0.0.1` with a free port, then opens **its own window** (pywebview) or, with `--browser` or from the menu, the **default browser**.
-- **Books** screen: the list of books (name, pages, samples, groups, labelled share, last change), create a book (name, input folder; a folder dialog in window mode, a path field in the browser), open, rename, delete.
-- **Capture** screen: settings (most users keep the defaults; a config file can be loaded), Start, progress, per-page status as in `report.csv`, and the summary at the end.
-- **Done when:** a book can be created from `samples/`, captured with visible progress, closed and reopened in both window and browser mode.
+**Status: planned.**
+**Goal:** the app starts like a desktop app, in its own window or in the browser, and handles books and capture.
+**Files:** `app/main.py`; `frontend/` (Vite + React + TypeScript): `src/api.ts` (the one way to call the backend), `src/screens/Books.tsx`, `src/screens/Capture.tsx`; `tests/test_main.py`; frontend tests in `frontend/src/**/*.test.tsx`. New dependencies: `pywebview` (Python); React, TypeScript, Vite, Vitest, Testing Library (Node, development only).
+
+**What it does:**
+- `app/main.py`: on first start, ask for the library folder (default `Documents/Manuscript Letters`) and remember it in the user's settings; start the backend on `127.0.0.1` with a free port; open **its own window** (pywebview) or, with `--browser` or from the menu, the **default browser**. If the window engine is missing (old Windows without WebView2), open the browser instead.
+- **Books** screen: the books (name, pages, samples, groups, labelled share, unsure, last change in local time); create (name, input folder: a folder dialog in the window, a path field in the browser); open, rename, delete (with confirmation); page problems (missing, changed, new) shown on the book.
+- **Capture** screen: settings (defaults; load a config file), Start, progress, per-page status as in `report.csv`, summary; the "has manual work" confirmation; add new pages / re-cut a page (C5c).
+
+**Done when:** a book can be created from `samples/`, captured with visible progress, closed and reopened, in window and in browser mode on macOS, and in the Windows build (C7).
+**Tests:** the backend serves the built screen and refuses requests without the token (Python); Books list, create form and capture progress with a mocked API (Vitest); type check.
 
 #### C5e. Group review and labeling
 
-- **Groups** list: code, label, sample count, red / black share, status; filter (unlabelled, reviewed, mixed suspicion = large spread), sort.
-- **Group** view: its samples as a grid (largest first, nearest to the centre first); click / shift-click / box-select samples; **drag** to `Unsure` or to another group in the side list; **New group from selection**; **Merge** two groups; **Delete** (specks).
-- **Unsure** view: same grid; select samples and **create a group**, or drop them on a group; per sample a **suggested group** (nearest labelled group).
-- **Label** a group: type in Devanagari or Gujarati, or use the picker; shown in both scripts with code points; mark the group **reviewed** / lock it.
-- Undo (Ctrl+Z / Cmd+Z) and the main actions on the keyboard.
-- **Done when:** on the sample book, the mixed groups of `docs/TUNING.md` (ता / ना, नि / ति ...) can be cleaned and labelled without leaving the app, and everything is still there after a restart.
+**Status: planned.**
+**Goal:** clean and label all groups of a book without leaving the app (FR-7, FR-8).
+**Files:** `frontend/src/screens/Groups.tsx`, `GroupView.tsx`, `Unsure.tsx`, `components/SampleGrid.tsx`, `components/LabelPicker.tsx`; tests next to them. New dependencies (Node): `@dnd-kit/core` (drag and drop), `@tanstack/react-virtual` (large grids).
+
+**What it does:**
+- **Groups** list: code, label (Gujarati, with Devanagari on hover), sample count, red / black share, status; filter (unlabelled, reviewed, large spread = possibly mixed), sort.
+- **Group** view: samples as a grid, nearest to the centre first, only the visible part loaded; select by click, shift-click, box; **drag** to `Unsure` or to a group in the side list; **New group from selection**; **Merge** with another group; **Delete** (specks).
+- **Unsure** view: the same grid; select and **create a group**, or drop on a group; each sample shows its **suggested group**, accepted with one key.
+- **Label** a group: type in Devanagari or Gujarati, or the **on-screen picker** (consonant, halant for a conjunct, matra, anusvara / visarga; Devanagari / Gujarati switch); live check through the API; shown in both scripts with code points; mark **reviewed** / **lock**.
+- **Undo / redo** (Ctrl+Z / Cmd+Z, Shift for redo) and keyboard keys for the main actions.
+
+**Done when:** on the sample book, the mixed groups listed in `docs/TUNING.md` (ता / ना, नि / ति, नो / तो ...) can be cleaned and labelled in the app, and everything is still there after a restart.
+**Tests:** selection, drag and the label picker with a mocked API (Vitest); the picker builds क्षि and શ્રી correctly; a large group (2000 samples) stays responsive (render count check).
 
 #### C5f. Fixing cuts and adding samples
 
-- **Page / line viewer:** the page or one line with every sample's box; click a box to see its group.
-- **Draw a box** (crop) on a line or page: a new sample from the ink inside the box (C1's ink masks of that page, recomputed on demand), source `cropped`; the samples it overlaps are offered for deletion.
-- **Join** two neighbouring samples; **split** a sample at a column (drag a line); source `joined` / `split`.
-- **Upload** a letter image: its ink is found with the C1 rules; source `uploaded`, marked as having no page position (traceability).
-- New and changed samples get a fingerprint and a suggested group.
+**Status: planned.**
+**Goal:** fix the cutting errors of C3b by hand (FR-8: "fix a wrong cut ... must be quick") and add letters the cutting missed.
+**Files:** `app/samples.py` (new samples from a box, join, split, upload), routes in `app/api.py`, `frontend/src/screens/PageViewer.tsx`; `tests/test_samples.py`. New dependency (Node): `react-image-crop`.
+
+**What it does:**
+- **Page / line viewer:** the page or one line with every sample's box, coloured by group; click a box to open its group.
+- **Draw a box** on a line or page: a new sample from the ink inside the box (the page's C1 ink masks, computed on demand and cached in the book folder), source `cropped`; samples it overlaps are offered for deletion.
+- **Join** two neighbouring samples (union of their masks); **split** a sample at a column (drag a line); source `joined` / `split`; the old samples are kept as deleted, so undo works.
+- **Upload** a letter image: ink found with the C1 colour rules (no text block needed), source `uploaded`, no page position (shown as such; the export marks it).
+- Every new sample gets its image, mask, fingerprint and a suggested group.
+
+**Done when:** on the sample book, the cutting errors listed in `docs/TUNING.md` (ज्ञा + नं, the split श्री, a split ॥ ...) can be fixed in the viewer, and the fixed samples group with their letters.
+**Tests:** a box around a known synthetic letter gives exactly its ink; join and split give the expected masks; uploaded images get a mask and fingerprint; undo of each.
 
 #### C5g. Export (FR-9, FR-10)
 
-From the database to `exports/<date>/` (or a chosen folder):
-- `dataset/<category>/<class>/`: every sample of each labelled class (`original` crop by default; `normalized`, `fixed64` as options), `label.txt` with the Gujarati label; categories `vowels`, `consonants`, `conjuncts`, `digits`, `punctuation`;
+**Status: planned.**
+**Goal:** the output folder of FR-9 and the summary of FR-10, built from a book's database, for Phase 2 training.
+**Files:** `app/export.py`, an Export button in the screens (after C5d), `tests/test_export.py`. Can be built and tested before the screens, from the library API.
+
+**What it does** (to `exports/<date>/` in the book folder, or a chosen folder):
+- `dataset/<category>/<safe name>/`: every sample of each **labelled** group (`original` crop by default; `normalized` black on white and `fixed64` 64 x 64 as options), `label.txt` with the Gujarati label; categories from C5b;
 - `lines/<page>_L01.png` + `.txt`: Gujarati text of each line from the labelled letters in reading order (`[?]` for unlabelled ones);
-- `letters.csv` (Gujarati label, Devanagari form, code points, transliteration, sample count, example image), `samples.csv` (as now, plus class and source), `overview.html` (one example per class in alphabet order, low-count classes highlighted), `unsure/`, `summary.txt`.
-- **Done when:** after labelling a few groups, the export is complete and Gujarati shows correctly in Excel and the browser on Windows and macOS.
+- `letters.csv` (Gujarati label, Devanagari form, code points, transliteration, category, sample count, example image), `samples.csv` (as now, plus label, source and group status), `overview.html` (one example per class in alphabet order, classes under `min_samples_warn` highlighted, works offline), `unsure/` (unlabelled samples), `summary.txt` (pages, lines, letters, classes, classes with few samples, unsure, skipped files, letters with no Gujarati equivalent).
+
+**Done when:** after labelling a few groups of the sample book, the export is complete and Gujarati shows correctly in Excel and in the browser on Windows and macOS.
+**Tests:** export of a small labelled synthetic book: folder names, `label.txt`, CSV columns and `utf-8-sig`, alphabet order in `overview.html`, `[?]` in line text, uploaded samples marked, nothing written outside the export folder.
 
 ### C6. Desktop GUI: merged into C5
 
@@ -457,25 +552,25 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 
 ### Chunk summary
 
-| # | Chunk | Main output | Requirements |
-|---|---|---|---|
-| C0 | Read input folder, skeleton | `report.csv` | FR-1 |
-| C1 | Page preparation | `debug/*_ink.png` | FR-2 |
-| C2 | Line detection | `lines/*.png`, `debug/*_lines.png` | FR-3 |
-| C3a | Stroke pieces | `debug/*_pieces.png` | FR-4 |
-| C3b | Letters | `letters/`, `samples.csv` | FR-5, FR-6 |
-| C4 | Grouping | `groups/`, `unsure/`, `groups.html` | FR-7 |
-| C5a | Library and database | `library.db`, books | FR-7, FR-8 |
-| C5b | Unicode mapping | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
-| C5c | Backend API | review actions, capture jobs, undo | FR-7, FR-8 |
-| C5d | App shell, Books, Capture | own window and browser | FR-1, Section 7 |
-| C5e | Group review and labeling | clean, labelled groups | FR-7, FR-8 |
-| C5f | Fixing cuts, adding samples | cropped / joined / split / uploaded samples | FR-8 |
-| C5g | Export | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
-| C6 | GUI | merged into C5d | Section 7 |
-| C7 | Packaging | `.app`, `.exe` with the React screen | Section 7 |
-| C8 | GitHub Actions | CI (Python, API, React), builds, releases | Section 7 |
-| C9 | Label suggestions | suggested labels (opt-in) | FR-7 |
+| # | Chunk | Status | Main output | Requirements |
+|---|---|---|---|---|
+| C0 | Read input folder, skeleton | done | `report.csv` | FR-1 |
+| C1 | Page preparation | done | `debug/*_ink.png` | FR-2 |
+| C2 | Line detection | done | `lines/*.png`, `debug/*_lines.png` | FR-3 |
+| C3a | Stroke pieces | done | `debug/*_pieces.png` | FR-4 |
+| C3b | Letters | done | `letters/`, `samples.csv` | FR-5, FR-6 |
+| C4 | Grouping | done | `groups/`, `unsure/`, `groups.html` | FR-7 |
+| C5a | Library and database | done | `library.db`, books | FR-7, FR-8 |
+| C5b | Unicode mapping | **next** | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
+| C5c | Backend API | planned | review actions, capture jobs, undo | FR-7, FR-8 |
+| C5d | App shell, Books, Capture | planned | own window and browser | FR-1, Section 7 |
+| C5e | Group review and labeling | planned | clean, labelled groups | FR-7, FR-8 |
+| C5f | Fixing cuts, adding samples | planned | cropped / joined / split / uploaded samples | FR-8 |
+| C5g | Export | planned | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
+| C6 | GUI | merged into C5d | - | Section 7 |
+| C7 | Packaging | planned | `.app`, `.exe` with the React screen | Section 7 |
+| C8 | GitHub Actions | planned | CI (Python, API, React), builds, releases | Section 7 |
+| C9 | Label suggestions | planned | suggested labels (opt-in) | FR-7 |
 
 ---
 
@@ -510,9 +605,10 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | `group_outlier_distance` | C4 | 0.5 |
 | `min_group_size` | C4 | 2 |
 | `save_masks`, `write_groups` | C5a | `False`, `True` (the app sets `True`, `False`) |
-| `digits` | C5 | `gujarati` (or `western`) |
-| `dataset_image` | C5 | `original` (or `normalized`, `fixed64`) |
-| `min_samples_warn` | C5 | 10 |
+| `digits` | C5b | `gujarati` (or `western`) |
+| `mapping_file` | C5b | empty = the built-in `data/mapping_dev_guj.csv` |
+| `dataset_image` | C5g | `original` (or `normalized`, `fixed64`) |
+| `min_samples_warn` | C5g | 10 |
 
 ---
 
