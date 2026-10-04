@@ -8,7 +8,7 @@ import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -152,14 +152,20 @@ def default_workers() -> int:
 def process_folder(input_dir: Path, output_dir: Path, cfg: Optional[Config] = None,
                    progress: Optional[ProgressFn] = None,
                    cancel: Optional[Callable[[], bool]] = None,
-                   summary: Optional[dict] = None) -> List[PageResult]:
+                   summary: Optional[dict] = None, files: Optional[Sequence[str]] = None,
+                   finish: bool = True) -> List[PageResult]:
     """Process every supported image in `input_dir` (name order), then group the letters of all pages,
     and write report.csv, samples.csv, groups/, unsure/ and groups.html to `output_dir`.
-    `summary`, if given, receives the run totals (samples, groups, unsure)."""
+    `summary`, if given, receives the run totals (samples, groups, unsure).
+    `files` limits the run to these file names; `finish=False` skips grouping and the reports (the
+    app adds pages to a book that way and matches their letters to the book's own groups)."""
     cfg = cfg or Config()
     input_dir, output_dir = Path(input_dir), Path(output_dir)
     io_utils.validate_folders(input_dir, output_dir)
     images, ignored = io_utils.scan_folder(input_dir)
+    if files is not None:
+        wanted = set(files)
+        images = [p for p in images if p.name in wanted]
     if not images:
         raise io_utils.FolderError(f"No supported images ({', '.join(sorted(io_utils.SUPPORTED_EXTENSIONS))}) "
                                    f"found in {input_dir}")
@@ -197,6 +203,8 @@ def process_folder(input_dir: Path, output_dir: Path, cfg: Optional[Config] = No
                         f.cancel()
                     break
     ordered = [results[p.name] for p in images if p.name in results]
+    if not finish:
+        return ordered
     report.write_report(ordered, ignored, output_dir)
     totals = _group_letters(ordered, output_dir, cfg)
     report.write_samples(ordered, output_dir)

@@ -4,7 +4,7 @@ Letter extraction. Read every page in an input folder, cut out every letter with
 
 Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md). Plan and chunks: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database) and C5b (Devanagari / Gujarati labels) are done; see the plan for C5c-C5g.
+**Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database), C5b (Devanagari / Gujarati labels) and C5c (backend API with review actions and undo) are done; the screens come next (C5d-C5f).
 
 ## Install
 
@@ -130,6 +130,10 @@ print(lib.check_pages(book.id))                            # missing / changed /
 ```
 
 Capturing a book again replaces its automatic results; it is refused once the book holds manual work (labels, reviewed groups), unless `force=True`.
+
+## The backend API (C5c)
+
+The review app's screens (C5d-C5f) talk to a local web API (FastAPI) that can already be used on its own. It covers books, capture in the background with progress and cancel, adding new pages and cutting one page again without losing review work, the review actions (move samples to a group or to unsure, new group, merge, dissolve, label in Devanagari or Gujarati, reviewed / locked, delete / restore) with **undo and redo**, suggested groups for unsure samples, and the letter, line and page images. It listens on `127.0.0.1` only and every request needs the session token. The route list is at the top of [app/api.py](src/letter_extractor/app/api.py); while it runs, FastAPI also shows interactive documentation at `/docs` (a developer aid; that page loads its scripts from the internet, the app itself does not).
 
 ## Tests
 

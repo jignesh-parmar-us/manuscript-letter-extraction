@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database) and C5b (Unicode mapping) are done; C5c (backend API) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C4 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping) and C5c (backend API) are done; C5d (app shell, Books and Capture screens) is next. Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -369,8 +369,8 @@ All times are stored in UTC and shown in local time.
 |---|---|---|
 | C5a Library and database | **done** | C0-C4 |
 | C5b Unicode mapping | **done** | - |
-| C5c Backend API | **next** | C5a, C5b |
-| C5d App shell, Books and Capture screens | planned | C5c |
+| C5c Backend API | **done** | C5a, C5b |
+| C5d App shell, Books and Capture screens | **next** | C5c |
 | C5e Group review and labeling | planned | C5c, C5d |
 | C5f Fixing cuts and adding samples | planned | C5c, C5e |
 | C5g Export | planned | C5a, C5b (can run before the screens) |
@@ -448,22 +448,33 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 #### C5c. Backend API
 
-**Status: planned.**
+**Status: done** (commit "Add the backend API with review actions, undo and capture jobs (C5c)").
 **Goal:** everything the screens do, available and tested as a local web API, before any screen exists.
-**Files:** `app/api.py` (FastAPI routes), `app/actions.py` (review actions and undo, usable without HTTP), `app/jobs.py` (capture in the background), `app/schemas.py` (request and response types), `tests/test_api.py`, `tests/test_actions.py`. New dependencies: `fastapi`, `uvicorn`, `httpx` (tests).
+**Files:** `app/actions.py` (review actions, undo / redo, history; usable without HTTP), `app/centres.py` (group centres, distances, suggestions), `app/jobs.py` (capture in the background), `app/api.py` (FastAPI routes), `app/schemas.py` (request bodies), additions to `app/library.py` (add pages, re-cut a page, work folder) and `pipeline.py` (`files`, `finish`); `tests/appbook.py` (a small captured book, copied per test), `tests/test_actions.py`, `tests/test_api.py`. New dependencies: `fastapi`, `uvicorn`; `httpx` for the tests.
 
 **What it does:**
-- **Books:** list, create, rename, delete; page problems (`check_pages`).
-- **Capture in the background** (`jobs.py`): one worker process per job; progress (pages done, current page, messages) polled by the screen; cancel. Capture over manual work returns a clear "needs confirmation" answer.
-- **Keeping manual work when pages change** (moved here from C5a): **add new pages** (cut only the new files; their samples get a *suggested* group, nearest centre within `group_distance`, and stay unsure until confirmed) and **re-cut one page** (asks first when it has reviewed samples; replaces only that page's samples).
-- **Reading:** pages, lines, groups (code, label, counts, red / black share, status, spread), a group's samples (nearest to the centre first, in pages of e.g. 200), unsure samples with suggestions.
-- **Review actions** (`actions.py`), each in one transaction and written to the `action` table with what is needed to undo it: move samples to a group or to unsure; new group from samples; merge groups; set or clear a label (through `canonical_label` of C5b; the response shows Devanagari, Gujarati, code points); mark reviewed / lock; delete and restore samples. Group centres and sample distances are recomputed from the stored fingerprints after every change. **Undo** (and redo) of the last actions of a book.
-- **Images:** letter, mask, line and page images served from the library folder and the book's input folder only (no other paths).
-- **Mapping helper:** `GET /api/label?text=...` returns `mapping.describe()` (C5b) for a label while it is typed, with the book's mapping (`mapping_for(book settings)`); labels are saved through `canonical_label()`, and the group stores `label_dev` and `label_guj`.
-- **Local only:** listens on `127.0.0.1`; every request carries a random token created at start, so other web pages open in the browser cannot call the API.
+- **Books:** list, create (with optional settings overrides), get (with settings, undo / redo counts and a running job), rename, delete; page problems (`check_pages`).
+- **Jobs** (`jobs.py`): capture, add new pages, re-cut one page. A job runs in a background thread; the page work runs in worker processes as in the CLI. Progress (pages done of total, the total known from the start, per-page status) is polled; a job can be cancelled. One job per book at a time. Capture or re-cut over manual work answers **409 "needs_confirmation"** until repeated with `force`.
+- **Work folder:** every run writes into `<book>/.work/` and its files are moved into the book only when the run succeeded, just before the database is updated. A cancelled or failed run leaves the book exactly as it was.
+- **Keeping manual work when pages change:** **add new pages** cuts only files not in the book; their samples start unsure. **Re-cut one page** replaces only that page's samples (new ones unsure); groups it leaves empty are removed if never reviewed; with `force` it also clears the undo history, which could refer to the replaced samples.
+- **Reading:** pages (with line images and the page's samples), groups (code, kind, label in both scripts, status, locked, samples, red / black, spread = mean distance to the centre, example sample), a group's samples nearest to the centre first, unsure samples (or deleted ones) with a **suggested group**, single samples. Lists are paged (`offset`, `limit` up to 500).
+- **Review actions** (`actions.py`): move samples (to a group or unsure), new group from samples (this is also "split a group"), merge groups, dissolve a group, label (Devanagari or Gujarati, through C5b's `canonical_label`), reviewed / locked status, delete and restore samples. Each runs in one transaction and stores the before / after state of everything it touched; **undo** and **redo** restore those states exactly; a new action clears the redo stack; **history** lists the actions. Locked groups refuse every change except unlocking. Group centres and member distances are recomputed after every change.
+- **Suggestions** (`centres.py`): for an unsure sample, the nearest group whose centre is within `group_distance`; a labelled group is preferred when it is at most 10% further away than the nearest one.
+- **Images:** letter, mask and line images (only `.png` files inside the book's folder) and input pages (only files recorded as pages of the book).
+- **Label check:** `GET /api/label?text=...&book_id=...` returns `mapping.describe()` with the book's mapping.
+- **Local only:** a session token is required on every request (header `X-Token`, or `?token=` for images, since an `<img>` tag cannot send headers); `main.py` (C5d) binds to `127.0.0.1`. Errors: 401 no token, 404 not found, 400 refused action (with the reason), 409 needs confirmation, 422 malformed request.
 
-**Done when:** every action needed by C5e and C5f works through the API on the sample book, undo restores the exact state, a capture shows progress and can be cancelled.
-**Tests:** every route with FastAPI's test client on a small synthetic book; each action and its undo (state before == state after undo); suggestions for new pages; re-cut keeps reviewed samples of other pages; paths outside the library are refused; requests without the token are refused.
+**Done when:** every action needed by C5e works through the API on the sample book, undo restores the exact state, a capture shows progress and can be cancelled. *Met. On a real server with the sample pages: capture through the API in about 10 s (2 pages, 22 lines, 854 samples, 54 groups, 236 unsure); labelling with Gujarati input stores ने / ને; unsure samples come with suggestions; undo, images and the token check work.* The sample actions of C5f (box, join, split, upload) come with C5f.
+**Tests (36):** actions (22): undo and redo give back the exact state for every action; six actions undone in a row return to the start; a new action clears redo; labels in both scripts and refused labels change nothing; locked groups refuse changes; new group codes; distances follow the groups; deleted samples leave their group; another book's samples and groups are refused; suggestions; history; adding pages changes nothing else and the new samples get suggestions; re-cut keeps other pages, needs confirmation over manual work, keeps labelled groups; a cancelled capture changes neither database nor files. API (14): token required; images served, nothing outside the book; book create / rename / delete with settings and errors; page problems; capture job with progress and the 409 confirmation; one job per book and cancel; add pages and re-cut through jobs; a full review round trip with undo of everything; deleted listing and restore; bad requests; label check; group fields. Disabling undo, the recomputation, clearing redo, the lock, the member snapshot, the token check or the path check makes tests fail.
+
+**Changes from the original plan (C5c):**
+- **Jobs run in a background thread, not a worker process per job:** the pages are already cut in worker processes by `process_folder`; a thread keeps the progress and the database work in the app process, which is simpler and safe with SQLite in WAL mode.
+- **Runs write into a work folder first** (new). Without it a cancelled or failed capture would have deleted the book's letter images while the database still pointed at them.
+- **`centres.py` added** for centres, distances and suggestions, shared by the actions and the library (re-cut).
+- **Extra actions and reads:** dissolve a group, history, undo / redo counts, the deleted-samples list; "split a group" is "new group from selection" rather than a separate action.
+- **Re-cut with confirmation clears the undo history**, because recorded states may refer to samples that no longer exist.
+- **Errors have their own types** (`NotFound` -> 404, `BookHasReviewError` -> 409 with `code: needs_confirmation`), so the screens can react without reading messages.
+- **The page total is known when a job starts**, so the screen can show "0 of 12" instead of "0 of 0".
 
 #### C5d. App shell, Books and Capture screens
 
@@ -472,9 +483,9 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 **Files:** `app/main.py`; `frontend/` (Vite + React + TypeScript): `src/api.ts` (the one way to call the backend), `src/screens/Books.tsx`, `src/screens/Capture.tsx`; `tests/test_main.py`; frontend tests in `frontend/src/**/*.test.tsx`. New dependencies: `pywebview` (Python); React, TypeScript, Vite, Vitest, Testing Library (Node, development only).
 
 **What it does:**
-- `app/main.py`: on first start, ask for the library folder (default `Documents/Manuscript Letters`) and remember it in the user's settings; start the backend on `127.0.0.1` with a free port; open **its own window** (pywebview) or, with `--browser` or from the menu, the **default browser**. If the window engine is missing (old Windows without WebView2), open the browser instead.
+- `app/main.py`: on first start, ask for the library folder (default `Documents/Manuscript Letters`) and remember it in the user's settings; create a random session token; start `create_app(library, token)` (C5c) with uvicorn on `127.0.0.1` with a free port; serve the built screen at `/` with the token written into the page, so `src/api.ts` sends it as `X-Token` and adds `?token=` to image URLs (C5c returns image URLs with it already); open **its own window** (pywebview) or, with `--browser` or from the menu, the **default browser**. If the window engine is missing (old Windows without WebView2), open the browser instead.
 - **Books** screen: the books (name, pages, samples, groups, labelled share, unsure, last change in local time); create (name, input folder: a folder dialog in the window, a path field in the browser); open, rename, delete (with confirmation); page problems (missing, changed, new) shown on the book.
-- **Capture** screen: settings (defaults; load a config file), Start, progress, per-page status as in `report.csv`, summary; the "has manual work" confirmation; add new pages / re-cut a page (C5c).
+- **Capture** screen: settings (defaults; load a config file), Start, progress (polling `GET /api/jobs/{id}`: pages done of total, per-page status as in `report.csv`), Cancel, summary; a 409 `needs_confirmation` answer shows the "has manual work" confirmation and repeats the call with `force`; add new pages / re-cut a page (C5c jobs).
 
 **Done when:** a book can be created from `samples/`, captured with visible progress, closed and reopened, in window and in browser mode on macOS, and in the Windows build (C7).
 **Tests:** the backend serves the built screen and refuses requests without the token (Python); Books list, create form and capture progress with a mocked API (Vitest); type check.
@@ -486,11 +497,12 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 **Files:** `frontend/src/screens/Groups.tsx`, `GroupView.tsx`, `Unsure.tsx`, `components/SampleGrid.tsx`, `components/LabelPicker.tsx`; tests next to them. New dependencies (Node): `@dnd-kit/core` (drag and drop), `@tanstack/react-virtual` (large grids).
 
 **What it does:**
-- **Groups** list: code, label (Gujarati, with Devanagari on hover), sample count, red / black share, status; filter (unlabelled, reviewed, large spread = possibly mixed), sort.
+- **Groups** list (`GET /api/books/{id}/groups`): code, label (Gujarati, with Devanagari on hover), sample count, red / black share, status, locked; filter (unlabelled, reviewed, large spread = possibly mixed; empty groups shown last with "dissolve"), sort.
 - **Group** view: samples as a grid, nearest to the centre first, only the visible part loaded; select by click, shift-click, box; **drag** to `Unsure` or to a group in the side list; **New group from selection**; **Merge** with another group; **Delete** (specks).
 - **Unsure** view: the same grid; select and **create a group**, or drop on a group; each sample shows its **suggested group**, accepted with one key.
 - **Label** a group: type in Devanagari or Gujarati, or the **on-screen picker** (consonant, halant for a conjunct, matra, anusvara / visarga; Devanagari / Gujarati switch); live check through the API; shown in both scripts with code points; mark **reviewed** / **lock**.
-- **Undo / redo** (Ctrl+Z / Cmd+Z, Shift for redo) and keyboard keys for the main actions.
+- **Undo / redo** (Ctrl+Z / Cmd+Z, Shift for redo; `POST /undo`, `/redo`, counts returned with every action) and keyboard keys for the main actions; a history panel (`GET /history`).
+- All of these call the C5c actions (`move`, `new-group`, `merge`, `dissolve`, `label`, `status`, `delete`, `restore`); refused actions show the reason the API returns.
 
 **Done when:** on the sample book, the mixed groups listed in `docs/TUNING.md` (ता / ना, नि / ति, नो / तो ...) can be cleaned and labelled in the app, and everything is still there after a restart.
 **Tests:** selection, drag and the label picker with a mocked API (Vitest); the picker builds क्षि and શ્રી correctly; a large group (2000 samples) stays responsive (render count check).
@@ -499,7 +511,7 @@ Every sub-chunk below has the same parts: status, goal, files, what it does, don
 
 **Status: planned.**
 **Goal:** fix the cutting errors of C3b by hand (FR-8: "fix a wrong cut ... must be quick") and add letters the cutting missed.
-**Files:** `app/samples.py` (new samples from a box, join, split, upload), routes in `app/api.py`, `frontend/src/screens/PageViewer.tsx`; `tests/test_samples.py`. New dependency (Node): `react-image-crop`.
+**Files:** `app/samples.py` (new samples from a box, join, split, upload), routes in `app/api.py`, `frontend/src/screens/PageViewer.tsx`; `tests/test_samples.py`. New dependency (Node): `react-image-crop`. The new actions record their before / after states with the same mechanism as C5c (`actions._Change`), so undo, redo and history cover them too; new samples get a fingerprint, so C5c's suggestions work for them.
 
 **What it does:**
 - **Page / line viewer:** the page or one line with every sample's box, coloured by group; click a box to open its group.
@@ -574,8 +586,8 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C4 | Grouping | done | `groups/`, `unsure/`, `groups.html` | FR-7 |
 | C5a | Library and database | done | `library.db`, books | FR-7, FR-8 |
 | C5b | Unicode mapping | done | `mapping.py`, `mapping_dev_guj.csv` | Section 4 |
-| C5c | Backend API | **next** | review actions, capture jobs, undo | FR-7, FR-8 |
-| C5d | App shell, Books, Capture | planned | own window and browser | FR-1, Section 7 |
+| C5c | Backend API | done | review actions, capture jobs, undo | FR-7, FR-8 |
+| C5d | App shell, Books, Capture | **next** | own window and browser | FR-1, Section 7 |
 | C5e | Group review and labeling | planned | clean, labelled groups | FR-7, FR-8 |
 | C5f | Fixing cuts, adding samples | planned | cropped / joined / split / uploaded samples | FR-8 |
 | C5g | Export | planned | `dataset/`, `lines/*.txt`, `letters.csv`, `samples.csv`, `overview.html`, `summary.txt` | FR-9, FR-10 |
@@ -647,7 +659,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | FR-5 Join and split rules | C3b | `letters.py` |
 | FR-6 Letter samples, ink mask, reading order | C3b | `letters.py`, `report.py` |
 | FR-7 Grouping and labeling | C4, C5e | `features.py`, `grouping.py`, `app/api.py`, Groups screen |
-| FR-8 Review screen | C5e, C5f | `app/api.py`, `app/db.py` (actions, undo), Groups and Page viewer screens |
+| FR-8 Review screen | C5c, C5e, C5f | `app/actions.py` (actions, undo / redo), `app/api.py`, Groups and Page viewer screens |
 | FR-9 Output folder | C5g | `app/export.py`, `mapping.py`, `report.py` |
 | FR-10 Report | C0, C5g | `report.py`, `app/export.py` |
 | Desktop app, Windows and macOS | C5d, C7, C8 | `app/main.py`, `frontend/`, `packaging/`, `.github/workflows/` |
@@ -669,6 +681,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | Team is new to React | TypeScript (errors found while typing), few libraries, plain CSS, one way of calling the backend, small screens built one chunk at a time, component tests (Vitest). |
 | WebView2 missing on an older Windows | The app falls back to the default browser. |
 | Database changes in later versions | Alembic migrations from the first version; a book's settings are stored with it. |
+| A capture writes while the user reviews | SQLite in WAL mode, short transactions, one job per book; capture over manual work needs confirmation; runs install their files only when finished (work folder). |
 | Re-running extraction undoes manual work | Samples have a stable identity (page checksum + box); re-cutting a reviewed page asks first; labelled groups are never changed automatically. |
 | Large books feel slow in the screen | Thumbnails load lazily, grids show one screen at a time (virtual scrolling), images are served from disk, not from the database. |
 | Many groups on very large batches | The merge step runs for up to `group_max_merge` (5000) groups after the first pass; beyond that only the first pass and reassignment run. Raise it, or group book by book. |

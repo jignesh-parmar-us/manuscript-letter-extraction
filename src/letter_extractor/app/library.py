@@ -43,8 +43,16 @@ class LibraryError(Exception):
     """A problem the user can fix (shown as a message, not as a crash)."""
 
 
+class NotFound(LibraryError):
+    """No book, page, group, sample or job with that id."""
+
+
 class BookHasReviewError(LibraryError):
     """Capturing again would discard groups, labels or other manual work."""
+
+
+class Cancelled(LibraryError):
+    """The user cancelled a capture; nothing was stored."""
 
 
 def default_library_dir() -> Path:
@@ -122,7 +130,7 @@ class Library:
         with self.session() as s:
             book = s.get(Book, book_id)
             if book is None:
-                raise LibraryError(f"No book with id {book_id}.")
+                raise NotFound(f"No book with id {book_id}.")
             return book
 
     def list_books(self) -> List[Dict]:
@@ -157,7 +165,7 @@ class Library:
                 raise LibraryError(f"A book named '{name}' already exists.")
             book = s.get(Book, book_id)
             if book is None:
-                raise LibraryError(f"No book with id {book_id}.")
+                raise NotFound(f"No book with id {book_id}.")
             book.name = name
 
     def delete_book(self, book_id: int) -> None:
@@ -165,7 +173,7 @@ class Library:
         with self.session() as s:
             book = s.get(Book, book_id)
             if book is None:
-                raise LibraryError(f"No book with id {book_id}.")
+                raise NotFound(f"No book with id {book_id}.")
             folder = self.book_dir(book)
             s.delete(book)
         books = (self.root / "books").resolve()
@@ -188,45 +196,109 @@ class Library:
             return bool(s.scalar(select(func.count(Sample.id)).where(Sample.book_id == book_id,
                                                                      Sample.source != "auto")))
 
+    def _run(self, book: Book, progress, cancel, files=None, finish=True, summary=None):
+        """Run the pipeline into a work folder inside the book. Returns (results, work folder); the
+        book's own files are untouched until `_install` moves the new ones in."""
+        cfg = self.book_config(book)
+        cfg.save_masks, cfg.write_groups = True, False
+        work = self.book_dir(book) / ".work"
+        if work.exists():
+            shutil.rmtree(work)
+        work.mkdir(parents=True)
+        try:
+            results = process_folder(Path(book.input_dir), work, cfg, progress, cancel,
+                                     summary=summary, files=files, finish=finish)
+        except io_utils.FolderError as e:
+            shutil.rmtree(work, ignore_errors=True)
+            raise LibraryError(str(e)) from e
+        except BaseException:
+            shutil.rmtree(work, ignore_errors=True)
+            raise
+        if cancel is not None and cancel():               # stopped early: store nothing
+            shutil.rmtree(work, ignore_errors=True)
+            raise Cancelled("Cancelled; nothing was changed in the book.")
+        return results, work
+
+    def _install(self, book: Book, work: Path, results, replace_all: bool) -> None:
+        """Move the files of a finished run from the work folder into the book: everything (capture)
+        or only the run's pages (add pages, cut a page again)."""
+        out = self.book_dir(book)
+        if replace_all:
+            for sub in ("letters", "lines"):
+                if (out / sub).is_dir():
+                    shutil.rmtree(out / sub)
+            for name in ("letters", "lines", "report.csv", "samples.csv"):
+                if (work / name).exists():
+                    shutil.move(str(work / name), str(out / name))
+        else:
+            for r in results:
+                stem = Path(r.file).stem
+                old = out / "letters" / stem
+                if old.is_dir():
+                    shutil.rmtree(old)
+                for f in (out / "lines").glob(f"{stem}_L[0-9][0-9].png") if (out / "lines").is_dir() else []:
+                    f.unlink()
+                (out / "letters").mkdir(exist_ok=True)
+                (out / "lines").mkdir(exist_ok=True)
+                if (work / "letters" / stem).is_dir():
+                    shutil.move(str(work / "letters" / stem), str(old))
+                for f in (work / "lines").glob(f"{stem}_L[0-9][0-9].png") if (work / "lines").is_dir() else []:
+                    shutil.move(str(f), str(out / "lines" / f.name))
+        shutil.rmtree(work, ignore_errors=True)
+
+    @staticmethod
+    def _store(s: Session, book: Book, results, group_ids: Optional[Dict[str, int]] = None) -> Dict:
+        """Store pages, lines and samples of pipeline results. Samples join the groups named in their
+        rows when `group_ids` maps those names to group ids; otherwise they are unsure."""
+        n_lines, n_samples = 0, 0
+        for r in results:
+            page = Page(book_id=book.id, file=r.file, width=r.width, height=r.height, status=r.status,
+                        message=r.message, line_spacing=r.line_spacing, seconds=r.seconds,
+                        sha256=file_sha256(Path(book.input_dir) / r.file))
+            s.add(page)
+            s.flush()
+            line_ids = {}
+            for li in r.lines_info:
+                line = Line(page_id=page.id, number=li["number"], x=li["x"], y=li["y"], w=li["w"],
+                            h=li["h"], ink=li["ink"], image=li["image"])
+                s.add(line)
+                s.flush()
+                line_ids[li["number"]] = line.id
+                n_lines += 1
+            if r.features is None or len(r.features) != len(r.samples):
+                continue
+            rows = []
+            for row, fp in zip(r.samples, r.features):
+                gid = (group_ids or {}).get(row.get("group_id", ""))
+                dist = row.get("distance", "")
+                rows.append({
+                    "book_id": book.id, "page_id": page.id, "line_id": line_ids.get(row["line"]),
+                    "line_number": row["line"], "pos": row["pos"], "x": row["x"], "y": row["y"],
+                    "w": row["w"], "h": row["h"], "ink": row["ink"], "kind": row["kind"],
+                    "pieces": row["pieces"], "rules": row["rules"], "image": row["image"],
+                    "mask": row.get("mask", ""), "fingerprint": fp.tobytes(), "source": "auto",
+                    "deleted": False, "group_id": gid,
+                    "distance": float(dist) if (gid is not None and dist != "") else None, "created_at": now(),
+                })
+            if rows:
+                s.execute(insert(Sample), rows)
+            n_samples += len(rows)
+        return {"lines": n_lines, "samples": n_samples}
+
     def capture(self, book_id: int, progress: Optional[ProgressFn] = None,
                 cancel: Optional[Callable[[], bool]] = None, force: bool = False) -> Dict:
-        """Cut and group all pages of the book's input folder and store the result."""
+        """Cut and group all pages of the book's input folder and store the result. Replaces the
+        book's earlier results; refused when the book holds manual work, unless `force`."""
         book = self.get_book(book_id)
         if not force and self.has_manual_work(book_id):
             raise BookHasReviewError(f"'{book.name}' has groups, labels or other changes made by hand; "
                                      "capturing again would discard them.")
-        cfg = self.book_config(book)
-        cfg.save_masks, cfg.write_groups = True, False
-        out = self.book_dir(book)
-        for sub in ("letters", "lines"):                  # results of an earlier capture
-            if (out / sub).is_dir():
-                shutil.rmtree(out / sub)
         summary: Dict = {}
-        try:
-            results = process_folder(Path(book.input_dir), out, cfg, progress, cancel, summary=summary)
-        except io_utils.FolderError as e:
-            raise LibraryError(str(e)) from e
-
+        results, work = self._run(book, progress, cancel, summary=summary)
+        self._install(book, work, results, replace_all=True)
         with self.session() as s:
             for table in (Action, Sample, LetterGroup, Page):   # lines go with their pages
                 s.execute(delete(table).where(table.book_id == book_id))
-            n_lines = 0
-            line_ids: Dict = {}
-            page_ids: Dict[str, int] = {}
-            for r in results:
-                page = Page(book_id=book_id, file=r.file, width=r.width, height=r.height, status=r.status,
-                            message=r.message, line_spacing=r.line_spacing, seconds=r.seconds,
-                            sha256=file_sha256(Path(book.input_dir) / r.file))
-                s.add(page)
-                s.flush()
-                page_ids[r.file] = page.id
-                for li in r.lines_info:
-                    line = Line(page_id=page.id, number=li["number"], x=li["x"], y=li["y"], w=li["w"],
-                                h=li["h"], ink=li["ink"], image=li["image"])
-                    s.add(line)
-                    s.flush()
-                    line_ids[(r.file, li["number"])] = line.id
-                    n_lines += 1
             group_ids: Dict[str, int] = {}
             for r in results:
                 for row in r.samples:
@@ -236,29 +308,89 @@ class Library:
                         s.add(g)
                         s.flush()
                         group_ids[gid] = g.id
-            rows = []
-            for r in results:
-                if r.features is None or len(r.features) != len(r.samples):
-                    continue
-                for row, fp in zip(r.samples, r.features):
-                    gid = row.get("group_id", "")
-                    dist = row.get("distance", "")
-                    rows.append({
-                        "book_id": book_id, "page_id": page_ids[r.file],
-                        "line_id": line_ids.get((r.file, row["line"])), "line_number": row["line"],
-                        "pos": row["pos"], "x": row["x"], "y": row["y"], "w": row["w"], "h": row["h"],
-                        "ink": row["ink"], "kind": row["kind"], "pieces": row["pieces"], "rules": row["rules"],
-                        "image": row["image"], "mask": row.get("mask", ""), "fingerprint": fp.tobytes(),
-                        "source": "auto", "deleted": False, "group_id": group_ids.get(gid),
-                        "distance": float(dist) if dist != "" else None, "created_at": now(),
-                    })
-            if rows:
-                s.execute(insert(Sample), rows)
+            stored = self._store(s, book, results, group_ids)
             b = s.get(Book, book_id)
-            b.captured_at = now()
-            b.updated_at = now()
-        return {"pages": len(results), "pages_ok": sum(r.status == "OK" for r in results), "lines": n_lines,
-                "samples": len(rows), "groups": len(group_ids), "unsure": summary.get("unsure", 0)}
+            b.captured_at = b.updated_at = now()
+        return {"pages": len(results), "pages_ok": sum(r.status == "OK" for r in results),
+                "lines": stored["lines"], "samples": stored["samples"], "groups": len(group_ids),
+                "unsure": summary.get("unsure", 0)}
+
+    def add_new_pages(self, book_id: int, progress: Optional[ProgressFn] = None,
+                      cancel: Optional[Callable[[], bool]] = None) -> Dict:
+        """Cut only the image files of the input folder that are not in the book yet. Their samples
+        are stored as unsure; the review screens show a suggested group for each. Nothing that
+        is already in the book changes."""
+        book = self.get_book(book_id)
+        with self.session() as s:
+            known = set(s.scalars(select(Page.file).where(Page.book_id == book_id)))
+        images, _ = io_utils.scan_folder(Path(book.input_dir))
+        new = [p.name for p in images if p.name not in known]
+        if not new:
+            return {"pages": 0, "lines": 0, "samples": 0, "files": []}
+        results, work = self._run(book, progress, cancel, files=new, finish=False)
+        self._install(book, work, results, replace_all=False)
+        with self.session() as s:
+            stored = self._store(s, book, results)
+            s.get(Book, book_id).updated_at = now()
+        return {"pages": len(results), **stored, "files": [r.file for r in results]}
+
+    def page_has_manual_work(self, page_id: int) -> bool:
+        """Samples of the page that were changed by hand, are in a reviewed, labelled or locked
+        group, or appear in the undo history."""
+        with self.session() as s:
+            page = s.get(Page, page_id)
+            if page is None:
+                raise NotFound(f"No page with id {page_id}.")
+            samples = s.scalars(select(Sample).where(Sample.page_id == page_id)).all()
+            ids = {smp.id for smp in samples}
+            for smp in samples:
+                if smp.source != "auto":
+                    return True
+                g = smp.group
+                if g is not None and (g.status != "auto" or g.locked or g.label_dev):
+                    return True
+            for payload in s.scalars(select(Action.payload).where(Action.book_id == page.book_id)):
+                data = json.loads(payload)
+                touched = {int(k) for k in {**data.get("samples_before", {}), **data.get("samples_after", {})}}
+                if touched & ids:
+                    return True
+        return False
+
+    def recut_page(self, book_id: int, page_id: int, progress: Optional[ProgressFn] = None,
+                   cancel: Optional[Callable[[], bool]] = None, force: bool = False) -> Dict:
+        """Cut one page again (for example after changing settings). Only that page's samples are
+        replaced; the new ones are unsure. Refused when the page holds manual work, unless `force`,
+        which also clears the book's undo history (it may refer to the replaced samples)."""
+        from .centres import recompute
+        book = self.get_book(book_id)
+        with self.session() as s:
+            page = s.get(Page, page_id)
+            if page is None or page.book_id != book_id:
+                raise NotFound(f"No page with id {page_id} in this book.")
+            file = page.file
+        if self.page_has_manual_work(page_id) and not force:
+            raise BookHasReviewError(f"Page {file} has samples that were reviewed or changed by hand; "
+                                     "cutting it again would replace them.")
+        results, work = self._run(book, progress, cancel, files=[file], finish=False)
+        self._install(book, work, results, replace_all=False)
+        with self.session() as s:
+            touched = set(s.scalars(select(Sample.group_id).where(Sample.page_id == page_id,
+                                                                  Sample.group_id.is_not(None))))
+            s.execute(delete(Sample).where(Sample.page_id == page_id))
+            s.execute(delete(Page).where(Page.id == page_id))
+            if force:
+                s.execute(delete(Action).where(Action.book_id == book_id))
+            s.flush()
+            stored = self._store(s, book, results)
+            recompute(s, touched)
+            for gid in touched:                           # groups left empty and never reviewed go
+                g = s.get(LetterGroup, gid)
+                if g is not None and not g.label_dev and g.status == "auto" and not g.locked and \
+                        not s.scalar(select(func.count(Sample.id)).where(Sample.group_id == gid,
+                                                                       Sample.deleted.is_(False))):
+                    s.delete(g)
+            s.get(Book, book_id).updated_at = now()
+        return {"pages": len(results), **stored, "files": [file]}
 
     def check_pages(self, book_id: int) -> List[Dict]:
         """Pages whose input file is missing or changed since capture, and new image files."""
