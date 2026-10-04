@@ -32,6 +32,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
+from sqlalchemy.orm import object_session
 
 from .. import __version__
 from ..config import Config, load_config
@@ -55,7 +56,10 @@ def _book_json(b: Dict) -> Dict:
 
 
 def _sample_json(smp: Sample, book_id: int, token: str) -> Dict:
-    return {"id": smp.id, "page_id": smp.page_id, "line": smp.line_number, "pos": smp.pos,
+    # the session keeps loaded pages, so a grid of samples from a few pages costs a few lookups
+    page = object_session(smp).get(Page, smp.page_id) if smp.page_id is not None else None
+    return {"id": smp.id, "page_id": smp.page_id, "page_file": page.file if page else None,
+            "line": smp.line_number, "pos": smp.pos,
             "box": [smp.x, smp.y, smp.w, smp.h], "ink": smp.ink, "kind": smp.kind, "source": smp.source,
             "group_id": smp.group_id, "distance": None if smp.distance is None else round(smp.distance, 3),
             "deleted": smp.deleted, "rules": smp.rules,

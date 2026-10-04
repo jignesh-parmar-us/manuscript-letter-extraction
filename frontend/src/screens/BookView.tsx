@@ -20,10 +20,11 @@ interface Props {
   bookId: number;
   tab: string;
   sub?: string; // e.g. the group shown in the Review tab
+  item?: string; // e.g. the sample shown on the page in the Pages tab
   info: AppInfo | null;
 }
 
-export default function BookView({ bookId, tab, sub, info }: Props) {
+export default function BookView({ bookId, tab, sub, item, info }: Props) {
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -68,7 +69,12 @@ export default function BookView({ bookId, tab, sub, info }: Props) {
       {tab === "review" && <Review book={book} view={sub} onChanged={reload} />}
       {tab === "export" && <Export book={book} info={info} />}
       {tab === "pages" && (
-        <PageViewer book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} onChanged={reload} />
+        <PageViewer
+          book={book}
+          pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null}
+          sampleId={item && /^\d+$/.test(item) ? Number(item) : null}
+          onChanged={reload}
+        />
       )}
     </section>
   );

@@ -32,6 +32,14 @@ describe("GroupView", () => {
     expect(api.move).toHaveBeenCalledWith(1, expect.arrayContaining([1, 2, 3]), null);
   });
 
+  it("shows the page on hover and opens the sample on its page with a double-click", async () => {
+    renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
+    const tile = (await findTiles())[1];
+    expect(tile.getAttribute("title")).toMatch(/^p1\.png · line 1, letter 2/);
+    await userEvent.dblClick(tile);
+    expect(window.location.hash).toBe("#/books/1/pages/1/2");
+  });
+
   it("makes a new group with the N key and opens it", async () => {
     vi.mocked(api.newGroup).mockResolvedValue({ ...ok, group_id: 9 });
     renderView((ctx) => <GroupView group={group()} ctx={ctx} />);

@@ -144,7 +144,9 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         </button>
       </div>
 
-      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} />
+      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick}
+        onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
+      />
       {samples.length < total && (
         <button onClick={more}>
           Show more ({samples.length} of {total})

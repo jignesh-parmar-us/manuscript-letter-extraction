@@ -61,6 +61,8 @@ class AuthAndFilesTests(ApiTestCase):
         detail = self.get(f"/api/pages/{page['id']}").json()
         self.assertEqual(self.client.get(detail["lines"][0]["image"]).status_code, 200)
         self.assertEqual(self.client.get(samples[0]["image"].split("?")[0]).status_code, 401)
+        files = {p["id"]: p["file"] for p in self.get(f"/api/books/{self.book}/pages").json()}
+        self.assertTrue(all(x["page_file"] == files[x["page_id"]] for x in samples), "page name for the hover text")
 
     def test_no_files_outside_the_book(self):
         for path in ("../../library.db", "..%2F..%2Flibrary.db", "report.csv", "letters/p1/nothing.png"):

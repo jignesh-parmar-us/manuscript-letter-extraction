@@ -1,5 +1,6 @@
 // "Pages" tab: a page with a box around every sample, to fix wrong cuts quickly (FR-8).
-// Address: #/books/<id>/pages/<page id>.
+// Address: #/books/<id>/pages/<page id>[/<sample id>]; with a sample id, that sample is selected and
+// scrolled into view (double-click on a letter in Review opens it here).
 //   Select   click a box (Shift or Ctrl/Cmd+click for more); Join, Delete, Open its group
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
 //   Split    click inside the selected sample where it should be cut in two
@@ -16,6 +17,7 @@ type Box = [number, number, number, number];
 interface Props {
   book: Book;
   pageId: number | null;
+  sampleId?: number | null; // select this sample and scroll to it
   onChanged: () => void;
 }
 
@@ -25,7 +27,7 @@ export function groupColour(groupId: number | null): string {
   return `hsl(${(groupId * 137.508) % 360} 70% 42%)`;
 }
 
-export default function PageViewer({ book, pageId, onChanged }: Props) {
+export default function PageViewer({ book, pageId, sampleId = null, onChanged }: Props) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [page, setPage] = useState<PageDetail | null>(null);
   const [groups, setGroups] = useState<Map<number, Group>>(new Map());
@@ -39,6 +41,8 @@ export default function PageViewer({ book, pageId, onChanged }: Props) {
   const [version, setVersion] = useState(0);
   const [dialog, confirm] = useConfirm();
   const svgRef = useRef<SVGSVGElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const shown = useRef<string>(""); // the page/sample already scrolled to, so reloads do not scroll again
 
   useEffect(() => {
     api.pages(book.id).then(setPages, setError);
@@ -58,6 +62,20 @@ export default function PageViewer({ book, pageId, onChanged }: Props) {
     setOffer([]);
     setMessage("");
   }, [pageId]);
+  // Opened for one sample: select it and bring it to the middle of the view, once.
+  useEffect(() => {
+    const key = `${pageId}/${sampleId}`;
+    if (!page || page.id !== pageId || sampleId === null || shown.current === key) return;
+    const s = page.samples.find((x) => x.id === sampleId);
+    if (!s) return;
+    shown.current = key;
+    setSelected(new Set([s.id]));
+    const box = scrollRef.current;
+    box?.scrollTo?.({
+      left: (s.box[0] + s.box[2] / 2) * zoom - box.clientWidth / 2,
+      top: (s.box[1] + s.box[3] / 2) * zoom - box.clientHeight / 2,
+    });
+  }, [page, pageId, sampleId, zoom]);
 
   /** Run an action, then reload the page and the book's numbers. */
   const act = useCallback(
@@ -241,7 +259,7 @@ export default function PageViewer({ book, pageId, onChanged }: Props) {
                 )}
               </div>
             )}
-            <div className="page-scroll">
+            <div className="page-scroll" ref={scrollRef}>
             <div className="page-canvas" style={{ width: page.width * zoom, height: page.height * zoom }}>
               <img
                 src={page.image}

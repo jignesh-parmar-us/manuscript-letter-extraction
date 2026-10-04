@@ -121,7 +121,9 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
           </button>
         )}
       </div>
-      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} onAccept={(s) => accept([s])} />
+      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} onAccept={(s) => accept([s])}
+        onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
+      />
       {samples.length < total && (
         <button onClick={more}>
           Show more ({samples.length} of {total})

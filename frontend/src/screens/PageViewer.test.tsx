@@ -61,6 +61,15 @@ describe("PageViewer", () => {
     expect(screen.getByLabelText("Samples on the page")).toHaveAttribute("viewBox", "0 0 1000 500");
   });
 
+  it("selects the sample named in the address and scrolls it into view", async () => {
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollTo = scrollTo;
+    render(<PageViewer book={book} pageId={3} sampleId={3} onChanged={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId("box-3")).toHaveClass("selected"));
+    expect(screen.getByTestId("box-1")).not.toHaveClass("selected");
+    expect(scrollTo).toHaveBeenCalledWith({ left: 110, top: 40 });   // centre (220, 80) at 50%, view 0 x 0
+  });
+
   it("joins the selected samples", async () => {
     vi.mocked(api.join).mockResolvedValue({ ...ok, sample: { id: 9, page_id: 3, box: [], source: "joined" } });
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);

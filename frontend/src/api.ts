@@ -154,6 +154,7 @@ export interface Suggestion {
 export interface Sample {
   id: number;
   page_id: number | null;
+  page_file: string | null; // file name of its page (null for uploaded samples)
   line: number;
   pos: number;
   box: [number, number, number, number];
