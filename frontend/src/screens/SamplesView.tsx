@@ -2,6 +2,8 @@
 // Unsure: each sample shows its suggested group; click the suggestion (or select samples and press
 // A) to accept it; select samples to make a new group (N) or move them to a group.
 // Deleted: select samples and restore them (they come back as unsure).
+// On printed books read with Tesseract (C12), unsure samples with a confident reading show it as a
+// second chip: accepting it puts the sample in the group with that label, or a new group that gets it.
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { api, Sample } from "../api";
 import ErrorBox from "../components/ErrorBox";
@@ -37,6 +39,16 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
     },
     [act, bookId, setSelection],
   );
+  /** Put samples under their OCR readings' labels: one action per label. */
+  const acceptReadings = useCallback(
+    async (chosen: Sample[]) => {
+      const byLabel = new Map<string, number[]>();
+      chosen.forEach((s) => s.reading && byLabel.set(s.reading.label_dev, [...(byLabel.get(s.reading.label_dev) ?? []), s.id]));
+      for (const [label, sids] of byLabel) await act(() => api.labelSamples(bookId, sids, label));
+      setSelection(emptySelection());
+    },
+    [act, bookId, setSelection],
+  );
   const toNewGroup = useCallback(async () => {
     if (!ids.length) return;
     const r = await act(() => api.newGroup(bookId, ids));
@@ -63,6 +75,7 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
   }, [order, samples, selection, ids, kind, accept, toNewGroup, act, bookId, setSelection]);
 
   const withSuggestion = samples.filter((s) => selection.ids.has(s.id) && s.suggestion);
+  const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading);
 
   return (
     <div>
@@ -72,7 +85,7 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
       </h2>
       <p className="muted small">
         {kind === "unsure"
-          ? "Samples in no group. Accept a suggestion (→), or select samples and make a new group or move them."
+          ? "Samples in no group. Accept a suggested group (→) or a Tesseract reading (green, top right), or select samples and make a new group or move them."
           : "Deleted samples are left out of groups and the export. Restoring puts them back as unsure."}
       </p>
       <div className="toolbar row">
@@ -82,6 +95,11 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
             <button disabled={!withSuggestion.length} onClick={() => accept(withSuggestion)} title="A">
               Accept suggestions ({withSuggestion.length})
             </button>
+            {samples.some((s) => s.reading) && (
+              <button disabled={!withReading.length} onClick={() => acceptReadings(withReading)}>
+                Accept readings ({withReading.length})
+              </button>
+            )}
             <button disabled={!ids.length} onClick={toNewGroup} title="N">
               New group
             </button>
@@ -122,6 +140,7 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
         )}
       </div>
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} onAccept={(s) => accept([s])}
+        onAcceptReading={kind === "unsure" ? (s) => acceptReadings([s]) : undefined}
         onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
       />
       {samples.length < total && (

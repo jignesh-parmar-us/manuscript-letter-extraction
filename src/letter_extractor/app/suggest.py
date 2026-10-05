@@ -232,15 +232,72 @@ def group_readings(s, book: Book, cfg: Config, group_ids: Optional[Iterable[int]
     return out
 
 
-def sample_readings(s, book: Book, cfg: Config, sample_ids: Sequence[int]) -> Dict[int, Dict]:
-    """Each sample's own Tesseract reading at or above `suggest_min_confidence`. Handwritten books
-    get none: Tesseract's confidence is high there even when it is wrong (C10)."""
+def sample_readings(s, book: Book, cfg: Config, sample_ids: Sequence[int], unsure: bool = True) -> Dict[int, Dict]:
+    """Each sample's own Tesseract reading.
+
+    For unsure samples (`unsure`), only readings at or above `suggest_min_confidence`, and none on
+    handwritten books: there they would be offered for accepting, and Tesseract's confidence stays
+    high when it is wrong (C10). For samples in a group, every reading: they are shown as badges
+    where they differ from the group (C12), which is how mixed groups are found."""
     run_id = _run_id(s, book.id)
-    if run_id is None or book.writing != "printed" or not sample_ids:
+    if run_id is None or not sample_ids or (unsure and book.writing != "printed"):
         return {}
     mapping = mapping_for(cfg)
-    rows = s.execute(select(OcrReading.sample_id, OcrReading.text_dev, OcrReading.confidence)
-                     .where(OcrReading.run_id == run_id, OcrReading.sample_id.in_(list(sample_ids)),
-                            OcrReading.confidence >= cfg.suggest_min_confidence))
+    q = select(OcrReading.sample_id, OcrReading.text_dev, OcrReading.confidence).where(
+        OcrReading.run_id == run_id, OcrReading.sample_id.in_(list(sample_ids)))
+    if unsure:
+        q = q.where(OcrReading.confidence >= cfg.suggest_min_confidence)
     return {sid: {"label_dev": text, "label_guj": mapping.gujarati(text), "confidence": conf, "engine": "tesseract"}
-            for sid, text, conf in rows}
+            for sid, text, conf in s.execute(q)}
+
+
+def samples_read_as(s, book: Book, group_id: int, text: str) -> List[int]:
+    """The group's samples (not deleted) that the newest Tesseract run read as `text` (C12: select
+    them, to split a mixed group)."""
+    run_id = _run_id(s, book.id)
+    if run_id is None:
+        return []
+    return list(s.scalars(select(Sample.id).join(OcrReading, OcrReading.sample_id == Sample.id)
+                          .where(OcrReading.run_id == run_id, Sample.group_id == group_id,
+                                 Sample.deleted.is_(False), OcrReading.text_dev == text).order_by(Sample.id)))
+
+
+BANDS = [(0.9, "90% or more"), (0.75, "75 to 90%"), (0.0, "below 75%")]
+
+
+def suggestion_accuracy(s, book: Book, cfg: Config) -> Dict:
+    """How the suggestions compare with the user's labels (C12): each labelled group is voted as if
+    it had no label. Right / wrong per share band, groups without a suggestion, the most common
+    wrong pairs. Only meaningful once a good part of the book is labelled."""
+    run_id = _run_id(s, book.id)
+    groups = s.scalars(select(LetterGroup).where(LetterGroup.book_id == book.id, LetterGroup.label_dev != "")).all()
+    out: Dict = {"labelled": len(groups), "suggested": 0, "right": 0, "none": 0,
+                 "bands": [{"band": name, "right": 0, "wrong": 0} for _, name in BANDS], "wrong": []}
+    if run_id is None or not groups:
+        out["none"] = len(groups)
+        return out
+    per_group: Dict[int, List[Tuple[str, float]]] = defaultdict(list)
+    for gid, text, conf in s.execute(
+            select(Sample.group_id, OcrReading.text_dev, OcrReading.confidence)
+            .join(OcrReading, OcrReading.sample_id == Sample.id)
+            .where(OcrReading.run_id == run_id, Sample.deleted.is_(False),
+                   Sample.group_id.in_([g.id for g in groups]))):
+        per_group[gid].append((text, conf))
+    wrong: Dict[Tuple[str, str], int] = defaultdict(int)
+    for g in groups:
+        v = vote(per_group.get(g.id, []), cfg.suggest_min_votes, cfg.suggest_min_share)
+        if v is None:
+            out["none"] += 1
+            continue
+        out["suggested"] += 1
+        band = next(i for i, (low, _) in enumerate(BANDS) if v["share"] >= low)
+        if v["label_dev"] == g.label_dev:
+            out["right"] += 1
+            out["bands"][band]["right"] += 1
+        else:
+            out["bands"][band]["wrong"] += 1
+            wrong[(g.label_dev, v["label_dev"])] += 1
+    mapping = mapping_for(cfg)
+    out["wrong"] = [{"label": mapping.gujarati(a), "suggested": mapping.gujarati(b), "groups": n}
+                    for (a, b), n in sorted(wrong.items(), key=lambda kv: -kv[1])[:10]]
+    return out

@@ -7,7 +7,7 @@ import { group } from "./reviewTestUtils";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { groups: vi.fn(), undo: vi.fn(), redo: vi.fn() } };
+  return { ...real, api: { groups: vi.fn(), undo: vi.fn(), redo: vi.fn(), tesseract: vi.fn(), accuracy: vi.fn() } };
 });
 
 const book: Book = {
@@ -25,6 +25,7 @@ describe("Review", () => {
   beforeEach(() => {
     vi.mocked(api.groups).mockResolvedValue(groups);
     vi.mocked(api.undo).mockResolvedValue({ undo: 1, redo: 1 });
+    vi.mocked(api.tesseract).mockResolvedValue({ ok: true, langs_needed: "script/Devanagari" });
   });
 
   it("lists the groups and undoes with Ctrl/Cmd+Z", async () => {
@@ -52,5 +53,22 @@ describe("Review", () => {
       group({ id: 5, code: "g0005", label_dev: "क" }),
     ];
     expect(sortGroups(labelled, "label").map((g) => g.id)).toEqual([3, 5, 4, 1, 2]);   // अ क कि ख, then unlabelled
+  });
+
+  it("filters suggested and mixed groups, and sorts by suggestion share", () => {
+    const sug = (label_dev: string, share: number) => ({
+      label_dev, label_guj: label_dev, share, count: 5, read: 6, engine: "tesseract" as const, merge_into: null,
+    });
+    const gs = [
+      group({ id: 1, samples: 8, suggestion: sug("क", 0.7), readings: [{ label_dev: "क", label_guj: "ક", count: 5 }], read: 6 }),
+      group({ id: 2, samples: 8, suggestion: sug("ख", 0.95), read: 6,
+              readings: [{ label_dev: "ख", label_guj: "ખ", count: 6 }] }),
+      group({ id: 3, samples: 8, read: 10,
+              readings: [{ label_dev: "ता", label_guj: "તા", count: 5 }, { label_dev: "ना", label_guj: "ના", count: 4 }] }),
+      group({ id: 4, samples: 8, label_dev: "ग", suggestion: null }),
+    ];
+    expect(filterGroups(gs, "suggested").map((g) => g.id)).toEqual([1, 2]);
+    expect(filterGroups(gs, "readmixed").map((g) => g.id)).toEqual([3]);
+    expect(sortGroups(gs, "share").map((g) => g.id)).toEqual([2, 1, 3, 4]);
   });
 });

@@ -263,5 +263,28 @@ class SuggestionTests(ApiTestCase):
         self.assertEqual(self.post(f"/api/books/{self.book}/suggest", {"engine": "books"}).status_code, 422)
 
 
+    def test_review_routes(self):
+        from test_suggest import FakeTesseract
+        from letter_extractor.app.suggest import run_tesseract
+        run_tesseract(self.lib, self.book, reader=FakeTesseract(self.lib, self.book, lambda smp: "क"), workers=1)
+        big = [g for g in self.groups() if g["samples"] >= 3]
+        samples = self.get(f"/api/groups/{big[0]['id']}/samples").json()["samples"]
+        self.assertEqual(samples[0]["reading"]["label_dev"], "क")
+        ids = self.get(f"/api/groups/{big[0]['id']}/read-as", params={"text": "क"}).json()["ids"]
+        self.assertEqual(len(ids), big[0]["samples"])
+        r = self.post(f"/api/books/{self.book}/actions/reject-suggestion", {"group_id": big[0]["id"], "label_dev": "क"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(self.get(f"/api/groups/{big[0]['id']}").json()["suggestion"])
+        r = self.post(f"/api/books/{self.book}/actions/accept-suggestions",
+                      {"items": [{"group_id": big[1]["id"], "label_dev": "क"}]})
+        self.assertEqual((r.status_code, r.json()["groups"], r.json()["undo"] > 0), (200, 1, True))
+        r = self.post(f"/api/books/{self.book}/actions/accept-suggestions",
+                      {"items": [{"group_id": big[2]["id"], "label_dev": "क"}]})
+        self.assertEqual(r.status_code, 400)                               # क is taken: one label, one group
+        r = self.post(f"/api/books/{self.book}/actions/label-samples", {"sample_ids": ids[:1], "text": "क"})
+        self.assertEqual(r.json()["group_id"], big[1]["id"])
+        acc = self.get(f"/api/books/{self.book}/suggestion-accuracy").json()
+        self.assertEqual((acc["labelled"], acc["right"]), (1, 1))
+
 if __name__ == "__main__":
     unittest.main()

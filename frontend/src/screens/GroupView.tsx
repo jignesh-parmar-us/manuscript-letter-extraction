@@ -3,6 +3,8 @@
 // label the group; mark it reviewed or lock it; merge another group into it; dissolve it.
 // Keys: U = selected to Unsure, N = new group from selection, Delete = delete selection,
 //       Ctrl/Cmd+A = select all, Esc = clear selection.
+// With OCR readings (C11, C12): the suggested label to accept, change or reject; what the samples
+// were read as; and a badge on each sample whose reading differs from the group's.
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { api, Group } from "../api";
 import { useConfirm } from "../components/Confirm";
@@ -13,6 +15,7 @@ import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
 import { isTyping, ReviewContext } from "./Review";
+import { expectedReading, ReadingsLine, SuggestionChip } from "./Suggestions";
 
 export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewContext }) {
   const { bookId, selection, setSelection, act } = ctx;
@@ -20,6 +23,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const { samples, total, more, error } = usePagedSamples(load, ctx.version);
   const [mergeWith, setMergeWith] = useState("");
   const [moveTo, setMoveTo] = useState("");
+  const [changeTo, setChangeTo] = useState<string | null>(null); // "Change…" on the suggestion fills the picker
   const [dialog, confirm] = useConfirm();
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
@@ -97,7 +101,12 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         </div>
       </div>
 
+      <SuggestionChip group={group} ctx={ctx} onChange={setChangeTo} />
+      <ReadingsLine group={group} ctx={ctx} />
+
       <LabelPicker
+        key={changeTo ?? ""}
+        initialText={changeTo ?? undefined}
         bookId={bookId}
         current={{ dev: group.label_dev, guj: group.label_guj }}
         disabled={locked}
@@ -151,7 +160,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         </button>
       </div>
 
-      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick}
+      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expectedReading(group)}
         onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
       />
       {samples.length < total && (

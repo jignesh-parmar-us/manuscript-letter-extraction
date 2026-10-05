@@ -4,7 +4,7 @@ Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, grou
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. **C12 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. **C13 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -237,34 +237,46 @@ Rules that carry over from Phase 1:
 
 ### C12. Reviewing suggestions in the app, and measuring them
 
+**Status:** built (2026-10-05). Open: the measurement after a full review of a printed book (see "Done when").
+
 **Goal:** the user sees each suggestion on its group and accepts, corrects or rejects it, one at a time or all above a threshold. The accuracy is measured, not guessed.
 
-**Files:** `frontend/src/screens/Suggestions.tsx` (+ test), additions to `GroupView.tsx`, `Review.tsx`, `SamplesView.tsx`, `api.ts`; additions to `app/actions.py` (`accept_suggestions`, `reject_suggestion`, which sets `LetterGroup.rejected_dev` as an undoable action), `app/api.py` (each sample's own reading in the group's sample list, for the badges); `docs/TUNING_PHASE2.md`.
+**Files:** `frontend/src/screens/Suggestions.tsx` (+ `Suggestions.test.tsx`), additions to `Review.tsx`, `GroupView.tsx`, `SamplesView.tsx`, `components/SampleGrid.tsx`, `components/LabelPicker.tsx` (`initialText`), `api.ts`, `styles.css`, `Review.test.tsx`, `reviewTestUtils.tsx`; additions to `app/actions.py` (`accept_suggestions`, `reject_suggestion`, `label_samples`), `app/suggest.py` (`samples_read_as`, `suggestion_accuracy`, readings for group samples), `app/api.py`, `app/schemas.py`, `config.py` (`bulk_accept_share`); tests in `tests/test_suggest.py`, `tests/test_api.py`; `docs/TUNING_PHASE2.md`.
 
 **What it does:**
-- **Review tab:**
-  - a **"Suggest labels"** button. Its default reader follows the book's writing: **printed** → Tesseract (the C11 job; disabled, with the reason from `GET /api/tesseract`, when Tesseract is missing); **handwritten** → other books (C13) or the classifier (C14) once they exist. Handwritten books also get **"Try Tesseract"** in the same place, with a note that it is measured to be less reliable on handwriting. Until C13 is built, that is the only reader a handwritten book has;
-  - a filter "Suggested" shows groups with a suggestion, sorted by share, highest first;
-  - a filter **"Mixed readings"** shows groups whose two most common readings are both strong (C11 found most unsuggested groups of the printed book are mixed: ता 29 + ना 25). Splitting them is how most groups get a suggestion.
-- **On a group:** a chip `क? 18 of 20 (90%)`, shown in Gujarati and Devanagari like labels:
-  - **Accept** sets the label (the normal `set_label` action, undoable);
-  - **Change** opens the label picker with the suggestion filled in;
-  - **Reject** keeps the group unlabelled and stops suggesting that label (`rejected_dev`, undoable);
-  - when the suggestion has `merge_into`, the chip offers **"Merge into gXXXX"** instead of Accept.
-- **Bulk:** **"Accept all with ≥ 90%"** (the threshold can be changed) accepts many suggestions as **one** undoable action, after a confirmation that shows how many groups it will label.
-- **Disagreeing samples:** in a group, samples whose own reading differs from the suggestion (or, without a suggestion, from the group's most common reading) get a small badge with their reading (for example `ब` in a `व` group). **"Select samples read as X"** selects them all, and "New group" or "Move to unsure" splits the look-alikes that Phase 1 grouping merged. This uses the existing actions; the new groups' suggestions appear at once (C11 votes live).
-- **Unsure tab:** samples with a confident reading show it, and "Accept" moves them into the group with that label, or creates one if none exists.
-- **Measuring** (written to `TUNING_PHASE2.md`): on the printed book, after the user's full review, compare suggestions with the final labels:
-  - the share of correct suggestions, by share band (≥ 90%, 75 to 90%, 60 to 75%);
-  - how many groups had no suggestion;
-  - the most common wrong pairs.
+- **Review tab, side bar: "Label suggestions" panel:**
+  - the button follows the book's writing: **printed** → "Suggest labels (Tesseract)" (then "Read again with Tesseract"); **handwritten** → "Try Tesseract", with a note that about a third of its letters are wrong on handwriting. Disabled, with the reason from `GET /api/tesseract`, when Tesseract or the book's language model is missing. It starts the C11 job and shows "Reading lines: n of m" with Cancel; the groups reload when it ends;
+  - after a run: when it ran, how many letters were read, how many groups got a suggestion;
+  - **"Accept N with ≥ [90] %"**: labels every group whose suggestion has at least that share, is not locked and needs no merge, as **one** undoable action (`accept_suggestions`), after a confirmation that says how many groups it will label. The start value is the book setting `bulk_accept_share` (0.9);
+  - **"Checked against your labels: x of y right"** (once the book has labels): each labelled group voted as if unlabelled, by share band, with the groups that would get none and the most common wrong pairs (`GET /api/books/{id}/suggestion-accuracy`). This is the C12 measurement, built into the app so it can be repeated on every book.
+- **Filters:** "Suggested" (unlabelled groups with a suggestion; sorts by share, highest first) and **"Mixed readings"** (the second most common reading is at least 2 samples and a quarter of those read). New sort: "by suggestion share". Unlabelled groups in the list show their suggestion after the code (`g0019 ર?`).
+- **On a group:** a chip "Suggested: ક क · 18 of 20 read (90%)":
+  - **Accept** labels the group (`accept_suggestions` with one group; undoable);
+  - **Change…** fills the label picker with the suggestion, to correct it before saving;
+  - **Reject** keeps the group unlabelled and stops suggesting that label (`reject_suggestion` sets `rejected_dev`; undoable). Another reading can still be suggested later;
+  - when another group already has the label, **"Merge into gXXXX"** replaces Accept (one label, one group).
+- **Readings line:** "Read as: તા 29 · ના 25 · મા 6 of 68 read". Clicking a reading **selects all samples of the group read that way** (every page of samples, `GET /api/groups/{id}/read-as`); then "New group" or "To Unsure" splits the group with the existing actions, and the parts get their own suggestions at once (C11 votes live). For mixed groups the line says so.
+- **Badges:** in a group, a sample whose reading differs from the group's (its suggestion, else its label, else its most common reading) shows that reading in its corner. In g0009 of the sample book they mark exactly the ના, મા and સા samples in a તા group.
+- **Unsure:** on printed books, samples with a confident reading show it as a green chip next to the suggested group. Clicking it, or **"Accept readings"** for a selection, puts the samples in the group with that label, or in a new group that gets it, as one undoable action (`label_samples`).
+- **Undo:** the group's `rejected_dev` is part of the recorded group state; actions recorded before C12 (without it) still undo.
 
-  This sets the default bulk-accept threshold. The same is measured on the **handwritten** sample book with "Try Tesseract", to see whether group votes make Tesseract useful there. C10 measured about 30 to 35% wrong code points per handwritten line, so some common letters may still get right suggestions. If the share of correct handwritten suggestions at the threshold is 90% or more, "Try Tesseract" stays offered for handwritten books; otherwise it is hidden behind the settings.
+**Tests:** accept many groups as one undoable action (undo and redo restore everything); accept skips a label another group has and refuses when nothing can be labelled; reject is undoable; undo of an action recorded before `rejected_dev`; label samples into the labelled group or a new one, and undo; samples read as X; accuracy against labels; the API routes. Screen: the panel (start and follow the job, "Try" on handwritten books, disabled with the reason, bulk accept with confirmation, the accuracy line), the chip (accept, reject, merge, change), badges only on samples read otherwise, selecting one reading of a mixed group, accepting an unsure sample's reading, the new filters and sort.
+
+**Measured** (`TUNING_PHASE2.md`): on the 27 labelled groups of the sample book, 13 of 13 suggestions are right in every share band (5 at ≥ 90%, 5 at 75 to 90%, 3 below). Too few groups to set the threshold, so `bulk_accept_share` stays 0.9. Splitting the mixed groups by reading, simulated on a copy, raised the groups (≥ 5 samples) with a suggestion from 32% to 57% in one round and 59% in two.
 
 **Done when:**
-- the printed book can be labelled mostly through suggestions, and the measured accuracy at the default threshold is at least 95%. If it is lower, the threshold is raised until it is, and the figure is recorded;
-- after the mixed groups of the printed book are split with the help of the readings, at least 70% of the groups with 5 or more samples get a suggestion (moved here from C11, where 27 to 32% did before splitting).
+- the printed book can be labelled mostly through suggestions, and the measured accuracy at the default threshold is at least 95%. If it is lower, the threshold is raised until it is, and the figure is recorded. *Open: needs the user's full review of a printed book; the app's "Checked against your labels" gives the figures.*
+- after the mixed groups of the printed book are split with the help of the readings, at least 70% of the groups with 5 or more samples get a suggestion. *Simulated: 59% by splitting alone; the rest (readings spread over many texts, the ा bar) is left to the person reviewing. To be measured again after that review.*
+
 **C7 addition:** none. **C8:** screen tests run as before.
+
+**Changes from the original plan:**
+- **The measurement is built into the app** ("Checked against your labels", `suggestion-accuracy`) instead of a one-off script, so it can be repeated for every book and after every review session.
+- **"Mixed readings" filter, "select samples read as X" and badges against the group's most common reading** (not only against a suggestion), because C11 showed that most groups without a suggestion are mixed.
+- **Unsure samples' readings are accepted with a new action, `label_samples`,** which moves them to the group with that label or creates one, as **one** undo step. The plan said "moves them into the group with that label, or creates one"; doing it in the backend makes it one action.
+- **Bulk accept leaves out groups that need a merge** (their label is on another group) and locked groups; the backend also skips any group that got a label meanwhile, and names the skipped ones.
+- **`bulk_accept_share`** is a book setting (0.9), as the plan's settings table said; the screen starts from it and the user can change it per use.
+- **No `Suggestions.tsx` screen of its own:** the plan named the file; it holds the panel, the chip and the readings line, used inside the Review tab rather than as a separate screen.
 
 ### Part B: suggestions for handwriting
 
@@ -466,8 +478,8 @@ Rules that carry over from Phase 1:
 |---|---|---|---|---|
 | C10 | Tesseract engine, akshara splitting, book writing | done | OCR of a line as aksharas with boxes; handwritten / printed per book | FR-7 |
 | C11 | Matching OCR to samples, group suggestions | done | suggestions on groups and unsure samples | FR-7 |
-| C12 | Reviewing suggestions, measuring | **next** | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
-| C13 | Suggestions from other labelled books | planned | handwriting suggestions, no training | FR-7 |
+| C12 | Reviewing suggestions, measuring | built (measurement after a full review) | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
+| C13 | Suggestions from other labelled books | **next** | handwriting suggestions, no training | FR-7 |
 | C14 | Letter classifier | planned | `model.onnx`, per-class accuracy report | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
 | C16a | Training pages and pages to convert | planned | two page sets per book, separate folders, `Page.role` | FR-12 (pages to convert) |
@@ -494,7 +506,7 @@ All in the same `Config` dataclass, per book, except where noted.
 | `suggest_min_votes` | C11 | 3 |
 | `suggest_min_share` | C11 | 0.6 |
 | `suggest_min_confidence` | C11 | 80 (Tesseract scale 0 to 100) |
-| `bulk_accept_share` | C12 | 0.9 (set from the C12 measurement) |
+| `bulk_accept_share` | C12 | 0.9 (to be set from the C12 measurement after a full review) |
 | `reference_books` | C13 | all books with the same writing |
 | `min_class_samples` | C14 | 5 |
 | `active_model` (app setting) | C14 | none |

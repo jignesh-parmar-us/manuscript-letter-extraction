@@ -146,6 +146,8 @@ The **Books** screen lists the books of the library and creates new ones (a name
 
 The **Review groups** tab is where the letters are sorted and labelled: the groups on the left (with filters such as *without label* or *possibly mixed*), the chosen group's samples on the right. Select samples (click, Ctrl/Cmd+click, Shift+click) and send them to **Unsure** (U), a **new group** (N), another group, or delete them; or drag them onto a group in the list. Label a group by typing in Gujarati or Devanagari, or with the on-screen letters; it is checked as you type. Unsure samples show a suggested group to accept with one click. Ctrl/Cmd+Z undoes, Shift+Ctrl/Cmd+Z redoes.
 
+**Label suggestions** (Phase 2, C12): the **Label suggestions** panel in the Review tab reads the book with Tesseract (for printed books; "Try Tesseract" on handwritten ones). Each group then shows a suggested label to **Accept**, **Change** or **Reject**, and **Accept N with ≥ 90 %** labels many groups in one undoable step. A group whose samples were read differently ("Read as: તા 29 · ના 25") is probably mixed: the filter **Mixed readings** lists these, a click on a reading selects its samples, and **New group** splits them off; samples read otherwise carry a small badge. Unsure samples on printed books show their reading in green, to accept with one click. **Checked against your labels** shows how often the suggestions agree with the labels given so far.
+
 The **Pages** tab shows a page with a box around every sample, to fix wrong cuts: **Draw a box** around ink that should be one letter (it becomes a new sample, and the samples it covers can be deleted), **Join** selected samples, **Split** a sample where you click, or **Upload letter image…** for a letter the cutting missed. New samples start in Unsure with a suggested group. Everything can be undone.
 
 The **Export** tab writes the book's dataset for OCR training: every sample of each labelled letter in `dataset/<category>/<letter>/` (as cut, black on white, or 64 × 64), the lines with their Gujarati text in `lines/`, the unlabelled samples in `unsure/`, `letters.csv`, `samples.csv`, `overview.html` (every letter at a glance, in alphabet order) and `summary.txt`. It goes into a new dated folder in the library (or a new, empty folder of your choice) and never overwrites anything; **Open the folder** shows it in Finder or Explorer.
@@ -156,7 +158,7 @@ For screen development: `npm run dev` in `frontend/` serves the screen with live
 
 ## Reading lines with Tesseract (Phase 2, C10)
 
-Printed books can be read by [Tesseract](https://github.com/tesseract-ocr/tesseract) to suggest labels. Since C11 the app can read a whole book in the background and vote a suggested label for each group from its samples' readings (`POST /api/books/{id}/suggest`; the screen for it comes in C12). Tesseract is a separate install: see [docs/INSTALL_TESSERACT.md](docs/INSTALL_TESSERACT.md). To read one line image and see its aksharas with their boxes:
+Printed books can be read by [Tesseract](https://github.com/tesseract-ocr/tesseract) to suggest labels. Since C11 the app reads a whole book in the background and votes a suggested label for each group from its samples' readings; C12 shows them in the Review tab (see above). Tesseract is a separate install: see [docs/INSTALL_TESSERACT.md](docs/INSTALL_TESSERACT.md). To read one line image and see its aksharas with their boxes:
 
 ```
 python -m letter_extractor.ocr out/lines/page1_L01.png            # script/Devanagari, one line

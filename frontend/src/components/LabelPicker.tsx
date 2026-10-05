@@ -4,7 +4,7 @@
 // A label can be one letter or a word (several letters). One label belongs to one group: if another
 // group has it, the picker offers "Merge into" that group (onMerge) instead of saving, or, for samples
 // (no onMerge), says which group they will go into.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, LabelInfo, LabelUser } from "../api";
 
 type Script = "gujarati" | "devanagari";
@@ -41,6 +41,7 @@ const SECTIONS: { key: keyof typeof DEV; title: string }[] = [
 interface Props {
   bookId: number;
   current: { dev: string; guj: string };
+  initialText?: string; // text to start with instead of the current label (a suggestion to change)
   disabled?: boolean;
   onSave: (text: string) => Promise<boolean | void>; // false: not saved (the letters stay open)
   saveText?: string; // the save button's text (default "Save label")
@@ -51,13 +52,19 @@ interface Props {
 
 export default function LabelPicker(props: Props) {
   const { bookId, current, disabled, onSave, saveText = "Save label", canClear = true, groupId, onMerge } = props;
-  const [text, setText] = useState(current.guj);
+  const [text, setText] = useState(props.initialText ?? current.guj);
   const [script, setScript] = useState<Script>("gujarati");
   const [info, setInfo] = useState<LabelInfo | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => setText(current.guj), [current.guj]);
+  // a new label (saved, undone) replaces the text; not on the first render, which may start from initialText
+  const shownLabel = useRef(current.guj);
+  useEffect(() => {
+    if (shownLabel.current === current.guj) return;
+    shownLabel.current = current.guj;
+    setText(current.guj);
+  }, [current.guj]);
 
   // check the label 250 ms after the last change
   useEffect(() => {

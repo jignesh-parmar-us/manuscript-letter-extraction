@@ -4,6 +4,8 @@
 // Every change goes through `act()`, which calls the backend, keeps the undo / redo counts and
 // reloads the lists. Samples are dragged with @dnd-kit: drop them on a group or on "Unsure".
 // Keys: Ctrl/Cmd+Z undo, Shift+Ctrl/Cmd+Z redo; the views add their own keys.
+// Label suggestions (C12): the panel in the side bar reads the book with Tesseract; the filters
+// "Suggested" and "Mixed readings" use the groups' votes and readings (see Suggestions.tsx).
 import { DndContext, DragEndEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { ActionResult, api, Book, Group } from "../api";
@@ -12,9 +14,10 @@ import { emptySelection, Selection } from "../components/selection";
 import { go } from "../route";
 import GroupView from "./GroupView";
 import SamplesView from "./SamplesView";
+import { isMixed, SuggestPanel } from "./Suggestions";
 
-type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "empty";
-type Sort = "code" | "label" | "size" | "spread";
+type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "suggested" | "readmixed" | "empty";
+type Sort = "code" | "label" | "size" | "spread" | "share";
 
 interface Props {
   book: Book;
@@ -91,6 +94,14 @@ export default function Review({ book, view, onChanged }: Props) {
   }
 
   const shown = useMemo(() => sortGroups(filterGroups(groups, filter), sort), [groups, filter, sort]);
+  const reload = useCallback(() => {
+    setVersion((v) => v + 1);
+    onChanged();
+  }, [onChanged]);
+  const chooseFilter = (f: Filter) => {
+    setFilter(f);
+    if (f === "suggested") setSort("share");
+  };
   const current = view && /^\d+$/.test(view) ? groups.find((g) => g.id === Number(view)) : undefined;
   const ctx: ReviewContext = { bookId: book.id, version, groups, selection, setSelection, act };
 
@@ -116,13 +127,16 @@ export default function Review({ book, view, onChanged }: Props) {
           >
             Deleted samples
           </button>
+          <SuggestPanel book={book} ctx={ctx} onRead={reload} />
           <div className="row small">
-            <select aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
+            <select aria-label="Show" value={filter} onChange={(e) => chooseFilter(e.target.value as Filter)}>
               <option value="all">All groups</option>
               <option value="unlabelled">Without label</option>
               <option value="labelled">Labelled</option>
               <option value="unreviewed">Not reviewed</option>
               <option value="mixed">Possibly mixed</option>
+              <option value="suggested">Suggested</option>
+              <option value="readmixed">Mixed readings</option>
               <option value="empty">Empty</option>
             </select>
             <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
@@ -130,6 +144,7 @@ export default function Review({ book, view, onChanged }: Props) {
               <option value="label">by label (Unicode)</option>
               <option value="size">by size</option>
               <option value="spread">by spread</option>
+              <option value="share">by suggestion share</option>
             </select>
           </div>
           <div className="side-list" aria-label="Groups">
@@ -141,7 +156,15 @@ export default function Review({ book, view, onChanged }: Props) {
                 onClick={() => go(`/books/${book.id}/review/${g.id}`)}
               >
                 {g.example_image ? <img src={g.example_image} alt="" className="thumb" /> : <span className="thumb" />}
-                <span className="side-label">{g.label_guj || g.code}</span>
+                <span className="side-label">
+                  {g.label_guj || g.code}
+                  {!g.label_dev && g.suggestion && (
+                    <span className="side-suggestion" title={`Suggested: ${g.suggestion.label_guj}`}>
+                      {" "}
+                      {g.suggestion.label_guj}?
+                    </span>
+                  )}
+                </span>
                 <span className="muted small">
                   {g.samples}
                   {g.locked ? " 🔒" : g.status !== "auto" ? " ✓" : ""}
@@ -194,6 +217,8 @@ export function filterGroups(groups: Group[], filter: Filter): Group[] {
   if (filter === "unlabelled") return groups.filter((g) => g.samples > 0 && !g.label_dev);
   if (filter === "labelled") return groups.filter((g) => !!g.label_dev);
   if (filter === "unreviewed") return groups.filter((g) => g.samples > 0 && g.status === "auto");
+  if (filter === "suggested") return groups.filter((g) => g.samples > 0 && !g.label_dev && !!g.suggestion);
+  if (filter === "readmixed") return groups.filter((g) => g.samples > 0 && isMixed(g));
   // possibly mixed: the 20% of groups (at least one) whose samples are furthest from their centre
   const candidates = groups.filter((g) => g.samples > 1 && g.spread !== null);
   const spreads = candidates.map((g) => g.spread as number).sort((a, b) => a - b);
@@ -208,6 +233,8 @@ export function sortGroups(groups: Group[], sort: Sort): Group[] {
   const out = [...groups];
   if (sort === "size") out.sort((a, b) => b.samples - a.samples);
   else if (sort === "spread") out.sort((a, b) => (b.spread ?? 0) - (a.spread ?? 0));
+  else if (sort === "share")
+    out.sort((a, b) => (b.suggestion?.share ?? -1) - (a.suggestion?.share ?? -1) || b.samples - a.samples);
   else if (sort === "label")
     // labelled groups in Unicode code point order of the label (the letter order of the script),
     // then the unlabelled ones by code

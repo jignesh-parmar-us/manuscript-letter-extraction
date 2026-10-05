@@ -14,12 +14,16 @@ Actions:
 - `set_label`     label typed in Devanagari or Gujarati (stored canonical, see mapping.py)
 - `set_status`    reviewed and / or locked
 - `delete_samples`, `restore_samples`  specks and false detections
+- `accept_suggestions` labels one or many groups with their suggested labels, as one action (C12)
+- `reject_suggestion`  the group stops getting that suggested label (C12)
+- `label_samples`  samples to the group with a label, or to a new group that gets it (C12)
 
 Locked groups refuse every change except unlocking.
 """
 from __future__ import annotations
 
 import json
+import unicodedata
 from collections import Counter
 from typing import Dict, Iterable, List, Optional
 
@@ -32,7 +36,7 @@ from .db import Action, Book, LetterGroup, Sample, now
 from .library import Library, LibraryError
 
 SAMPLE_FIELDS = ("group_id", "deleted", "kind", "distance")
-GROUP_FIELDS = ("code", "kind", "label_dev", "label_guj", "status", "locked")
+GROUP_FIELDS = ("code", "kind", "label_dev", "label_guj", "status", "locked", "rejected_dev")
 
 
 class ActionError(LibraryError):
@@ -139,7 +143,8 @@ def _apply(s: Session, groups: Dict, samples: Dict) -> None:
             g = LetterGroup(id=int(gid), book_id=state["book_id"], code=state["code"])
             s.add(g)
         for f in GROUP_FIELDS:
-            setattr(g, f, state[f])
+            if f in state:                                # states recorded before C12 have no rejected_dev
+                setattr(g, f, state[f])
     s.flush()
     for sid, state in samples.items():
         smp = s.get(Sample, int(sid))
@@ -245,6 +250,78 @@ def set_label(lib: Library, book_id: int, group_id: int, text: str) -> Dict:
                 g.status = "reviewed"
         a = ch.finish("label", {"group": g.code, "label_dev": g.label_dev, "label_guj": g.label_guj})
         return _result(a, group_id=g.id)
+
+
+def accept_suggestions(lib: Library, book_id: int, items: List[Dict]) -> Dict:
+    """Label groups with the suggestions the user saw ({group_id, label_dev} each), as one action.
+    Groups that got a label meanwhile, are locked, or whose label another group has (one label,
+    one group) are skipped and named in the result."""
+    with lib.session() as s:
+        book = s.get(Book, book_id)
+        m = mapping_for(lib.book_config(book))
+        ch = _Change(s, book_id)
+        used = set(s.scalars(select(LetterGroup.label_dev).where(LetterGroup.book_id == book_id,
+                                                                 LetterGroup.label_dev != "")))
+        labelled, skipped = [], []
+        for item in items:
+            g = s.get(LetterGroup, int(item["group_id"]))
+            if g is None or g.book_id != book_id:
+                raise ActionError(f"Group {item['group_id']} is not in this book.")
+            try:
+                dev = canonical_label(item["label_dev"], m, words=True)
+            except LabelError as e:
+                raise ActionError(f"Not a letter: {e}") from e
+            if g.label_dev or g.locked or dev in used:
+                skipped.append(g.code)
+                continue
+            g = ch.group(g.id)
+            g.label_dev, g.label_guj, g.status = dev, m.gujarati(dev), "labelled"
+            used.add(dev)
+            labelled.append(g.code)
+        if not labelled:
+            raise ActionError("No group could be labelled: they are labelled or locked already, "
+                              "or another group has the label.")
+        a = ch.finish("accept_suggestions", {"groups": len(labelled), "skipped": skipped})
+        return _result(a, labelled=labelled)
+
+
+def reject_suggestion(lib: Library, book_id: int, group_id: int, label_dev: str) -> Dict:
+    """The group keeps no label and is not suggested `label_dev` again (another reading can be)."""
+    with lib.session() as s:
+        ch = _Change(s, book_id)
+        g = ch.group(group_id)
+        g.rejected_dev = unicodedata.normalize("NFC", label_dev.strip())
+        a = ch.finish("reject_suggestion", {"group": g.code, "label_dev": g.rejected_dev})
+        return _result(a, group_id=g.id)
+
+
+def label_samples(lib: Library, book_id: int, sample_ids: Iterable[int], text: str) -> Dict:
+    """Move samples to the group with this label (the largest unlocked one), or to a new group
+    that gets the label: one action, so one undo."""
+    with lib.session() as s:
+        book = s.get(Book, book_id)
+        m = mapping_for(lib.book_config(book))
+        try:
+            dev = canonical_label(text, m, words=True)
+        except LabelError as e:
+            raise ActionError(f"Not a letter: {e}") from e
+        ch = _Change(s, book_id)
+        smps = ch.samples(sample_ids)
+        same = s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id, LetterGroup.label_dev == dev)).all()
+        open_ = [g for g in same if not g.locked]
+        if same and not open_:
+            raise ActionError(f"The group {same[0].code} with the label {m.gujarati(dev)} is locked; unlock it first.")
+        if open_:
+            target = ch.group(max(open_, key=lambda g: len(members(s, g.id))).id)
+            new = False
+        else:
+            target = ch.new_group(Counter(smp.kind for smp in smps).most_common(1)[0][0])
+            target.label_dev, target.label_guj, target.status = dev, m.gujarati(dev), "labelled"
+            new = True
+        for smp in smps:
+            smp.group_id, smp.kind = target.id, target.kind
+        a = ch.finish("label_samples", {"samples": len(smps), "to": target.code, "label_dev": dev, "new": new})
+        return _result(a, group_id=target.id)
 
 
 def set_status(lib: Library, book_id: int, group_id: int, reviewed: Optional[bool] = None,

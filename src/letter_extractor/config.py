@@ -118,6 +118,7 @@ class Config:
     suggest_min_votes: int = 3            # a group needs this many read samples for a suggestion...
     suggest_min_share: float = 0.6        # ...and the winning reading this share of the weighted votes
     suggest_min_confidence: float = 80.0  # an unsure sample shows its own reading from this confidence
+    bulk_accept_share: float = 0.9        # "Accept all" in the Review tab starts at this share (C12)
 
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))

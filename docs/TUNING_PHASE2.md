@@ -48,3 +48,28 @@ Measured numbers behind the Phase 2 defaults (`docs/implementation_plan_phase2.m
 **Confidence** stays useless as a filter (C10): readings that agree with the labels averaged 98.6, those that do not 97.9. At `suggest_min_confidence` 80 all 761 pass; even at 95, 169 of the 187 wrong readings would pass.
 
 **Defaults kept:** all C11 settings as planned. The plan's target, a suggestion for 70% of groups with ≥ 5 samples, is not met (32%, 27%). The cause is the grouping, not the reading, so the target moves to C12: after mixed groups are split with the help of the readings.
+
+## C12. Suggestions in the Review tab (2026-10-05)
+
+**Accuracy by share band**, from the app's own check ("Checked against your labels" in the Review tab, `GET /api/books/{id}/suggestion-accuracy`), on book 1 with its 27 labelled groups:
+
+| Share of the winning reading | Right | Wrong |
+|---|---|---|
+| 90% or more | 5 | 0 |
+| 75 to 90% | 5 | 0 |
+| below 75% (down to 60%) | 3 | 0 |
+| no suggestion | 14 groups | |
+
+13 of 13 suggestions are right in every band, but 13 groups are too few to set the bulk-accept threshold. **`bulk_accept_share` stays at 0.9** until the user has reviewed a whole printed book; then this table is measured again (the plan's C12 "done when").
+
+**Splitting mixed groups, simulated** on a second copy of book 1: for every unlabelled group without a suggestion, the samples of each other reading with at least 2 samples were moved to a new group (what "click a reading, then New group" does). This splits blindly by reading, including त-shaped letters read as ता, which a person looking at the images would not do, so it is an estimate only:
+
+| | Groups with ≥ 5 samples | With a suggestion |
+|---|---|---|
+| before | 158 | 50 (32%) |
+| after one round (101 splits) | 182 | 103 (57%) |
+| after a second round (25 more) | 183 | 108 (59%) |
+
+The plan's 70% is therefore not reached by splitting alone. Most of the rest are groups whose readings are spread over many texts, or where the ा bar splits the vote (C11); they are left to the person reviewing.
+
+**Screen check** (headless Chrome on a copy of the library): the suggestion chip, the badges on samples read otherwise (in g0009 they mark exactly the ना, मा and सा samples in a ता group), the readings of unsure samples, and the side panel.

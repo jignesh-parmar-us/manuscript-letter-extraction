@@ -203,5 +203,104 @@ class VoteTests(unittest.TestCase):
         self.assertEqual(v["label_dev"], "क")
 
 
+
+class ReviewActionTests(SuggestTestCase):
+    """C12: accepting and rejecting suggestions, labelling samples, selecting by reading, accuracy."""
+
+    def label_of(self, gid):
+        with self.lib.session() as s:
+            return s.get(LetterGroup, gid).label_dev
+
+    def test_accept_many_as_one_undoable_action(self):
+        self.run_fake()
+        ocr = self.ocr()
+        items = [{"group_id": g, "label_dev": v["suggestion"]["label_dev"]} for g, v in ocr.items() if v["suggestion"]]
+        before = appbook.state(self.lib, self.book)
+        r = actions.accept_suggestions(self.lib, self.book, items)
+        self.assertEqual(r["groups"], len(items))
+        for item in items:
+            self.assertEqual(self.label_of(item["group_id"]), item["label_dev"])
+        actions.undo(self.lib, self.book)
+        self.assertEqual(appbook.state(self.lib, self.book), before)
+        actions.redo(self.lib, self.book)
+        self.assertEqual(self.label_of(items[0]["group_id"]), items[0]["label_dev"])
+
+    def test_accept_skips_a_label_another_group_has(self):
+        a, b = self.big_groups()[:2]
+        actions.set_label(self.lib, self.book, a, "क")
+        r = actions.accept_suggestions(self.lib, self.book, [{"group_id": b, "label_dev": "क"},
+                                                             {"group_id": self.big_groups()[2], "label_dev": "ख"}])
+        self.assertEqual(r["groups"], 1)
+        self.assertEqual(len(r["skipped"]), 1)
+        self.assertEqual(self.label_of(b), "")
+
+    def test_accept_refuses_when_nothing_can_be_labelled(self):
+        gid = self.big_groups()[0]
+        actions.set_label(self.lib, self.book, gid, "क")
+        with self.assertRaises(actions.ActionError):
+            actions.accept_suggestions(self.lib, self.book, [{"group_id": gid, "label_dev": "ख"}])
+
+    def test_reject_is_undoable_and_hides_the_suggestion(self):
+        self.run_fake()
+        gid = self.big_groups()[0]
+        actions.reject_suggestion(self.lib, self.book, gid, self.letter[gid])
+        self.assertIsNone(self.ocr([gid])[gid]["suggestion"])
+        actions.undo(self.lib, self.book)
+        self.assertEqual(self.ocr([gid])[gid]["suggestion"]["label_dev"], self.letter[gid])
+
+    def test_undo_of_an_action_recorded_before_rejected_dev_existed(self):
+        gid = self.big_groups()[0]
+        actions.set_label(self.lib, self.book, gid, "क")
+        with self.lib.session() as s:                       # as an action from C11 or earlier looks
+            import json
+            from letter_extractor.app.db import Action
+            a = s.scalars(select(Action).order_by(Action.id.desc())).first()
+            data = json.loads(a.payload)
+            for state in list(data["groups_before"].values()) + list(data["groups_after"].values()):
+                state.pop("rejected_dev", None)
+            a.payload = json.dumps(data)
+        actions.undo(self.lib, self.book)
+        self.assertEqual(self.label_of(gid), "")
+
+    def test_label_samples_into_the_labelled_group_or_a_new_one(self):
+        a, b = self.big_groups()[:2]
+        actions.set_label(self.lib, self.book, a, "क")
+        with self.lib.session() as s:
+            ids = [x.id for x in s.scalars(select(Sample).where(Sample.group_id == b))][:2]
+        r = actions.label_samples(self.lib, self.book, ids, "ક")              # Gujarati input
+        self.assertEqual(r["group_id"], a)
+        r = actions.label_samples(self.lib, self.book, ids, "ख")
+        self.assertTrue(r["new"])
+        self.assertEqual(self.label_of(r["group_id"]), "ख")
+        actions.undo(self.lib, self.book)
+        with self.lib.session() as s:
+            self.assertIsNone(s.get(LetterGroup, r["group_id"]))
+            self.assertEqual({s.get(Sample, i).group_id for i in ids}, {a})
+
+    def test_samples_read_as(self):
+        from letter_extractor.app.suggest import samples_read_as
+        gid = self.big_groups()[0]
+        self.run_fake(text_of=lambda smp: "ब" if smp.group_id == gid and smp.pos % 2 else self.text_of(smp))
+        with self.lib.session() as s:
+            book = s.get(Book, self.book)
+            ids = samples_read_as(s, book, gid, "ब")
+            self.assertTrue(ids)
+            self.assertTrue(all(s.get(Sample, i).pos % 2 for i in ids))
+            self.assertEqual(samples_read_as(s, book, gid, "ञ"), [])
+
+    def test_accuracy_against_the_labels(self):
+        from letter_extractor.app.suggest import suggestion_accuracy
+        self.run_fake()
+        a, b = self.big_groups()[:2]
+        actions.set_label(self.lib, self.book, a, self.letter[a])                # right
+        actions.set_label(self.lib, self.book, b, "ञ")                           # the reading says otherwise
+        with self.lib.session() as s:
+            book = s.get(Book, self.book)
+            acc = suggestion_accuracy(s, book, self.lib.book_config(book))
+        self.assertEqual((acc["labelled"], acc["suggested"], acc["right"]), (2, 2, 1))
+        self.assertEqual(acc["bands"][0], {"band": "90% or more", "right": 1, "wrong": 1})
+        self.assertEqual(acc["wrong"][0]["suggested"], {"क": "ક", "ख": "ખ"}.get(self.letter[b], acc["wrong"][0]["suggested"]))
+
+
 if __name__ == "__main__":
     unittest.main()

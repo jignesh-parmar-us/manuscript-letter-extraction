@@ -55,6 +55,23 @@ class LibraryChoice(BaseModel):
     path: str
 
 
+class Accepted(BaseModel):
+    group_id: int
+    label_dev: str                                # the suggestion the user saw
+
+
+class AcceptSuggestions(BaseModel):
+    items: List[Accepted] = Field(min_length=1)
+
+
+class RejectSuggestion(GroupRef):
+    label_dev: str
+
+
+class LabelSamples(SampleIds):
+    text: str                                     # Devanagari or Gujarati
+
+
 class SuggestRequest(BaseModel):
     engine: Literal["tesseract"] = "tesseract"    # other books and the classifier follow (C13, C14)
 

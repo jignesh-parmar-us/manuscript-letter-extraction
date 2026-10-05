@@ -10,10 +10,12 @@ Routes (all JSON unless noted):
   jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11),
              GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
   ocr (C11)  GET /api/tesseract (installed? version, languages); groups carry `suggestion` and `readings`,
-             unsure samples `reading`, the book `ocr_runs`
+             their samples and unsure samples `reading`, the book `ocr_runs`;
+             GET /api/groups/{id}/read-as?text=... (sample ids), GET /api/books/{id}/suggestion-accuracy (C12)
   reading    GET /api/books/{id}/pages, /api/pages/{id}, /api/books/{id}/groups, /api/groups/{id},
              /api/groups/{id}/samples, /api/books/{id}/unsure, /api/samples/{id}
   actions    POST /api/books/{id}/actions/{move|new-group|merge|dissolve|label|status|delete|restore},
+             POST /api/books/{id}/actions/{accept-suggestions|reject-suggestion|label-samples} (C12),
              POST /api/books/{id}/undo | /redo, GET /api/books/{id}/history
   labels     GET /api/label?text=...&book_id=...   (with a book: `used_by`, the groups with that label)
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
@@ -44,9 +46,10 @@ from .centres import suggestions
 from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force, GroupRef, Label,
-                      LibraryChoice, Merge, Move, SampleIds, Split, Status, SuggestRequest, Upload)
-from .suggest import group_readings, latest_runs, sample_readings
+from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+                      GroupRef, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion, SampleIds, Split,
+                      Status, SuggestRequest, Upload)
+from .suggest import group_readings, latest_runs, sample_readings, samples_read_as, suggestion_accuracy
 
 MAX_PAGE = 500
 
@@ -273,7 +276,23 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             q = select(Sample).where(Sample.group_id == g.id, Sample.deleted.is_(False))
             total = s.scalar(select(func.count()).select_from(q.subquery()))
             rows = s.scalars(q.order_by(Sample.distance, Sample.id).offset(offset).limit(limit)).all()
-            return {"total": total, "offset": offset, "samples": [_sample_json(x, g.book_id, token) for x in rows]}
+            book = s.get(Book, g.book_id)
+            reads = sample_readings(s, book, library.book_config(book), [x.id for x in rows], unsure=False)
+            return {"total": total, "offset": offset,
+                    "samples": [{**_sample_json(x, g.book_id, token), "reading": reads.get(x.id)} for x in rows]}
+
+    @app.get("/api/groups/{group_id}/read-as", dependencies=auth)
+    def group_read_as(group_id: int, text: str) -> Dict:
+        """The ids of the group's samples read as `text` (all of them, not one page)."""
+        with library.session() as s:
+            g = group_or_404(s, group_id)
+            return {"ids": samples_read_as(s, s.get(Book, g.book_id), g.id, text)}
+
+    @app.get("/api/books/{book_id}/suggestion-accuracy", dependencies=auth)
+    def accuracy(book_id: int) -> Dict:
+        with library.session() as s:
+            book = book_or_404(s, book_id)
+            return suggestion_accuracy(s, book, library.book_config(book))
 
     @app.get("/api/books/{book_id}/unsure", dependencies=auth)
     def unsure(book_id: int, offset: int = 0, limit: int = Query(200, le=MAX_PAGE),
@@ -323,6 +342,18 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/actions/label", dependencies=auth)
     def a_label(book_id: int, body: Label) -> Dict:
         return after(book_id, actions.set_label(library, book_id, body.group_id, body.text))
+
+    @app.post("/api/books/{book_id}/actions/accept-suggestions", dependencies=auth)
+    def a_accept(book_id: int, body: AcceptSuggestions) -> Dict:
+        return after(book_id, actions.accept_suggestions(library, book_id, [i.model_dump() for i in body.items]))
+
+    @app.post("/api/books/{book_id}/actions/reject-suggestion", dependencies=auth)
+    def a_reject(book_id: int, body: RejectSuggestion) -> Dict:
+        return after(book_id, actions.reject_suggestion(library, book_id, body.group_id, body.label_dev))
+
+    @app.post("/api/books/{book_id}/actions/label-samples", dependencies=auth)
+    def a_label_samples(book_id: int, body: LabelSamples) -> Dict:
+        return after(book_id, actions.label_samples(library, book_id, body.sample_ids, body.text))
 
     @app.post("/api/books/{book_id}/actions/status", dependencies=auth)
     def a_status(book_id: int, body: Status) -> Dict:

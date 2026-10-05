@@ -518,3 +518,72 @@ table.list.compact {
   width: auto;
   min-width: 320px;
 }
+
+/* ---- label suggestions (C12) ---- */
+.suggest-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  margin: 0;
+}
+.suggest-panel p {
+  margin: 0;
+}
+.suggest-panel ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.share-input {
+  width: 64px;
+  min-width: 0;
+  padding: 3px 6px;
+}
+.bulk-accept {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.side-suggestion {
+  font-size: 14px;
+  color: var(--accent);
+}
+.suggestion-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.readings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 6px 0 0;
+}
+.readings .link {
+  font-size: 16px;
+}
+.reading-badge,
+.reading-chip {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+.reading-badge {
+  background: var(--warn);
+  color: var(--panel);
+}
+.reading-chip {
+  background: var(--panel);
+  border: 1px solid var(--ok);
+  color: var(--ok);
+}

@@ -165,6 +165,24 @@ export interface LabelSuggestion {
   merge_into: { id: number; code: string } | null; // another group already has this label
 }
 
+/** Whether Tesseract can run with the book's languages (GET /api/tesseract). */
+export interface TesseractStatus {
+  ok: boolean;
+  error?: string;
+  version?: string;
+  langs_needed: string;
+}
+
+/** Suggestions compared with the user's labels: each labelled group voted as if unlabelled (C12). */
+export interface SuggestionAccuracy {
+  labelled: number;
+  suggested: number;
+  right: number;
+  none: number;
+  bands: { band: string; right: number; wrong: number }[];
+  wrong: { label: string; suggested: string; groups: number }[];
+}
+
 export interface Reading {
   label_dev: string;
   label_guj: string;
@@ -195,7 +213,8 @@ export interface Sample {
   rules: string;
   image: string;
   suggestion?: Suggestion | null;
-  reading?: { label_dev: string; label_guj: string; confidence: number; engine: "tesseract" } | null; // C11
+  // its own OCR reading (C11): for unsure samples only confident ones on printed books; in groups all of them
+  reading?: { label_dev: string; label_guj: string; confidence: number; engine: "tesseract" } | null;
 }
 
 export interface SamplePage {
@@ -283,6 +302,8 @@ export const api = {
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
   setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
   suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),
+  tesseract: (bookId: number) => get<TesseractStatus>(`/api/tesseract?book_id=${bookId}`),
+  accuracy: (bookId: number) => get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy`),
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),
   setSettings: (id: number, settings: Record<string, unknown> | null) =>
     patch<Book>(`/api/books/${id}/settings`, { settings }),
@@ -321,6 +342,15 @@ export const api = {
     post<ActionResult>(`/api/books/${bookId}/actions/delete`, { sample_ids: sampleIds }),
   restoreSamples: (bookId: number, sampleIds: number[]) =>
     post<ActionResult>(`/api/books/${bookId}/actions/restore`, { sample_ids: sampleIds }),
+  // label suggestions (C12)
+  acceptSuggestions: (bookId: number, items: { group_id: number; label_dev: string }[]) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/accept-suggestions`, { items }),
+  rejectSuggestion: (bookId: number, groupId: number, labelDev: string) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/reject-suggestion`, { group_id: groupId, label_dev: labelDev }),
+  labelSamples: (bookId: number, sampleIds: number[], text: string) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/label-samples`, { sample_ids: sampleIds, text }),
+  readAs: (groupId: number, text: string) =>
+    get<{ ids: number[] }>(`/api/groups/${groupId}/read-as?text=${encodeURIComponent(text)}`),
   undo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/undo`),
   redo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/redo`),
   history: (bookId: number) => get<HistoryItem[]>(`/api/books/${bookId}/history`),
