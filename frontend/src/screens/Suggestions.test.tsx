@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -86,6 +86,21 @@ describe("SuggestPanel", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Label them" }));
     expect(act).toHaveBeenCalled();
     expect(api.acceptSuggestions).toHaveBeenCalledWith(1, [{ group_id: 1, label_dev: "क" }]);
+  });
+
+  it("fixes cuts on printed books after asking, and not on handwritten ones", async () => {
+    vi.mocked(api.fixCuts).mockResolvedValue({ id: "j2", book_id: 1, kind: "fix_cuts", status: "running", done: 0,
+      total: 9, current: "", pages: [], result: null, error: "", seconds: 0 });
+    const { unmount } = renderView((ctx) => <SuggestPanel book={withRun()} ctx={ctx} onRead={() => {}} />);
+    const fix = screen.getByRole("button", { name: "Fix cuts with Tesseract" });
+    await waitFor(() => expect(fix).toBeEnabled());
+    await userEvent.click(fix);
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Fix cuts" }));
+    expect(api.fixCuts).toHaveBeenCalledWith(1);
+    expect(await screen.findByText("Checking cuts: 0 of 9")).toBeInTheDocument();
+    unmount();
+    renderView((ctx) => <SuggestPanel book={withRun({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Fix cuts with Tesseract" })).toBeNull();
   });
 
   it("shows how the suggestions compare with the labels", async () => {

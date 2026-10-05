@@ -286,5 +286,13 @@ class SuggestionTests(ApiTestCase):
         acc = self.get(f"/api/books/{self.book}/suggestion-accuracy").json()
         self.assertEqual((acc["labelled"], acc["right"]), (1, 1))
 
+    def test_fix_cuts_route(self):
+        self.assertEqual(self.post(f"/api/books/{self.book}/fix-cuts").status_code, 400)       # handwritten
+        self.client.patch(f"/api/books/{self.book}", headers=H, json={"writing": "printed"})
+        job = self.wait(self.post(f"/api/books/{self.book}/fix-cuts").json())
+        self.assertEqual(job["kind"], "fix_cuts")
+        self.assertEqual(job["status"], "failed")                                             # not read yet
+        self.assertIn("Tesseract first", job["error"])
+
 if __name__ == "__main__":
     unittest.main()

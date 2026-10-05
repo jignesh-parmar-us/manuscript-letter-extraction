@@ -106,7 +106,7 @@ export interface JobPage {
 export interface Job {
   id: string;
   book_id: number;
-  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest";
+  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -302,6 +302,7 @@ export const api = {
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
   setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
   suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),
+  fixCuts: (id: number) => post<Job>(`/api/books/${id}/fix-cuts`),
   tesseract: (bookId: number) => get<TesseractStatus>(`/api/tesseract?book_id=${bookId}`),
   accuracy: (bookId: number) => get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy`),
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),

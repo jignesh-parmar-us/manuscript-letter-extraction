@@ -7,7 +7,7 @@ same browser therefore cannot use the API.
 
 Routes (all JSON unless noted):
   books      GET/POST /api/books, GET/PATCH/DELETE /api/books/{id}, GET /api/books/{id}/page-problems
-  jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11),
+  jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11) | /fix-cuts (C12b),
              GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
   ocr (C11)  GET /api/tesseract (installed? version, languages); groups carry `suggestion` and `readings`,
              their samples and unsure samples `reading`, the book `ocr_runs`;
@@ -193,6 +193,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/suggest", dependencies=auth, status_code=202)
     def suggest(book_id: int, body: SuggestRequest = SuggestRequest()) -> Dict:
         return jobs.suggest(book_id, body.engine, tesseract_setting()).as_dict()
+
+    @app.post("/api/books/{book_id}/fix-cuts", dependencies=auth, status_code=202)
+    def fix_cuts(book_id: int) -> Dict:
+        book = library.get_book(book_id)
+        if book.writing != "printed":
+            raise HTTPException(400, "Fixing cuts with Tesseract is for printed books.")
+        return jobs.fix_cuts(book_id).as_dict()
 
     @app.get("/api/tesseract", dependencies=auth)
     def tesseract(book_id: Optional[int] = None) -> Dict:

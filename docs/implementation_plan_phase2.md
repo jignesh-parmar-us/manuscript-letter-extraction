@@ -4,7 +4,7 @@ Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, grou
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. **C13 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. **C13 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -66,6 +66,7 @@ src/letter_extractor/
 │   └── convert.py        # page → Devanagari text → Gujarati text, confidences                (C16b)
 ├── app/
 │   ├── suggest.py        # label-suggestion jobs: Tesseract, other books, classifier          (C11, C13, C14)
+│   ├── recut.py          # split and join samples where Tesseract's readings show a wrong cut  (C12b)
 │   ├── texts.py          # converted text, proofreading edits                                  (C16b, C17)
 │   └── migrations/versions/0002_book_writing.py (C10), 0003_ocr_readings.py (C11), 0004_models_dictionary.py,
 │                           0005_page_sets.py (C16a), 0006_texts.py
@@ -278,6 +279,34 @@ Rules that carry over from Phase 1:
 - **`bulk_accept_share`** is a book setting (0.9), as the plan's settings table said; the screen starts from it and the user can change it per use.
 - **No `Suggestions.tsx` screen of its own:** the plan named the file; it holds the panel, the chip and the readings line, used inside the Review tab rather than as a separate screen.
 
+### C12b. Fixing cuts with Tesseract's readings (printed books)
+
+**Status:** built (2026-10-05). Asked for by the user after C12: the suggestions showed Tesseract reads print well, while Phase 1 leaves several letters in one sample on print.
+
+**Goal:** split samples that hold several letters, and join letters that were cut in pieces, where Tesseract's reading shows it, without ever cutting a conjunct, and without cutting worse than before.
+
+**Decisions (user, 2026-10-05):** applied automatically as **one undoable action** (not a list to approve); samples in labelled and reviewed groups are fixed too (their new pieces go to Unsure with their readings). **Locked groups stay untouched**, as everywhere else in the app.
+
+**Files:** `app/recut.py`, `ocr/align.py` (the alignment path, `steps`), additions to `app/jobs.py`, `app/api.py`, `config.py`, `frontend/src/screens/Suggestions.tsx`, `api.ts`, `Capture.tsx` (job name); `tests/test_recut.py`, additions to `tests/test_api.py`, `Suggestions.test.tsx`; `docs/TUNING_PHASE2.md`.
+
+**What it does:**
+- **Not a new cutter.** Phase 1 still finds the lines and makes the first cut. Tesseract's character boxes are too rough to cut with (about 15 px off, some over a whole word, C11); they only say how many aksharas a stretch of line holds and roughly where they meet.
+- **Per line** read by the newest Tesseract run, its kept hOCR is aligned with the line's current samples again (C11's alignment, now also returning its path):
+  - **split:** a sample holding 2 or 3 aksharas is cut between them. Each cut goes to the column with the least ink, the headline rows left out, within `recut_window` (0.3) x the line's median sample width of the boundary Tesseract gives;
+  - **join:** 2 or 3 samples inside one akshara become one sample, only when one of them is letter-sized and the others are fragments (a vowel bar, an i-hook, a mark). Two letter-sized samples are never joined.
+- **Splits only happen between aksharas** (C10's rules), so a conjunct (क्ष, त्र, द्ध), a reph (र्क) or a letter with its vowel signs and marks is never cut.
+- **A change is kept only when every new sample looks like a letter of this book:** its fingerprint is within `group_distance` of the centre of a group with at least `recut_min_group` (5) samples, it is at least `recut_min_width` (0.45) x the line's median sample width wide, and its reading is one letter. Dandas, digits and samples of locked groups are left alone.
+- **Applying:** all changes as **one action** (`fix_cuts`); one undo takes them all back. As with the Pages tab's split and join (C5f), the old samples are marked deleted and the new ones (source `ocr-split` / `ocr-joined`) start in Unsure. Each new sample gets its akshara as its reading in the newest run, so it shows it at once (green chip in Unsure, "Accept readings").
+- **In the app:** the Label suggestions panel of printed books gets **"Fix cuts with Tesseract"** once the book has been read. It asks first, runs as a job ("Checking cuts: n of m", cancellable: nothing changes), and reports the samples split and joined. `POST /api/books/{id}/fix-cuts` (400 on handwritten books; the job fails with the reason when the book has not been read).
+
+**Tests:** a sample holding two letters (made with the Pages tab's join) is split again at the right places, with the right readings, into Unsure; a letter cut with a narrow fragment is joined again; two letters under one akshara are not joined; one undo restores everything; locked groups are untouched; nothing to fix changes nothing; handwritten books and books without a run are refused; the least-ink column below the headline; the API route; the button (printed only, asks, follows the job).
+
+**Measured** (`TUNING_PHASE2.md`, a copy of the user's 23-page book): 12% of the read samples held several letters. One run (78 s) split **725** samples into 1,460 and joined **126**, refusing 706 candidates. By eye about three quarters of the splits and most joins are right. The new pieces' readings agree with the label of the nearest labelled group as often as ordinary samples do (75%).
+
+**Done when:** on a printed book, the fix splits most samples that hold several letters, a look at the new samples shows mostly single letters, and one undo restores the book. *Met on the copy of the user's book; to be checked by the user in the app.*
+
+**Changes from the original plan:** a new chunk. Two approaches were tried and dropped on the way: re-reading each new piece with Tesseract as the check (it cannot read a lone letter: 16 of 120 passed), and joining any samples under one akshara (half of the joins merged two letters).
+
 ### Part B: suggestions for handwriting
 
 ### C13. Suggestions from other labelled books
@@ -478,7 +507,8 @@ Rules that carry over from Phase 1:
 |---|---|---|---|---|
 | C10 | Tesseract engine, akshara splitting, book writing | done | OCR of a line as aksharas with boxes; handwritten / printed per book | FR-7 |
 | C11 | Matching OCR to samples, group suggestions | done | suggestions on groups and unsure samples | FR-7 |
-| C12 | Reviewing suggestions, measuring | built (measurement after a full review) | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
+| C12 | Reviewing suggestions, measuring | built (measurement after a full review) |
+| C12b | Fixing cuts with Tesseract's readings (printed books) | built | split samples holding several letters, join cut pieces; one undo | FR-8 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
 | C13 | Suggestions from other labelled books | **next** | handwriting suggestions, no training | FR-7 |
 | C14 | Letter classifier | planned | `model.onnx`, per-class accuracy report | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
@@ -507,6 +537,9 @@ All in the same `Config` dataclass, per book, except where noted.
 | `suggest_min_share` | C11 | 0.6 |
 | `suggest_min_confidence` | C11 | 80 (Tesseract scale 0 to 100) |
 | `bulk_accept_share` | C12 | 0.9 (to be set from the C12 measurement after a full review) |
+| `recut_window` | C12b | 0.3 (x the line's median sample width) |
+| `recut_min_width` | C12b | 0.45 (x the line's median sample width) |
+| `recut_min_group` | C12b | 5 |
 | `reference_books` | C13 | all books with the same writing |
 | `min_class_samples` | C14 | 5 |
 | `active_model` (app setting) | C14 | none |
@@ -550,6 +583,7 @@ All in the same `Config` dataclass, per book, except where noted.
 | Risk | Mitigation |
 |---|---|
 | Tesseract's character boxes are wrong for vowel signs and conjuncts | Alignment uses boxes **and** order, leaves out implausible boxes, keeps only clear matches, and refuses unclear lines (C11). Raw hOCR is kept, so the rules can be improved without re-running OCR. |
+| Fixing cuts with Tesseract cuts letters wrongly | Splits only between aksharas; every new piece must look like a letter of the book (group centre, width); never two letters joined; locked groups untouched; one undo takes the whole fix back (C12b). |
 | Phase 1 groups mix different letters on print, so few groups get a suggestion (C11: 27 to 32%) | Groups show their most common readings; C12 adds a "Mixed readings" filter and "select samples read as X" to split them, after which the parts get suggestions at once. |
 | Tesseract splits text into aksharas differently from our cutting | Our own akshara rules match Phase 1 cutting; mismatches are handled by the alignment's split / merge steps. |
 | Old typefaces (old अ, ण, श forms) are misread | Suggestions are voted per group, so single misreads are outvoted. Nothing is labelled without the user. Languages were compared in C10 (`script/Devanagari`). |

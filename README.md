@@ -6,6 +6,25 @@ Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md)
 
 **Status:** C0 (read the input folder), C1 (page preparation), C2 (line detection), C3a (first cut into stroke pieces) C3b (letters) and C4 (grouping identical letters) are done: about 92% of letters are cut correctly on the sample pages, and their 854 letters form 54 groups ([docs/TUNING.md](docs/TUNING.md)). The review app (C5) is under way: C5a (library of books in a SQLite database), C5b (Devanagari / Gujarati labels) C5c (backend API with review actions and undo), C5d (the app window with the Books and Capture screens), C5e (the group review and labeling screen), C5f (fixing cuts in a page viewer) and C5g (the export of the dataset) are done. Packaging for Windows and macOS (C7) and the GitHub build (C8) come next.
 
+## Quick start: open the app
+
+On macOS, in Terminal, from the project folder (after the one-time install below):
+
+```sh
+cd frontend && npm run build && cd ..                          # build the screen (again after changes in frontend/)
+PYTHONPATH=src .venv/bin/python -m letter_extractor.app        # the app in its own window
+PYTHONPATH=src .venv/bin/python -m letter_extractor.app --browser   # or in the web browser
+```
+
+On Windows (Command Prompt), the same as two lines:
+
+```bat
+set PYTHONPATH=src
+.venv\Scripts\python -m letter_extractor.app
+```
+
+Stop the app by closing its window, or with Ctrl+C in the Terminal in browser mode. More about the app: [The app](#the-app-c5d).
+
 ## Install
 
 Python 3.10 or newer on Windows or macOS. Use a virtual environment:
@@ -13,15 +32,24 @@ Python 3.10 or newer on Windows or macOS. Use a virtual environment:
 ```
 python3 -m venv .venv                      (Windows: py -3 -m venv .venv)
 .venv/bin/pip install -r requirements.txt  (Windows: .venv\Scripts\pip install -r requirements.txt)
+cd frontend && npm install && cd ..        (for the app's screen; needs Node.js)
 ```
 
-The commands below use `python`; run them with `.venv/bin/python` (Windows: `.venv\Scripts\python`) or after activating the environment.
+The commands below use `python`; run them with `.venv/bin/python` (Windows: `.venv\Scripts\python`) or after activating the environment (`source .venv/bin/activate`, Windows: `.venv\Scripts\activate`). Many Macs have no `python` command outside the environment, only `python3`.
+
+`PYTHONPATH=src` tells Python where the code is. On macOS / Linux it goes in front of the command on the same line, or is set once per Terminal window with `export PYTHONPATH=src`. On Windows it is a line of its own before the command: `set PYTHONPATH=src`. (On macOS, `set PYTHONPATH=src python …` does not work: zsh's `set` runs nothing.)
 
 ## Use
 
 ```
-export PYTHONPATH=src          (macOS / Linux)          set PYTHONPATH=src          (Windows)
-python -m letter_extractor --input samples --output out --debug
+PYTHONPATH=src .venv/bin/python -m letter_extractor --input samples --output out --debug     (macOS / Linux)
+```
+
+On Windows, two lines:
+
+```bat
+set PYTHONPATH=src
+.venv\Scripts\python -m letter_extractor --input samples --output out --debug
 ```
 
 Options:
@@ -137,16 +165,18 @@ Build the screen once (and after every change in `frontend/`), then start the ap
 
 ```
 cd frontend && npm install && npm run build && cd ..
-python -m letter_extractor.app               # its own window
-python -m letter_extractor.app --browser     # or in the web browser
-python -m letter_extractor.app --library "/path/to/My Library"   # another library folder (remembered)
+PYTHONPATH=src .venv/bin/python -m letter_extractor.app               # its own window
+PYTHONPATH=src .venv/bin/python -m letter_extractor.app --browser     # or in the web browser
+PYTHONPATH=src .venv/bin/python -m letter_extractor.app --library "/path/to/My Library"   # another library folder (remembered)
 ```
+
+(Windows: `set PYTHONPATH=src` first, then `.venv\Scripts\python -m letter_extractor.app`.) The library is `Documents/Manuscript Letters` unless another one was chosen.
 
 The **Books** screen lists the books of the library and creates new ones (a name, the folder with the page images, and whether the book is **handwritten or printed**; this can be changed later in Pages & capture). A book's **Pages & capture** tab cuts the pages into letters with a progress bar, adds new pages later, cuts single pages again, and holds the book's settings.
 
 The **Review groups** tab is where the letters are sorted and labelled: the groups on the left (with filters such as *without label* or *possibly mixed*), the chosen group's samples on the right. Select samples (click, Ctrl/Cmd+click, Shift+click) and send them to **Unsure** (U), a **new group** (N), another group, or delete them; or drag them onto a group in the list. Label a group by typing in Gujarati or Devanagari, or with the on-screen letters; it is checked as you type. Unsure samples show a suggested group to accept with one click. Ctrl/Cmd+Z undoes, Shift+Ctrl/Cmd+Z redoes.
 
-**Label suggestions** (Phase 2, C12): the **Label suggestions** panel in the Review tab reads the book with Tesseract (for printed books; "Try Tesseract" on handwritten ones). Each group then shows a suggested label to **Accept**, **Change** or **Reject**, and **Accept N with ≥ 90 %** labels many groups in one undoable step. A group whose samples were read differently ("Read as: તા 29 · ના 25") is probably mixed: the filter **Mixed readings** lists these, a click on a reading selects its samples, and **New group** splits them off; samples read otherwise carry a small badge. Unsure samples on printed books show their reading in green, to accept with one click. **Checked against your labels** shows how often the suggestions agree with the labels given so far.
+**Label suggestions** (Phase 2, C12): the **Label suggestions** panel in the Review tab reads the book with Tesseract (for printed books; "Try Tesseract" on handwritten ones). Each group then shows a suggested label to **Accept**, **Change** or **Reject**, and **Accept N with ≥ 90 %** labels many groups in one undoable step. A group whose samples were read differently ("Read as: તા 29 · ના 25") is probably mixed: the filter **Mixed readings** lists these, a click on a reading selects its samples, and **New group** splits them off; samples read otherwise carry a small badge. Unsure samples on printed books show their reading in green, to accept with one click. **Checked against your labels** shows how often the suggestions agree with the labels given so far. On printed books, **Fix cuts with Tesseract** (in the same panel, after reading) splits samples that hold several letters and joins letters cut in pieces, where Tesseract's reading shows it and the new pieces look like letters of the book; conjuncts are never cut, locked groups are left alone, and one undo takes the whole fix back.
 
 The **Pages** tab shows a page with a box around every sample, to fix wrong cuts: **Draw a box** around ink that should be one letter (it becomes a new sample, and the samples it covers can be deleted), **Join** selected samples, **Split** a sample where you click, or **Upload letter image…** for a letter the cutting missed. New samples start in Unsure with a suggested group. Everything can be undone.
 

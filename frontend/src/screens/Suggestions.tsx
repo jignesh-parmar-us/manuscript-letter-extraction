@@ -1,7 +1,8 @@
 // Label suggestions in the Review tab (C12).
 // - SuggestPanel (in the side bar): read the book with Tesseract (a background job), accept all
 //   suggestions above a share in one undoable step, and see how the suggestions compare with the
-//   labels given so far.
+//   labels given so far. On printed books, "Fix cuts with Tesseract" splits samples that hold several
+//   letters and joins letters cut in pieces (C12b), as one undoable step.
 // - SuggestionChip (on a group): accept, change or reject its suggestion; or merge into the group
 //   that already has the suggested label.
 // - ReadingsLine (on a group): what its samples were read as; select the samples of one reading to
@@ -47,7 +48,7 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     },
     [onRead],
   );
-  const [job, setJob] = useJob(book.job?.kind === "suggest" ? book.job : null, onEnd);
+  const [job, setJob] = useJob(book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" ? book.job : null, onEnd);
   const run = book.ocr_runs?.find((r) => r.engine === "tesseract");
   const printed = book.writing === "printed";
 
@@ -64,6 +65,22 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     setError(null);
     try {
       setJob(await api.suggest(book.id));
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function fixCuts() {
+    const ok = await confirm(
+      "Split samples that hold several letters and join letters that were cut in pieces, where Tesseract's " +
+        "reading shows it and the new pieces look like letters of this book? The new samples go to Unsure with " +
+        "their readings. Undo takes all of it back in one step.",
+      "Fix cuts",
+    );
+    if (!ok) return;
+    setError(null);
+    try {
+      setJob(await api.fixCuts(book.id));
     } catch (e) {
       setError(e);
     }
@@ -113,15 +130,26 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
       {running && (
         <div className="small">
           <progress max={job!.total || 1} value={job!.done} />
-          Reading lines: {job!.done} of {job!.total}
+          {job!.kind === "fix_cuts" ? "Checking cuts" : "Reading lines"}: {job!.done} of {job!.total}
         </div>
       )}
       {job?.status === "failed" && <p className="small error-text">{job.error}</p>}
+      {job?.kind === "fix_cuts" && job.status === "done" && job.result && (
+        <p className="small">
+          Fixed cuts: {String(job.result.splits)} samples split, {String(job.result.joins)} joined;{" "}
+          {String(job.result.samples_new)} new samples are in Unsure with their readings. Undo takes it all back.
+        </p>
+      )}
       {run && !running && (
         <p className="small muted">
           Read {localTime(run.finished_at)}: {run.result.samples_matched} of {run.result.samples} letters,{" "}
           {run.result.groups_with_suggestion} groups with a suggestion.
         </p>
+      )}
+      {run && printed && (
+        <button disabled={running || !status?.ok} onClick={fixCuts} title="Split and join samples where Tesseract shows a wrong cut">
+          Fix cuts with Tesseract
+        </button>
       )}
       {run && (
         <div className="row small bulk-accept">

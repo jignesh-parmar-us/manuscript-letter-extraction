@@ -1,5 +1,5 @@
 """Long tasks in the background (C5c): capture a book, add new pages, cut one page again, export,
-read a book with Tesseract for label suggestions (C11).
+read a book with Tesseract for label suggestions (C11), fix cuts with its readings (C12b).
 
 A job runs in a background thread of the app; the page work itself runs in worker processes, as in
 the CLI (pipeline.process_folder). The screen polls the job for progress and can cancel it: the
@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -144,6 +144,17 @@ class Jobs:
                              .where(Page.book_id == book_id, Sample.deleted.is_(False))) or 0
         return self.start(book_id, "suggest", lambda progress, cancel:
                           run_tesseract(self.lib, book_id, progress, cancel, reader=reader), total=total)
+
+    def fix_cuts(self, book_id: int) -> Job:
+        """Split and join samples where Tesseract's readings show a wrong cut, as one action (C12b)."""
+        from sqlalchemy import func, select
+        from .db import Line, Page
+        from .recut import fix_cuts
+        with self.lib.session() as s:
+            total = s.scalar(select(func.count(Line.id)).join(Page, Line.page_id == Page.id)
+                             .where(Page.book_id == book_id)) or 0
+        return self.start(book_id, "fix_cuts",
+                          lambda progress, cancel: fix_cuts(self.lib, book_id, progress, cancel), total=total)
 
     def _images(self, book_id: int):
         from pathlib import Path

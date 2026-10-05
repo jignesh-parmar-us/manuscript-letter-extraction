@@ -42,6 +42,10 @@ class LineAlignment:
     matches: List[Match]
     spans: List[Optional[Span]]      # the aksharas' spans used for matching
     refused: bool = False            # too few samples matched: the line is not used
+    steps: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    # the alignment path: (first akshara, first sample, aksharas, samples) per step; (i, j, 0, 1) skips
+    # sample j, (i, j, 1, 0) skips akshara i, (i, j, 2, 1) puts 2 aksharas on sample j (C12b splits it),
+    # (i, j, 1, 2) puts akshara i over 2 samples (C12b joins them)
 
 
 def akshara_spans(aksharas: Sequence[Akshara], dx: int = 0) -> List[Optional[Span]]:
@@ -162,4 +166,4 @@ def align_line(aksharas: Sequence[Akshara], samples: Sequence[Span], dx: int = 0
                                  conf=min(a.conf for a in aks), overlap=round(o, 3),
                                  alternatives=[alt for a in aks for alt in a.alternatives]))
     refused = m > 0 and len(matches) < min_matched * m
-    return LineAlignment(matches=[] if refused else matches, spans=spans, refused=refused)
+    return LineAlignment(matches=[] if refused else matches, spans=spans, refused=refused, steps=steps)

@@ -119,6 +119,9 @@ class Config:
     suggest_min_share: float = 0.6        # ...and the winning reading this share of the weighted votes
     suggest_min_confidence: float = 80.0  # an unsure sample shows its own reading from this confidence
     bulk_accept_share: float = 0.9        # "Accept all" in the Review tab starts at this share (C12)
+    recut_window: float = 0.3             # fixing cuts (C12b): a cut may move this x a letter width from Tesseract's
+    recut_min_width: float = 0.45         # a new sample must be at least this x a letter width wide...
+    recut_min_group: int = 5              # ...and near the centre of a group with at least this many samples
 
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))

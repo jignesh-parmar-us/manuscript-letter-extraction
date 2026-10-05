@@ -73,3 +73,16 @@ Measured numbers behind the Phase 2 defaults (`docs/implementation_plan_phase2.m
 The plan's 70% is therefore not reached by splitting alone. Most of the rest are groups whose readings are spread over many texts, or where the ा bar splits the vote (C11); they are left to the person reviewing.
 
 **Screen check** (headless Chrome on a copy of the library): the suggestion chip, the badges on samples read otherwise (in g0009 they mark exactly the ना, मा and सा samples in a ता group), the readings of unsure samples, and the side panel.
+
+## C12b. Fixing cuts with Tesseract's readings (2026-10-05)
+
+**Setup:** a copy of the user's library, book 3 "Vachnamrut Printed 1933": 23 printed pages, 302 lines, 14,569 samples, 77 labelled groups, read with Tesseract (C11). Defaults: `recut_window` 0.3, `recut_min_width` 0.45, `recut_min_group` 5, `group_distance` 0.55.
+
+**How often the cuts are wrong:** 1,325 of the 10,917 samples with a reading (12%) were read as 2 or 3 aksharas (अम, ईक, तेउ, णते, केव, रूप, वच): several letters left in one sample.
+
+**Checking the new pieces:**
+- **Reading each piece again with Tesseract** (single character, `--psm 10`, or single word, `--psm 8`) was tried first: only 16 of 120 sampled splits passed, although most cuts were in the right place. Tesseract cannot read one letter cut out of its word (क came back as ">", "|", "h"). Dropped.
+- **By shape:** a piece is kept when its fingerprint is within `group_distance` of the centre of a group with ≥ 5 samples, and it is at least 0.45 x the line's median sample width. Of 1,384 split candidates, 874 passed before the width rule; by eye, about 9 of 12 random ones were right. The wrong ones cut a vowel bar off (क|ा) or cut through ॥: hence the width rule and splitting only samples of kind "letter".
+- **Joins:** a first version joined any 2 or 3 samples inside one akshara: 511 joins, of which about half joined two real letters (हत, श्वेत, नेर, अन्य), because Tesseract's box of an akshara often reaches into the next letter. Now only a letter-sized sample with narrow fragments is joined: 126 joins, by eye about 26 of 30 right (रा, जी, आ, मां, तां, वि, थि, अं, लि, श्री).
+
+**Result** (one run, 78 s): **725 samples split** into 1,460 new ones, **126 joined**, 706 candidates refused by the checks. For the new samples near a labelled group, their reading equals that group's label for 75% of the splits (481 of 638) and 70% of the joins (16 of 23), the same as for ordinary samples (C11: 75%), so the pieces behave like normal letters. The most common disagreements are look-alikes (ने / ते 29) and the ा bar (क / का 11).
