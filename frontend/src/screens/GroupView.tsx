@@ -28,6 +28,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
   // labelled groups first, in letter order, then the others by code (as the side bar's "by label")
+  const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading).map((s) => s.id);
   const others = sortGroups(ctx.groups.filter((g) => g.id !== group.id && g.kind === group.kind && g.samples > 0), "label");
 
   const onClick = (id: number, e: MouseEvent) =>
@@ -159,9 +160,17 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         <button className="danger" disabled={locked || !ids.length} onClick={remove} title="Delete">
           Delete
         </button>
+        <button
+          disabled={!withReading.length}
+          onClick={() => act(() => api.removeReadings(bookId, withReading)).then(() => setSelection(emptySelection()))}
+          title="The selected letters' readings are wrong: remove them (the letters stay in the group)"
+        >
+          Remove readings{withReading.length ? ` (${withReading.length})` : ""}
+        </button>
       </div>
 
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expectedReading(group)}
+        onRemoveReading={(s) => act(() => api.removeReadings(bookId, [s.id]))}
         onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
       />
       {samples.length < total && (

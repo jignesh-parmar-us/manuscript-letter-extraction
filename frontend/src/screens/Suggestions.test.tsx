@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -170,7 +170,26 @@ describe("suggestions on a group", () => {
     await userEvent.click(within(chip).getByRole("button", { name: "Reject" }));
     expect(api.rejectSuggestion).toHaveBeenCalledWith(1, 5, "क");
     await findTiles();
-    expect(screen.getAllByTitle(/^Read as/).map((b) => b.textContent)).toEqual(["બ"]);   // only the one read otherwise
+    expect(screen.getAllByTitle(/^Read as/).map((b) => b.textContent)).toEqual(["બ×"]);  // only the one read otherwise
+  });
+
+  it("removes a wrong reading from its badge, or from the selected letters", async () => {
+    vi.mocked(api.removeReadings).mockResolvedValue(ok);
+    renderView((ctx) => <GroupView group={group({ suggestion: sug() })} ctx={ctx} />);
+    const tiles = await findTiles();
+    await userEvent.click(screen.getByRole("button", { name: "Remove the reading બ" }));
+    expect(api.removeReadings).toHaveBeenCalledWith(1, [2]);
+    expect(screen.queryByText("1 selected")).toBeNull();                         // the click did not select
+    const bulk = screen.getByRole("button", { name: /^Remove readings/ });
+    expect(bulk).toBeDisabled();
+    const user = userEvent.setup();                                               // one session: Shift stays held
+    await user.click(tiles[0]);
+    await user.keyboard("{Shift>}");
+    await user.click(tiles[2]);
+    await user.keyboard("{/Shift}");
+    expect(bulk).toHaveTextContent("Remove readings (2)");                        // letters 1 and 2 have readings
+    await userEvent.click(bulk);
+    expect(api.removeReadings).toHaveBeenLastCalledWith(1, [1, 2]);
   });
 
   it("offers a merge when another group has the label, and fills the picker on Change", async () => {

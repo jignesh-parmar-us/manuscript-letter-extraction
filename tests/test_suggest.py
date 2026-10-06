@@ -302,5 +302,57 @@ class ReviewActionTests(SuggestTestCase):
         self.assertEqual(acc["wrong"][0]["suggested"], {"क": "ક", "ख": "ખ"}.get(self.letter[b], acc["wrong"][0]["suggested"]))
 
 
+
+class RemoveReadingTests(SuggestTestCase):
+    """A reading the user says is wrong is removed: no badge, no vote; undo puts it back."""
+
+    def readings_of(self, ids):
+        with self.lib.session() as s:
+            return dict(s.execute(select(OcrReading.sample_id, OcrReading.text_dev)
+                                  .where(OcrReading.sample_id.in_(list(ids)))).all())
+
+    def test_remove_undo_redo(self):
+        # by position, not by id: the synthetic book's two pages are identical images
+        gid = self.big_groups()[0]
+        with self.lib.session() as s:
+            members = s.scalars(select(Sample).where(Sample.group_id == gid)).all()
+            pos = members[0].pos
+            wrong = {x.id for x in members if x.pos == pos}
+        self.run_fake(text_of=lambda smp: "ब" if smp.group_id == gid and smp.pos == pos else self.text_of(smp))
+        self.assertIn("ब", {r["label_dev"] for r in self.ocr([gid])[gid]["readings"]})
+        r = actions.remove_readings(self.lib, self.book, sorted(wrong))
+        self.assertEqual(r["samples"], len(wrong))
+        self.assertEqual(self.readings_of(wrong), {})
+        self.assertNotIn("ब", {r["label_dev"] for r in self.ocr([gid])[gid]["readings"]})
+        with self.lib.session() as s:
+            self.assertEqual({s.get(Sample, i).group_id for i in wrong}, {gid})     # the letters stay
+        actions.undo(self.lib, self.book)
+        self.assertEqual(set(self.readings_of(wrong).values()), {"ब"})
+        actions.redo(self.lib, self.book)
+        self.assertEqual(self.readings_of(wrong), {})
+
+    def test_nothing_to_remove(self):
+        with self.assertRaises(actions.ActionError):
+            actions.remove_readings(self.lib, self.book, [1])                      # no run yet
+        self.run_fake()
+        with self.assertRaises(actions.ActionError):
+            actions.remove_readings(self.lib, self.book, [])
+        with self.lib.session() as s:
+            sid = s.scalar(select(Sample.id).where(Sample.book_id == self.book))
+            s.query(OcrReading).filter(OcrReading.sample_id == sid).delete()
+        with self.assertRaises(actions.ActionError):
+            actions.remove_readings(self.lib, self.book, [sid])
+
+    def test_undo_after_reading_again_is_harmless(self):
+        self.run_fake()
+        gid = self.big_groups()[0]
+        with self.lib.session() as s:
+            sid = s.scalar(select(Sample.id).where(Sample.group_id == gid))
+        actions.remove_readings(self.lib, self.book, [sid])
+        self.run_fake()                                                            # a new run replaces the old
+        actions.undo(self.lib, self.book)                                          # the old run is gone: nothing to put back
+        self.assertEqual(len(self.readings_of([sid])), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

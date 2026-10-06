@@ -68,6 +68,10 @@ class RejectSuggestion(GroupRef):
     label_dev: str
 
 
+class RemoveReadings(SampleIds):
+    engine: Optional[Literal["tesseract", "books"]] = None   # None: the book's main reader
+
+
 class LabelSamples(SampleIds):
     text: str                                     # Devanagari or Gujarati
 

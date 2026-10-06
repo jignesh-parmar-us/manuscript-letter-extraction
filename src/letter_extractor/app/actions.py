@@ -18,6 +18,7 @@ Actions:
 - `reject_suggestion`  the group stops getting that suggested label (C12)
 - `label_samples`  samples to the group with a label, or to a new group that gets it (C12)
 - `split_mixed`    letters of a group read as another letter, with another shape, to new groups (C12d)
+- `remove_readings`  the readings of samples the user says are wrong; undo puts them back
 
 Locked groups refuse every change except unlocking.
 """
@@ -325,6 +326,51 @@ def label_samples(lib: Library, book_id: int, sample_ids: Iterable[int], text: s
         return _result(a, group_id=target.id)
 
 
+def remove_readings(lib: Library, book_id: int, sample_ids: Iterable[int], engine: Optional[str] = None) -> Dict:
+    """Remove the readings of these samples by one reader (by default the book's main one), because
+    the user says they are wrong: the samples stay where they are, but their readings no longer show
+    as badges or count in their group's vote. The removed rows are kept in the action, so undo puts
+    them back and redo removes them again."""
+    from .db import OcrReading
+    from .suggest import _engine, _run_id
+    ids = list(dict.fromkeys(int(i) for i in sample_ids))
+    if not ids:
+        raise ActionError("No samples selected.")
+    with lib.session() as s:
+        book = s.get(Book, book_id)
+        engine = _engine(s, book, engine)
+        run_id = _run_id(s, book_id, engine) if engine else None
+        if run_id is None:
+            raise ActionError("This book has no readings.")
+        rows = s.scalars(select(OcrReading).where(OcrReading.run_id == run_id, OcrReading.sample_id.in_(ids))).all()
+        if not rows:
+            raise ActionError("These samples have no reading to remove.")
+        removed = [{"run_id": r.run_id, "sample_id": r.sample_id, "text_dev": r.text_dev,
+                    "confidence": r.confidence, "alternatives": r.alternatives, "overlap": r.overlap} for r in rows]
+        for r in rows:
+            s.delete(r)
+        ch = _Change(s, book_id)
+        a = ch.finish("remove_readings", {"samples": len(removed), "engine": engine})
+        payload = json.loads(a.payload)
+        payload["readings_removed"] = removed
+        a.payload = json.dumps(payload, ensure_ascii=False)
+        return _result(a)
+
+
+def _readings_back(s: Session, data: Dict, restore: bool) -> None:
+    """Undo (restore) or redo (remove again) the readings an action removed; a run read again since
+    then is left alone."""
+    from .db import OcrReading, OcrRun
+    for r in data.get("readings_removed", []):
+        if s.get(OcrRun, r["run_id"]) is None:
+            continue
+        if restore:
+            s.add(OcrReading(**r))
+        else:
+            s.execute(delete(OcrReading).where(OcrReading.run_id == r["run_id"],
+                                               OcrReading.sample_id == r["sample_id"]))
+
+
 def split_mixed(lib: Library, book_id: int, engine: Optional[str] = None) -> Dict:
     """Split mixed groups by their readings where the shapes agree (suggest.mixed_splits): each set
     of letters read as another letter goes to a new group of its own (unlabelled: it gets its own
@@ -392,6 +438,7 @@ def undo(lib: Library, book_id: int) -> Dict:
             raise ActionError("Nothing to undo.")
         data = json.loads(a.payload)
         _apply(s, data["groups_before"], data["samples_before"])
+        _readings_back(s, data, restore=True)
         a.undone = True
         s.get(Book, book_id).updated_at = now()
         return {"undone": a.kind, **data["summary"]}
@@ -405,6 +452,7 @@ def redo(lib: Library, book_id: int) -> Dict:
             raise ActionError("Nothing to redo.")
         data = json.loads(a.payload)
         _apply(s, data["groups_after"], data["samples_after"])
+        _readings_back(s, data, restore=False)
         a.undone = False
         s.get(Book, book_id).updated_at = now()
         return {"redone": a.kind, **data["summary"]}

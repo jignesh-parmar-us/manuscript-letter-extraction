@@ -18,7 +18,7 @@ Routes (all JSON unless noted):
              /api/groups/{id}/samples, /api/books/{id}/unsure, /api/samples/{id}
   actions    POST /api/books/{id}/actions/{move|new-group|merge|dissolve|label|status|delete|restore},
              POST /api/books/{id}/actions/{accept-suggestions|reject-suggestion|label-samples} (C12),
-             POST /api/books/{id}/actions/split-mixed (C12d),
+             POST /api/books/{id}/actions/split-mixed (C12d), /actions/remove-readings (wrong readings),
              POST /api/books/{id}/undo | /redo, GET /api/books/{id}/history
   labels     GET /api/label?text=...&book_id=...   (with a book: `used_by`, the groups with that label)
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
@@ -51,8 +51,8 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion, SampleIds, Split,
-                      Status, SuggestRequest, Upload)
+                      GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
+                      RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
                       suggestion_accuracy)
 
@@ -372,6 +372,10 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def a_split_mixed(book_id: int) -> Dict:
         library.get_book(book_id)
         return after(book_id, actions.split_mixed(library, book_id))
+
+    @app.post("/api/books/{book_id}/actions/remove-readings", dependencies=auth)
+    def a_remove_readings(book_id: int, body: RemoveReadings) -> Dict:
+        return after(book_id, actions.remove_readings(library, book_id, body.sample_ids, body.engine))
 
     @app.post("/api/books/{book_id}/actions/label-samples", dependencies=auth)
     def a_label_samples(book_id: int, body: LabelSamples) -> Dict:

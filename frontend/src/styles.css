@@ -576,6 +576,24 @@ table.list.compact {
   background: var(--warn);
   color: var(--panel);
 }
+button.reading-badge.removable {
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.reading-badge .remove-x {
+  display: none;
+  font-weight: 700;
+}
+.tile:hover .reading-badge .remove-x,
+.reading-badge:focus-visible .remove-x {
+  display: inline;
+}
+button.reading-badge.removable:hover {
+  background: var(--danger);
+}
 .reading-chip {
   background: var(--panel);
   border: 1px solid var(--ok);
