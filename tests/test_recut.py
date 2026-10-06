@@ -13,7 +13,12 @@ import appbook                                                                  
 from letter_extractor.app import actions, samples as manual                     # noqa: E402
 from letter_extractor.app.db import LetterGroup, Line, OcrReading, OcrRun, Sample, now   # noqa: E402
 from letter_extractor.app.library import LibraryError                           # noqa: E402
-from letter_extractor.app.recut import best_cut, fix_cuts                        # noqa: E402
+from letter_extractor.app.recut import best_cut, fix_cuts, left_bar, plan_line   # noqa: E402
+from letter_extractor.config import Config                                       # noqa: E402
+from letter_extractor.mapping import load_mapping                               # noqa: E402
+from letter_extractor.ocr.aksharas import Akshara                               # noqa: E402
+from letter_extractor.ocr.tesseract import Char                                 # noqa: E402
+from types import SimpleNamespace                                               # noqa: E402
 from sqlalchemy import func, select                                             # noqa: E402
 
 BORDER = 10        # read_line adds this border; hOCR boxes are in the bordered image
@@ -190,6 +195,106 @@ class BestCutTests(unittest.TestCase):
 
     def test_no_room(self):
         self.assertIsNone(best_cut(np.ones((10, 1), bool), 0, 0))
+
+
+
+def letter(width=40, height=50, stem=True):
+    """A letter-like mask: headline, a body, and a stem on the right."""
+    m = np.zeros((height, width), bool)
+    m[4:7, :] = True
+    m[16:30, 4:width - 8] = True                         # a body in the middle rows, not a full-height stroke
+    if stem:
+        m[4:46, width - 8:width - 3] = True
+    return m
+
+
+def bar(height=50, width=7):
+    m = np.zeros((height, width), bool)
+    m[4:7, :] = True
+    m[4:46, 1:6] = True
+    return m
+
+
+class LeftBarTests(unittest.TestCase):
+    def test_bar_then_letter(self):
+        m = np.concatenate([bar(), np.zeros((50, 4), bool), letter()], axis=1)
+        m[4:7, :] = True                                     # one headline over both
+        cut = left_bar(m, 40)
+        self.assertIsNotNone(cut)
+        self.assertTrue(6 <= cut <= 12, cut)
+
+    def test_a_lone_bar(self):
+        self.assertEqual(left_bar(bar(), 40), 7)
+
+    def test_a_letter_does_not_start_with_a_bar(self):
+        self.assertIsNone(left_bar(letter(), 40))
+
+
+class AnyShape:
+    def distance(self, mask, spacing):
+        return 0.0
+
+
+class BarMoveTests(unittest.TestCase):
+    """अ | ावे: Phase 1 joined the bar of आ to the next letter; Tesseract reads आ, then वे."""
+
+    def plan(self, next_mask, readings):
+        cur = SimpleNamespace(id=1, x=100, y=10, w=40, h=50, kind="letter", page_id=1)
+        nxt = SimpleNamespace(id=2, x=140, y=10, w=next_mask.shape[1], h=50, kind="letter", page_id=1)
+        others = [SimpleNamespace(id=3 + k, x=140 + next_mask.shape[1] + 40 * k, y=10, w=40, h=50, kind="letter",
+                                  page_id=1) for k in range(3)]
+        smps = [cur, nxt] + others
+        masks = {1: letter(), 2: next_mask, **{o.id: letter() for o in others}}
+        aks = [Akshara(t, (x0, 0, x1 - x0, 40), 95.0, chars=[Char(t, (x0, 0, x1 - x0, 40), 95.0)])
+               for t, x0, x1 in readings(cur, nxt, others)]
+        return plan_line(aks, smps, lambda smp: masks[smp.id], 0, Config(), AnyShape(), 70.0, load_mapping())
+
+    def test_the_bar_moves_to_the_letter_before_it(self):
+        nm = np.concatenate([bar(), np.zeros((50, 4), bool), letter()], axis=1)
+        nm[4:7, :] = True
+        changes, _ = self.plan(nm, lambda c, n, o: [("आ", 98, 138), ("वे", 150, 192)] +
+                               [("क", x.x, x.x + 40) for x in o])
+        self.assertEqual([c.kind for c in changes], ["bar"])
+        first, rest = changes[0].pieces
+        self.assertEqual((first.text, rest.text), ("आ", "वे"))
+        self.assertGreaterEqual(first.box[2], 46)                           # the letter and its bar
+        self.assertGreaterEqual(rest.box[0], 146)                           # the next letter without its bar
+
+    def test_a_lone_bar_is_joined(self):
+        changes, _ = self.plan(bar(), lambda c, n, o: [("ता", 100, 140)] + [("क", x.x, x.x + 40) for x in o])
+        self.assertEqual([c.kind for c in changes], ["bar"])
+        self.assertEqual(len(changes[0].pieces), 1)
+        self.assertEqual(changes[0].pieces[0].text, "ता")
+
+    def test_no_move_when_the_next_letter_has_an_i_sign(self):
+        nm = np.concatenate([bar(), np.zeros((50, 4), bool), letter()], axis=1)
+        changes, _ = self.plan(nm, lambda c, n, o: [("ता", 100, 140), ("कि", 140, 192)] +
+                               [("क", x.x, x.x + 40) for x in o])
+        self.assertEqual(changes, [])
+
+    def test_no_move_when_the_reading_has_no_bar(self):
+        nm = np.concatenate([bar(), np.zeros((50, 4), bool), letter()], axis=1)
+        changes, _ = self.plan(nm, lambda c, n, o: [("त", 100, 140), ("वे", 150, 192)] +
+                               [("क", x.x, x.x + 40) for x in o])
+        self.assertEqual(changes, [])
+
+
+class PlacementTests(RecutTestCase):
+    def test_pieces_go_into_the_labelled_group_of_their_reading(self):
+        a, b, span_a, span_b = self.big_neighbours()
+        with self.lib.session() as s:
+            ga, gb = s.get(Sample, a).group_id, s.get(Sample, b).group_id
+        actions.set_label(self.lib, self.book, ga, "क")
+        actions.set_label(self.lib, self.book, gb, "ख")
+        joined = manual.join_samples(self.lib, self.book, [a, b])["sample"]["id"]
+        self.write_readings(lambda line, smps: [t for x in smps for t in (
+            [("क", *span_a), ("ख", *span_b)] if x.id == joined else [(self.letter_of(x), x.x, x.x + x.w)])])
+        r = fix_cuts(self.lib, self.book)
+        self.assertGreaterEqual(r["placed"], 2)
+        with self.lib.session() as s:
+            new = s.scalars(select(Sample).where(Sample.source == "ocr-split", Sample.deleted.is_(False))
+                            .order_by(Sample.x)).all()
+            self.assertEqual([x.group_id for x in new], [ga, gb])
 
 
 if __name__ == "__main__":

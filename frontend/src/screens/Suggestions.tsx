@@ -72,9 +72,10 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
 
   async function fixCuts() {
     const ok = await confirm(
-      "Split samples that hold several letters and join letters that were cut in pieces, where Tesseract's " +
-        "reading shows it and the new pieces look like letters of this book? The new samples go to Unsure with " +
-        "their readings. Undo takes all of it back in one step.",
+      "Split samples that hold several letters, put vowel bars (ा ो ौ) back on their letter, and join letters " +
+        "cut in pieces, where Tesseract's reading shows it and the new pieces look like letters of this book? " +
+        "Each fixed letter goes into the group with its reading's label (or a new group with that label, " +
+        "marked not reviewed); the rest go to Unsure. Undo takes all of it back in one step.",
       "Fix cuts",
     );
     if (!ok) return;
@@ -136,8 +137,13 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
       {job?.status === "failed" && <p className="small error-text">{job.error}</p>}
       {job?.kind === "fix_cuts" && job.status === "done" && job.result && (
         <p className="small">
-          Fixed cuts: {String(job.result.splits)} samples split, {String(job.result.joins)} joined;{" "}
-          {String(job.result.samples_new)} new samples are in Unsure with their readings. Undo takes it all back.
+          Fixed cuts: {String(job.result.splits)} split, {String(job.result.bars)} vowel bars put back,{" "}
+          {String(job.result.joins)} joined. {String(job.result.placed)} of {String(job.result.samples_new)} new
+          samples went into groups by their reading
+          {Array.isArray(job.result.new_groups) && job.result.new_groups.length > 0
+            ? ` (${job.result.new_groups.length} new groups, not reviewed yet)`
+            : ""}
+          ; the rest are in Unsure. Undo takes it all back.
         </p>
       )}
       {run && !running && (
