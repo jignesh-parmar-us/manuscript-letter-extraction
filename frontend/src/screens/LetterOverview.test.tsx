@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import LetterOverview, { CONSONANTS, missingCount, otherLabelled, SIGNS, VOWELS } from "./LetterOverview";
+import LetterOverview, { CONSONANTS, missingCount, otherLabelled, rowsOf, SIGNS, VOWELS } from "./LetterOverview";
 import { group, renderView } from "./reviewTestUtils";
 
 const sug = (label_dev: string) => ({ label_dev, label_guj: "", share: 0.9, count: 9, read: 10, engine: "tesseract" as const,
@@ -17,6 +17,19 @@ const groups = [
 ];
 
 describe("LetterOverview", () => {
+  it("adds rows with rakar (and the bottom churn) and with reph", () => {
+    const heads = (extras: Parameters<typeof rowsOf>[0]) => rowsOf(extras).map((r) => r.head);
+    expect(heads([]).length).toBe(1 + CONSONANTS.length);
+    const rakar = rowsOf(["rakar"]).filter((r) => r.section.startsWith("With rakar"));
+    expect(rakar.map((r) => r.head)).toContain("ट्र");                          // the bottom churn
+    expect(rakar.find((r) => r.head === "प्र")!.letters.slice(0, 3)).toEqual(["प्र", "प्रा", "प्रि"]);
+    expect(rakar.map((r) => r.head)).not.toContain("र्र");
+    const reph = rowsOf(["reph"]).filter((r) => r.section.startsWith("With reph"));
+    expect(reph.find((r) => r.head === "र्क")!.letters[2]).toBe("र्कि");
+    expect(reph.length).toBe(CONSONANTS.length - 1);
+  });
+
+
   it("counts the letters without a labelled group", () => {
     const total = VOWELS.length + CONSONANTS.length * SIGNS.length;
     expect(missingCount(groups)).toBe(total - 3);                     // क, कि and अ have groups
@@ -36,8 +49,8 @@ describe("LetterOverview", () => {
 
   it("lists the labelled groups that are not letters of the table", async () => {
     window.location.hash = "";
-    expect(otherLabelled(groups, false).map((g) => g.label_dev)).toEqual(["कं", "क्ष", "रहे"]);
-    expect(otherLabelled(groups, true).map((g) => g.label_dev)).toEqual(["कं", "रहे"]);   // क्ष is in the table now
+    expect(otherLabelled(groups).map((g) => g.label_dev)).toEqual(["कं", "क्ष", "रहे"]);
+    expect(otherLabelled(groups, ["conjuncts"]).map((g) => g.label_dev)).toEqual(["कं", "रहे"]);   // क्ष is in the table now
     renderView((ctx) => <LetterOverview ctx={ctx} />, groups);
     const others = screen.getByLabelText("Other labelled groups");
     expect(within(others).getAllByRole("button").map((b) => b.textContent)).toEqual(["કં4", "ક્ષ5", "રહે8"]);
@@ -49,12 +62,12 @@ describe("LetterOverview", () => {
     renderView((ctx) => <LetterOverview ctx={ctx} />, groups);
     const table = () => screen.getByRole("table", { name: "Letters and their groups" });
     expect(within(table()).queryByTitle(/^ક્ષ \(क्ष\)/)).toBeNull();
-    await userEvent.click(screen.getByRole("checkbox", { name: /Include the conjuncts/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /^Conjuncts/ }));
     expect(within(table()).getByTitle(/^ક્ષ \(क्ष\): 5 letters/)).toBeInTheDocument();
     const rowsBefore = within(table()).getAllByRole("row").length;
     await userEvent.click(screen.getByRole("checkbox", { name: /Hide rows with no group yet/ }));
     const left = within(table()).getAllByRole("row").map((r) => r.querySelector("th")?.textContent);
-    expect(left).toEqual(["", "vowels", "ક", "ન", "ક્ષ"]);                 // header, then rows with something
+    expect(left).toEqual(["", "vowels", "ક", "ન", "Conjuncts", "ક્ષ"]);   // header, rows with something, a section
     expect(rowsBefore).toBeGreaterThan(left.length);
     expect(screen.getByRole("checkbox", { name: /hidden\)/ })).toBeChecked();
   });

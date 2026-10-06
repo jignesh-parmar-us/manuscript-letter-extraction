@@ -7,13 +7,16 @@
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
 //   Split    click inside the selected sample where it should be cut in two
 // Boxes are coloured by group; unsure samples have a dashed grey box.
+// The selection panel sits below the page and stays at the bottom of the window, so the page does not
+// move when it opens or closes; after a change (delete, join, split, move, label, new box) a dashed
+// marker stays on that spot until the next click, so the place is easy to find again.
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
 import { go } from "../route";
-import { sortGroups } from "./Review";
+import GroupPicker, { MoveTarget } from "./GroupPicker";
 
 type Mode = "select" | "draw" | "split";
 type Box = [number, number, number, number];
@@ -41,7 +44,8 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const [drawing, setDrawing] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [message, setMessage] = useState<string>("");
   const [offer, setOffer] = useState<number[]>([]);
-  const [moveTo, setMoveTo] = useState("");
+  const [picking, setPicking] = useState(false); // the "Move to…" picker is open
+  const [lastSpot, setLastSpot] = useState<Box | null>(null); // where the last change was
   const [focusId, setFocusId] = useState<number | null>(null); // the sample with the ring
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
@@ -68,6 +72,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     setOffer([]);
     setMessage("");
     setFocusId(null);
+    setLastSpot(null);
   }, [pageId]);
   // Opened for one sample: select it and bring it to the middle of the view, once.
   useEffect(() => {
@@ -109,9 +114,21 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     return [Math.round((e.clientX - rect.left) * scale), Math.round((e.clientY - rect.top) * scale)];
   }
 
+  /** The box around these samples (page coordinates). */
+  function around(ids: Iterable<number>): Box | null {
+    const boxes = (page?.samples ?? []).filter((x) => new Set(ids).has(x.id)).map((x) => x.box);
+    if (!boxes.length) return null;
+    const x0 = Math.min(...boxes.map((b) => b[0]));
+    const y0 = Math.min(...boxes.map((b) => b[1]));
+    const x1 = Math.max(...boxes.map((b) => b[0] + b[2]));
+    const y1 = Math.max(...boxes.map((b) => b[1] + b[3]));
+    return [x0, y0, x1 - x0, y1 - y0];
+  }
+
   function clickBox(s: Sample, e: MouseEvent) {
     e.stopPropagation();
     setFocusId(null);
+    setLastSpot(null);
     if (mode === "split") {
       if (selected.size === 1 && selected.has(s.id)) split(s, toPage(e)[0]);
       return;
@@ -124,6 +141,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   }
 
   async function split(s: Sample, x: number) {
+    setLastSpot(s.box);
     const r = await act(() => api.split(book.id, s.id, x));
     if (r) {
       setSelected(new Set());
@@ -151,6 +169,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
       Math.abs(drawing.y1 - drawing.y0),
     ];
     setDrawing(null);
+    setLastSpot(box);
     const r = await act(() => api.crop(book.id, page.id, box));
     if (r) {
       setOffer(r.overlapping ?? []);
@@ -169,6 +188,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
 
   async function removeSelected() {
     if (await confirm(`Delete ${selected.size} sample(s)? Deleted samples can be restored.`, "Delete")) {
+      setLastSpot(around(selected));
       await act(() => api.deleteSamples(book.id, [...selected]));
       setSelected(new Set());
     }
@@ -177,9 +197,9 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   /** Put the selected samples in a group (null: Unsure), or in a new group of their own. */
   async function regroup(groupId: number | null | "new") {
     const ids = [...selected];
+    setLastSpot(around(ids));
     const r = await act(() => (groupId === "new" ? api.newGroup(book.id, ids) : api.move(book.id, ids, groupId)));
     if (r) {
-      setMoveTo("");
       const g = groupId === "new" ? null : groupId === null ? null : groups.get(groupId);
       setMessage(
         groupId === "new"
@@ -196,6 +216,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
    *  a locked group has it, nothing is done (the picker says so). */
   async function labelSelected(text: string): Promise<boolean> {
     const ids = [...selected];
+    setLastSpot(around(ids));
     const info = await api.checkLabel(text, book.id).catch((e) => {
       setError(e);
       return null;
@@ -218,19 +239,26 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     return true;
   }
 
+  /** From the "Move to…" picker: into a group, or under a label (its group, or a new one). */
+  async function moveTo(target: MoveTarget) {
+    setPicking(false);
+    const ids = [...selected];
+    if ("groupId" in target) return regroup(target.groupId);
+    setLastSpot(around(ids));
+    if (await act(() => api.labelSamples(book.id, ids, target.label)))
+      setMessage(`${ids.length} sample(s) put under the label ${target.label}.`);
+  }
+
   const sel = page?.samples.filter((s) => selected.has(s.id)) ?? [];
-  // Groups to move into, by label as everywhere: labelled ones first in letter order, then the
-  // others by code. Locked groups refuse changes, so they are left out.
-  const targets = sortGroups(
-    [...groups.values()].filter((g) => !g.locked && (g.samples > 0 || g.label_dev)),
-    "label",
-  );
   const single = sel.length === 1 ? sel[0] : null;
   const singleGroup = single?.group_id ? groups.get(single.group_id) : undefined;
 
   return (
     <div className="review">
       {dialog}
+      {picking && (
+        <GroupPicker groups={[...groups.values()]} count={selected.size} onPick={moveTo} onClose={() => setPicking(false)} />
+      )}
       <aside className="sidebar">
         <label className="button">
           Upload letter image…
@@ -268,7 +296,13 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                   </button>
                 ))}
               </div>
-              <button disabled={sel.length < 2} onClick={() => act(() => api.join(book.id, [...selected])).then((r) => r?.sample && setSelected(new Set([r.sample.id])))}>
+              <button
+                disabled={sel.length < 2}
+                onClick={() => {
+                  setLastSpot(around(selected));
+                  act(() => api.join(book.id, [...selected])).then((r) => r?.sample && setSelected(new Set([r.sample.id])));
+                }}
+              >
                 Join ({sel.length})
               </button>
               <button className="danger" disabled={sel.length === 0} onClick={removeSelected}>
@@ -292,66 +326,6 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                   : "Click a box to select it; Shift or Ctrl/Cmd+click to select more."}{" "}
               {message}
             </p>
-            {offer.length > 0 && (
-              <div className="card subtle row">
-                <span className="small">The new sample overlaps {offer.length} sample(s).</span>
-                <button
-                  onClick={async () => {
-                    await act(() => api.deleteSamples(book.id, offer));
-                    setOffer([]);
-                  }}
-                >
-                  Delete them
-                </button>
-                <button onClick={() => setOffer([])}>Keep them</button>
-              </div>
-            )}
-            {sel.length > 0 && (
-              <div className="card row" aria-label="Selected samples">
-                {sel.slice(0, 8).map((s) => (
-                  <img key={s.id} src={s.image} alt={`selected sample ${s.id}`} className="selected-sample" />
-                ))}
-                {sel.length > 8 && <span className="muted small">+{sel.length - 8}</span>}
-                {single ? (
-                  <span className="small">
-                    {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line} ·{" "}
-                    {singleGroup ? `group ${singleGroup.label_guj || singleGroup.code}` : "unsure"}
-                  </span>
-                ) : (
-                  <span className="small">{sel.length} selected</span>
-                )}
-                {singleGroup && (
-                  <button onClick={() => go(`/books/${book.id}/review/${singleGroup.id}`)}>Open group</button>
-                )}
-                <select aria-label="Move selected to group" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-                  <option value="">Move to group…</option>
-                  {targets.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.label_guj ? `${g.label_guj} (${g.code})` : g.code} · {g.samples}
-                    </option>
-                  ))}
-                </select>
-                <button disabled={!moveTo} onClick={() => regroup(Number(moveTo))}>
-                  Move
-                </button>
-                <button onClick={() => regroup("new")}>New group</button>
-                <button disabled={sel.every((s) => s.group_id === null)} onClick={() => regroup(null)}>
-                  To Unsure
-                </button>
-                <div className="selected-label" title="Moves the selected samples to the group with this label, or to a new group with it">
-                  <LabelPicker
-                    bookId={book.id}
-                    current={{
-                      dev: singleGroup?.label_dev ?? "",
-                      guj: singleGroup?.label_guj ?? "",
-                    }}
-                    saveText={`Label ${sel.length === 1 ? "it" : `these ${sel.length}`}`}
-                    canClear={false}
-                    onSave={labelSelected}
-                  />
-                </div>
-              </div>
-            )}
             <div className="page-scroll" ref={scrollRef}>
             <div className="page-canvas" style={{ width: page.width * zoom, height: page.height * zoom }}>
               <img
@@ -385,6 +359,19 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                     <title>{s.group_id ? groups.get(s.group_id)?.label_guj || groups.get(s.group_id)?.code : "unsure"}</title>
                   </rect>
                 ))}
+                {lastSpot && (
+                  <rect
+                    className="last-spot"
+                    data-testid="last-spot"
+                    x={lastSpot[0] - 8}
+                    y={lastSpot[1] - 8}
+                    width={lastSpot[2] + 16}
+                    height={lastSpot[3] + 16}
+                    rx={8}
+                  >
+                    <title>The last change was here</title>
+                  </rect>
+                )}
                 {(() => {
                   const f = focusId !== null ? page.samples.find((x) => x.id === focusId) : undefined;
                   if (!f) return null;
@@ -414,6 +401,62 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
               </svg>
             </div>
             </div>
+            {(offer.length > 0 || sel.length > 0) && (
+              <div className="selection-dock" aria-label="Selection">
+            {offer.length > 0 && (
+              <div className="card subtle row">
+                <span className="small">The new sample overlaps {offer.length} sample(s).</span>
+                <button
+                  onClick={async () => {
+                    await act(() => api.deleteSamples(book.id, offer));
+                    setOffer([]);
+                  }}
+                >
+                  Delete them
+                </button>
+                <button onClick={() => setOffer([])}>Keep them</button>
+              </div>
+            )}
+            {sel.length > 0 && (
+              <div className="card row" aria-label="Selected samples">
+                {sel.slice(0, 8).map((s) => (
+                  <img key={s.id} src={s.image} alt={`selected sample ${s.id}`} className="selected-sample" />
+                ))}
+                {sel.length > 8 && <span className="muted small">+{sel.length - 8}</span>}
+                {single ? (
+                  <span className="small">
+                    {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line} ·{" "}
+                    {singleGroup ? `group ${singleGroup.label_guj || singleGroup.code}` : "unsure"}
+                  </span>
+                ) : (
+                  <span className="small">{sel.length} selected</span>
+                )}
+                {singleGroup && (
+                  <button onClick={() => go(`/books/${book.id}/review/${singleGroup.id}`)}>Open group</button>
+                )}
+                <button onClick={() => setPicking(true)} title="Move to a letter's group or another group">
+                  Move to…
+                </button>
+                <button onClick={() => regroup("new")}>New group</button>
+                <button disabled={sel.every((s) => s.group_id === null)} onClick={() => regroup(null)}>
+                  To Unsure
+                </button>
+                <div className="selected-label" title="Moves the selected samples to the group with this label, or to a new group with it">
+                  <LabelPicker
+                    bookId={book.id}
+                    current={{
+                      dev: singleGroup?.label_dev ?? "",
+                      guj: singleGroup?.label_guj ?? "",
+                    }}
+                    saveText={`Label ${sel.length === 1 ? "it" : `these ${sel.length}`}`}
+                    canClear={false}
+                    onSave={labelSelected}
+                  />
+                </div>
+              </div>
+            )}
+              </div>
+            )}
           </>
         )}
       </div>

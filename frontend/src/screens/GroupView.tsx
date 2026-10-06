@@ -1,6 +1,7 @@
 // One group: its label, status and samples (nearest to the group's centre first).
 // Select samples and move them out (to Unsure, another group, a new group) or delete them;
-// label the group; mark it reviewed or lock it; merge another group into it; dissolve it.
+// label the group; mark it reviewed or lock it; merge another group into it (chosen in the letter
+// table, GroupPicker.tsx); dissolve it.
 // Keys: U = selected to Unsure, N = new group from selection, Delete = delete selection,
 //       Ctrl/Cmd+A = select all, Esc = clear selection.
 // With OCR readings (C11, C12): the suggested label to accept, change or reject; what the samples
@@ -14,22 +15,21 @@ import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
-import { isTyping, ReviewContext, sortGroups } from "./Review";
+import { isTyping, ReviewContext } from "./Review";
+import GroupPicker, { MoveTarget } from "./GroupPicker";
 import { expectedReading, ReadingsLine, SuggestionChip } from "./Suggestions";
 
 export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewContext }) {
   const { bookId, selection, setSelection, act } = ctx;
   const load = useCallback((offset: number, limit: number) => api.groupSamples(group.id, offset, limit), [group.id]);
   const { samples, total, more, error } = usePagedSamples(load, ctx.version);
-  const [mergeWith, setMergeWith] = useState("");
-  const [moveTo, setMoveTo] = useState("");
+  const [picking, setPicking] = useState(false); // the "Move to…" picker is open
+  const [merging, setMerging] = useState(false); // the picker for "Merge another group into this one…"
   const [changeTo, setChangeTo] = useState<string | null>(null); // "Change…" on the suggestion fills the picker
   const [dialog, confirm] = useConfirm();
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
-  // labelled groups first, in letter order, then the others by code (as the side bar's "by label")
   const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading).map((s) => s.id);
-  const others = sortGroups(ctx.groups.filter((g) => g.id !== group.id && g.kind === group.kind && g.samples > 0), "label");
 
   const onClick = (id: number, e: MouseEvent) =>
     setSelection(select(selection, order, id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));
@@ -63,6 +63,14 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
     return () => window.removeEventListener("keydown", onKey);
   }, [order, toUnsure, toNewGroup, remove, setSelection, group.locked]);
 
+  async function moveTo(target: MoveTarget) {
+    setPicking(false);
+    await act(() =>
+      "label" in target ? api.labelSamples(bookId, ids, target.label) : api.move(bookId, ids, target.groupId),
+    );
+    setSelection(emptySelection());
+  }
+
   async function dissolve() {
     if (await confirm(`Send all ${group.samples} samples of ${group.code} to Unsure and remove the group?`, "Dissolve"))
       act(() => api.dissolve(bookId, group.id)).then((r) => r && go(`/books/${bookId}/review/unsure`));
@@ -72,6 +80,23 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   return (
     <div>
       {dialog}
+      {picking && (
+        <GroupPicker groups={ctx.groups} count={ids.length} currentGroupId={group.id} onPick={moveTo} onClose={() => setPicking(false)} />
+      )}
+      {merging && (
+        <GroupPicker
+          mode="merge"
+          into={group.label_guj ? `${group.label_guj} (${group.code})` : group.code}
+          groups={ctx.groups}
+          count={0}
+          currentGroupId={group.id}
+          onPick={(t) => {
+            setMerging(false);
+            if ("groupId" in t) act(() => api.merge(bookId, group.id, [t.groupId]));
+          }}
+          onClose={() => setMerging(false)}
+        />
+      )}
       <ErrorBox error={error} />
       <div className="group-head">
         <div>
@@ -125,37 +150,22 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
       />
       {locked && <p className="muted small">The group is locked: unlock it to change it.</p>}
 
-      <div className="toolbar row">
-        <span className="small muted">{ids.length > 0 ? `${ids.length} selected` : "Click samples to select them"}</span>
+      {/* the actions stay at the top of the window while the letters scroll (sticky) */}
+      <div className="toolbar row sticky-tools" aria-label="Actions on the selected letters">
+        <span className="sticky-title" title={`${group.code}${group.label_dev ? ` · ${group.label_dev}` : ""}`}>
+          {group.label_guj || group.code}
+        </span>
+        <span className="small muted">
+          {ids.length > 0 ? `${ids.length} selected` : "Click samples to select them"}
+        </span>
         <button disabled={locked || !ids.length} onClick={toUnsure} title="U">
           To Unsure
         </button>
         <button disabled={locked || !ids.length} onClick={toNewGroup} title="N">
           New group
         </button>
-        <select
-          aria-label="Move selected to group"
-          value={moveTo}
-          disabled={locked || !ids.length}
-          onChange={(e) => setMoveTo(e.target.value)}
-        >
-          <option value="">Move to group…</option>
-          {others.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.label_guj ? `${g.label_guj} (${g.code})` : g.code} · {g.samples}
-            </option>
-          ))}
-        </select>
-        <button
-          disabled={locked || !ids.length || !moveTo}
-          onClick={() =>
-            act(() => api.move(bookId, ids, Number(moveTo))).then(() => {
-              setSelection(emptySelection());
-              setMoveTo("");
-            })
-          }
-        >
-          Move
+        <button disabled={locked || !ids.length} onClick={() => setPicking(true)} title="Move to a letter's group or another group">
+          Move to…
         </button>
         <button className="danger" disabled={locked || !ids.length} onClick={remove} title="Delete">
           Delete
@@ -180,19 +190,8 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
       )}
 
       <div className="row toolbar">
-        <select aria-label="Merge with group" value={mergeWith} disabled={locked} onChange={(e) => setMergeWith(e.target.value)}>
-          <option value="">Merge another group into this one…</option>
-          {others.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.label_guj ? `${g.label_guj} (${g.code})` : g.code} · {g.samples}
-            </option>
-          ))}
-        </select>
-        <button
-          disabled={locked || !mergeWith}
-          onClick={() => act(() => api.merge(bookId, group.id, [Number(mergeWith)])).then(() => setMergeWith(""))}
-        >
-          Merge
+        <button disabled={locked} onClick={() => setMerging(true)} title="Choose a group from the letter table">
+          Merge another group into this one…
         </button>
         <button className="danger" disabled={locked} onClick={dissolve}>
           Dissolve group

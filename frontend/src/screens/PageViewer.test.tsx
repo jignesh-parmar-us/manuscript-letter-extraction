@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, Book, PageDetail } from "../api";
@@ -9,7 +9,7 @@ vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { pages: vi.fn(), page: vi.fn(), groups: vi.fn(), crop: vi.fn(), join: vi.fn(), split: vi.fn(),
     upload: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn(), redo: vi.fn(), move: vi.fn(), newGroup: vi.fn(), label: vi.fn(),
-    checkLabel: vi.fn() } };
+    checkLabel: vi.fn(), labelSamples: vi.fn() } };
 });
 
 const book = { id: 1 } as Book;
@@ -83,21 +83,44 @@ describe("PageViewer", () => {
     ]);
     vi.mocked(api.move).mockResolvedValue(ok);
     vi.mocked(api.newGroup).mockResolvedValue({ ...ok, group_id: 8 });
+    vi.mocked(api.labelSamples).mockResolvedValue({ ...ok, group_id: 9 });
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
     fireEvent.click(await screen.findByTestId("box-2"));              // an unsure sample
-    const picker = screen.getByLabelText("Move selected to group");
-    const names = [...picker.querySelectorAll("option")].map((o) => o.textContent);
-    expect(names).toEqual(["Move to group…", "ક (g0006) · 9", "g0005 · 2"]);   // labelled first, locked left out
     expect(screen.getByRole("button", { name: "To Unsure" })).toBeDisabled();
-    await userEvent.selectOptions(picker, "6");
-    await userEvent.click(screen.getByRole("button", { name: "Move" }));
+    await userEvent.click(screen.getByRole("button", { name: "Move to…" }));
+    let picker = screen.getByRole("dialog", { name: "Move to" });
+    await userEvent.click(within(picker).getByTitle(/^Move into ક \(g0006/));          // a letter with a group
     expect(api.move).toHaveBeenCalledWith(1, [2], 6);
     expect(await screen.findByText(/moved to ક/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Move to" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Move to…" }));
+    picker = screen.getByRole("dialog", { name: "Move to" });
+    const unlabelled = within(picker).getByLabelText("Groups without a label");
+    expect(within(unlabelled).getByTitle(/^Move into g0007/)).toBeDisabled();            // locked
+    await userEvent.click(within(picker).getByTitle("Put them in a new group labelled ખ (ख)")); // no group yet
+    expect(api.labelSamples).toHaveBeenCalledWith(1, [2], "ख");
     fireEvent.click(screen.getByTestId("box-1"), { shiftKey: true });
     await userEvent.click(screen.getByRole("button", { name: "New group" }));
     expect(api.newGroup).toHaveBeenCalledWith(1, [2, 1]);
     await userEvent.click(screen.getByRole("button", { name: "To Unsure" }));
     expect(api.move).toHaveBeenLastCalledWith(1, [2, 1], null);
+  });
+
+  it("keeps the selection below the page, and marks the spot of the last change", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByTestId("box-1"));
+    const dock = screen.getByLabelText("Selection");
+    const pageArea = screen.getByLabelText("Samples on the page");
+    expect(pageArea.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();  // below the page
+    fireEvent.click(screen.getByTestId("box-3"), { shiftKey: true });
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }));
+    expect(api.deleteSamples).toHaveBeenCalledWith(1, [1, 3]);
+    const spot = await screen.findByTestId("last-spot");                    // around both deleted boxes
+    expect([spot.getAttribute("x"), spot.getAttribute("width")]).toEqual(["92", "156"]);
+    fireEvent.click(screen.getByTestId("box-2"));                          // the next click clears it
+    expect(screen.queryByTestId("last-spot")).toBeNull();
   });
 
   it("labels the selected samples: into the group with that label, or a new labelled group", async () => {

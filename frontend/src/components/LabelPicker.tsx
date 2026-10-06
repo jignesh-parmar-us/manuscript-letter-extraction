@@ -13,6 +13,9 @@ const DEV = {
   vowels: "अ आ इ ई उ ऊ ऋ ए ऐ ओ औ".split(" "),
   consonants: "क ख ग घ ङ च छ ज झ ञ ट ठ ड ढ ण त थ द ध न प फ ब भ म य र ल ळ व श ष स ह".split(" "),
   conjuncts: "क्ष त्र ज्ञ श्र".split(" "),
+  // joined letters: reph र् goes before a letter (र्क), rakar ्र after it (क्र, क्रा; on ट and ड it is
+  // drawn as the bottom churn, ट्र)
+  joined: ["र्", "्र"],
   signs: ["ा", "ि", "ी", "ु", "ू", "ृ", "े", "ै", "ो", "ौ", "्", "ं", "ः", "ँ", "़"],
   digits: "० १ २ ३ ४ ५ ६ ७ ८ ९".split(" "),
   punctuation: ["।", "॥", "ऽ", "ॐ"],
@@ -33,6 +36,7 @@ const SECTIONS: { key: keyof typeof DEV; title: string }[] = [
   { key: "vowels", title: "Vowels" },
   { key: "consonants", title: "Consonants" },
   { key: "conjuncts", title: "Conjuncts" },
+  { key: "joined", title: "Joined letters (જોડાક્ષર): reph ર્ before a letter (ર્ક), rakar ્ર after it (ક્ર, ક્રા, bottom churn ટ્ર)" },
   { key: "signs", title: "Vowel signs, halant, marks" },
   { key: "digits", title: "Digits" },
   { key: "punctuation", title: "Punctuation" },
@@ -200,7 +204,7 @@ export default function LabelPicker(props: Props) {
               <div className="keys">
                 {DEV[sec.key].map((ch) => {
                   const shown = script === "gujarati" ? toGujarati(ch) : ch;
-                  const isSign = sec.key === "signs";
+                  const isSign = sec.key === "signs" || ch.startsWith("्"); // attaches to the letter before it
                   return (
                     <button key={ch} className="key" onClick={() => add(ch)} title={shown}>
                       {isSign ? `◌${shown}` : shown}

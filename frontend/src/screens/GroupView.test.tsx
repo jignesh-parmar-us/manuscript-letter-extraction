@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
@@ -59,9 +59,13 @@ describe("GroupView", () => {
   it("merges another group into this one", async () => {
     const other = group({ id: 6, code: "g0006", label_guj: "ક" });
     renderView((ctx) => <GroupView group={group()} ctx={ctx} />, [group(), other]);
-    await userEvent.selectOptions(await screen.findByLabelText("Merge with group"), "6");
-    await userEvent.click(screen.getByRole("button", { name: "Merge" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Merge another group into this one…" }));
+    const picker = screen.getByRole("dialog", { name: "Merge a group" });
+    expect(picker).toHaveTextContent("Merge a group into g0005");
+    expect(within(picker).getByTitle("ખ (ख): no group to merge").tagName).toBe("SPAN");    // nothing to merge
+    await userEvent.click(within(within(picker).getByLabelText("Groups without a label")).getByTitle(/^Merge g0006/));
     expect(api.merge).toHaveBeenCalledWith(1, 5, [6]);
+    expect(screen.queryByRole("dialog", { name: "Merge a group" })).toBeNull();
   });
 
   it("a locked group can only be unlocked", async () => {

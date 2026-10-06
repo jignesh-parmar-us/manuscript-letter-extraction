@@ -11,7 +11,8 @@ import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
-import { isTyping, ReviewContext, sortGroups } from "./Review";
+import GroupPicker, { MoveTarget } from "./GroupPicker";
+import { isTyping, ReviewContext } from "./Review";
 
 export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted"; ctx: ReviewContext }) {
   const { bookId, selection, setSelection, act } = ctx;
@@ -21,10 +22,9 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
     [kind, bookId],
   );
   const { samples, total, more, error } = usePagedSamples(load, ctx.version);
-  const [moveTo, setMoveTo] = useState("");
+  const [picking, setPicking] = useState(false); // the "Move to…" picker is open
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
-  const targets = sortGroups(ctx.groups.filter((g) => g.samples > 0 || g.label_dev), "label");
 
   const onClick = (id: number, e: MouseEvent) =>
     setSelection(select(selection, order, id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));
@@ -74,6 +74,14 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
     return () => window.removeEventListener("keydown", onKey);
   }, [order, samples, selection, ids, kind, accept, toNewGroup, act, bookId, setSelection]);
 
+  async function moveTo(target: MoveTarget) {
+    setPicking(false);
+    await act(() =>
+      "label" in target ? api.labelSamples(bookId, ids, target.label) : api.move(bookId, ids, target.groupId),
+    );
+    setSelection(emptySelection());
+  }
+
   const withSuggestion = samples.filter((s) => selection.ids.has(s.id) && s.suggestion);
   const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading);
 
@@ -88,7 +96,9 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
           ? "Samples in no group. Accept a suggested group (→) or a Tesseract reading (green, top right), or select samples and make a new group or move them."
           : "Deleted samples are left out of groups and the export. Restoring puts them back as unsure."}
       </p>
-      <div className="toolbar row">
+      {picking && <GroupPicker groups={ctx.groups} count={ids.length} onPick={moveTo} onClose={() => setPicking(false)} />}
+      <div className="toolbar row sticky-tools" aria-label="Actions on the selected letters">
+        <span className="sticky-title">{kind === "unsure" ? "Unsure" : "Deleted"}</span>
         <span className="small muted">{ids.length > 0 ? `${ids.length} selected` : "Click samples to select them"}</span>
         {kind === "unsure" ? (
           <>
@@ -103,24 +113,8 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
             <button disabled={!ids.length} onClick={toNewGroup} title="N">
               New group
             </button>
-            <select aria-label="Move selected to group" value={moveTo} disabled={!ids.length} onChange={(e) => setMoveTo(e.target.value)}>
-              <option value="">Move to group…</option>
-              {targets.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.label_guj ? `${g.label_guj} (${g.code})` : g.code} · {g.samples}
-                </option>
-              ))}
-            </select>
-            <button
-              disabled={!ids.length || !moveTo}
-              onClick={() =>
-                act(() => api.move(bookId, ids, Number(moveTo))).then(() => {
-                  setSelection(emptySelection());
-                  setMoveTo("");
-                })
-              }
-            >
-              Move
+            <button disabled={!ids.length} onClick={() => setPicking(true)} title="Move to a letter's group or another group">
+              Move to…
             </button>
             <button
               className="danger"

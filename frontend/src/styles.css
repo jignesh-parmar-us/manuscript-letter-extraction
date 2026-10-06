@@ -751,3 +751,83 @@ button.reading-badge.removable:hover {
   color: var(--accent);
   white-space: nowrap;
 }
+
+/* ---- actions that stay in view (group view, Unsure, Pages) ---- */
+.sticky-tools {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+  padding: 6px 0;
+  margin: 6px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.sticky-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.selection-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--bg);
+  padding: 6px 0 4px;
+  border-top: 1px solid var(--line);
+}
+.selection-dock .card {
+  margin: 4px 0;
+  box-shadow: 0 -2px 10px rgb(0 0 0 / 0.08);
+}
+.last-spot {
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 8 6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* ---- "Move to…" picker ---- */
+.dialog.picker {
+  max-width: min(980px, calc(100vw - 32px));
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.dialog.picker h2 {
+  margin: 0;
+}
+.picker-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.picker-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  min-width: 64px;
+}
+.picker-group img {
+  height: 40px;
+  max-width: 80px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 3px;
+}
+.missing-table .table-section th {
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 6px 2px;
+  color: var(--muted);
+  background: var(--bg);
+}
+.row-choice {
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
