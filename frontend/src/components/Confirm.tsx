@@ -2,7 +2,10 @@
 //   const [dialog, confirm] = useConfirm();
 //   if (await confirm("Delete this book?", "Delete")) { ... }
 //   return <>{dialog} ...</>;
+// The dialog is drawn into <body> (a portal), so it lies above everything even when it is opened
+// from inside a sticky or positioned part of the page, such as the Review tab's side bar.
 import { ReactElement, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface Pending {
   message: string;
@@ -21,7 +24,7 @@ export function useConfirm(): [ReactElement | null, (message: string, okLabel?: 
     pending?.resolve(ok);
     setPending(null);
   };
-  const dialog = pending ? (
+  const dialog = pending ? createPortal(
     <div className="backdrop">
       <div className="dialog" role="dialog" aria-modal="true">
         <p>{pending.message}</p>
@@ -32,7 +35,8 @@ export function useConfirm(): [ReactElement | null, (message: string, okLabel?: 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   ) : null;
   return [dialog, confirm];
 }
