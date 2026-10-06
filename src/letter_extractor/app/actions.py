@@ -400,8 +400,10 @@ def set_status(lib: Library, book_id: int, group_id: int, reviewed: Optional[boo
         g = ch.group(group_id, editing_lock=True)
         if g.locked and locked is not False:
             raise ActionError(f"Group {g.code} is locked; unlock it first.")
-        if reviewed is not None and not g.label_dev:
-            g.status = "reviewed" if reviewed else "auto"
+        if reviewed is not None:
+            # a label given automatically (capture, Fix cuts) is "auto" until the user reviews it;
+            # reviewing it makes it a label like one the user typed
+            g.status = ("labelled" if g.label_dev else "reviewed") if reviewed else "auto"
         if locked is not None:
             g.locked = bool(locked)
         a = ch.finish("status", {"group": g.code, "status": g.status, "locked": g.locked})

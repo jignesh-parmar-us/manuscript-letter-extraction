@@ -64,6 +64,22 @@ class UndoRedoTests(ActionTestCase):
     def test_status_and_lock(self):
         self.assert_undo_redo_exact(lambda: A.set_status(self.lib, self.book, self.g1, reviewed=True, locked=True))
 
+    def test_reviewing_a_label_given_automatically(self):
+        from letter_extractor.app.db import LetterGroup
+        with self.lib.session() as s:                            # as capture or Fix cuts leave it
+            g = s.get(LetterGroup, self.g1)
+            g.label_dev, g.label_guj, g.status = "की", "કી", "auto"
+        A.set_status(self.lib, self.book, self.g1, reviewed=True)
+        with self.lib.session() as s:
+            self.assertEqual(s.get(LetterGroup, self.g1).status, "labelled")
+        A.set_status(self.lib, self.book, self.g1, reviewed=False)
+        with self.lib.session() as s:
+            g = s.get(LetterGroup, self.g1)
+            self.assertEqual((g.status, g.label_dev), ("auto", "की"))       # the label stays, not reviewed
+        A.undo(self.lib, self.book)
+        with self.lib.session() as s:
+            self.assertEqual(s.get(LetterGroup, self.g1).status, "labelled")
+
     def test_delete_and_restore(self):
         smp = self.groups[self.g1][:1]
         self.assert_undo_redo_exact(lambda: A.delete_samples(self.lib, self.book, smp))

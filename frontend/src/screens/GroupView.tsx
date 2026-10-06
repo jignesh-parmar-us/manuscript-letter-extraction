@@ -112,7 +112,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
             <input
               type="checkbox"
               checked={group.status !== "auto"}
-              disabled={locked || group.status === "labelled"}
+              disabled={locked}
               onChange={(e) => act(() => api.status(bookId, group.id, { reviewed: e.target.checked }))}
             />
             Reviewed
@@ -131,52 +131,55 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
       <SuggestionChip group={group} ctx={ctx} onChange={setChangeTo} />
       <ReadingsLine group={group} ctx={ctx} />
 
-      <LabelPicker
-        key={changeTo ?? ""}
-        initialText={changeTo ?? undefined}
-        bookId={bookId}
-        current={{ dev: group.label_dev, guj: group.label_guj }}
-        disabled={locked}
-        groupId={group.id}
-        onSave={async (text) => !!(await act(() => api.label(bookId, group.id, text)))}
-        onMerge={async (target) => {
-          if (await confirm(`Merge ${group.code} (${group.samples} samples) into ${target.code}?`, "Merge")) {
-            const r = await act(() => api.merge(bookId, target.id, [group.id]));
-            if (r) go(`/books/${bookId}/review/${target.id}`);
-            return !!r;
-          }
-          return false;
-        }}
-      />
-      {locked && <p className="muted small">The group is locked: unlock it to change it.</p>}
-
-      {/* the actions stay at the top of the window while the letters scroll (sticky) */}
-      <div className="toolbar row sticky-tools" aria-label="Actions on the selected letters">
-        <span className="sticky-title" title={`${group.code}${group.label_dev ? ` · ${group.label_dev}` : ""}`}>
-          {group.label_guj || group.code}
-        </span>
-        <span className="small muted">
-          {ids.length > 0 ? `${ids.length} selected` : "Click samples to select them"}
-        </span>
-        <button disabled={locked || !ids.length} onClick={toUnsure} title="U">
-          To Unsure
-        </button>
-        <button disabled={locked || !ids.length} onClick={toNewGroup} title="N">
-          New group
-        </button>
-        <button disabled={locked || !ids.length} onClick={() => setPicking(true)} title="Move to a letter's group or another group">
-          Move to…
-        </button>
-        <button className="danger" disabled={locked || !ids.length} onClick={remove} title="Delete">
-          Delete
-        </button>
-        <button
-          disabled={!withReading.length}
-          onClick={() => act(() => api.removeReadings(bookId, withReading)).then(() => setSelection(emptySelection()))}
-          title="The selected letters' readings are wrong: remove them (the letters stay in the group)"
-        >
-          Remove readings{withReading.length ? ` (${withReading.length})` : ""}
-        </button>
+      {/* the label and the actions stay at the top of the window while the letters scroll (sticky) */}
+      <div className="sticky-tools sticky-block">
+        <div className="row sticky-label">
+          <span className="sticky-title" title={`${group.code}${group.label_dev ? ` · ${group.label_dev}` : ""}`}>
+            {group.label_guj || group.code}
+          </span>
+          <LabelPicker
+            key={changeTo ?? ""}
+            initialText={changeTo ?? undefined}
+            bookId={bookId}
+            current={{ dev: group.label_dev, guj: group.label_guj }}
+            disabled={locked}
+            groupId={group.id}
+            onSave={async (text) => !!(await act(() => api.label(bookId, group.id, text)))}
+            onMerge={async (target) => {
+              if (await confirm(`Merge ${group.code} (${group.samples} samples) into ${target.code}?`, "Merge")) {
+                const r = await act(() => api.merge(bookId, target.id, [group.id]));
+                if (r) go(`/books/${bookId}/review/${target.id}`);
+                return !!r;
+              }
+              return false;
+            }}
+          />
+        </div>
+        {locked && <p className="muted small">The group is locked: unlock it to change it.</p>}
+        <div className="toolbar row" aria-label="Actions on the selected letters">
+          <span className="small muted">
+            {ids.length > 0 ? `${ids.length} selected` : "Click samples to select them"}
+          </span>
+          <button disabled={locked || !ids.length} onClick={toUnsure} title="U">
+            To Unsure
+          </button>
+          <button disabled={locked || !ids.length} onClick={toNewGroup} title="N">
+            New group
+          </button>
+          <button disabled={locked || !ids.length} onClick={() => setPicking(true)} title="Move to a letter's group or another group">
+            Move to…
+          </button>
+          <button className="danger" disabled={locked || !ids.length} onClick={remove} title="Delete">
+            Delete
+          </button>
+          <button
+            disabled={!withReading.length}
+            onClick={() => act(() => api.removeReadings(bookId, withReading)).then(() => setSelection(emptySelection()))}
+            title="The selected letters' readings are wrong: remove them (the letters stay in the group)"
+          >
+            Remove readings{withReading.length ? ` (${withReading.length})` : ""}
+          </button>
+        </div>
       </div>
 
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expectedReading(group)}

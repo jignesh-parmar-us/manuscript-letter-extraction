@@ -8,10 +8,11 @@
 // Label suggestions (C12): the panel in the side bar reads the book with Tesseract; the filters
 // "Suggested" and "Mixed readings" use the groups' votes and readings (see Suggestions.tsx).
 import { DndContext, DragEndEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionResult, api, Book, Group } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { emptySelection, Selection } from "../components/selection";
+import { useFitHeight } from "../components/useFitHeight";
 import { go } from "../route";
 import GroupView from "./GroupView";
 import SamplesView from "./SamplesView";
@@ -44,6 +45,8 @@ export default function Review({ book, view, onChanged }: Props) {
   const [selection, setSelection] = useState<Selection>(emptySelection);
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("label");
+  const sidebar = useRef<HTMLElement>(null);
+  useFitHeight(sidebar); // the group list scrolls by itself, the window does not
 
   useEffect(() => {
     api.groups(book.id).then(setGroups, setError);
@@ -122,7 +125,7 @@ export default function Review({ book, view, onChanged }: Props) {
         <SuggestPanel book={book} ctx={ctx} onRead={reload} />
       </div>
       <div className="review">
-        <aside className="sidebar">
+        <aside className="sidebar" ref={sidebar}>
           <SideTarget id="unsure" active={view === "unsure"} onClick={() => go(`/books/${book.id}/review/unsure`)}>
             Unsure <span className="muted">({book.unsure})</span>
           </SideTarget>

@@ -15,6 +15,7 @@ import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Sample } from "..
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
+import { useFitHeight } from "../components/useFitHeight";
 import { go } from "../route";
 import GroupPicker, { MoveTarget } from "./GroupPicker";
 
@@ -52,6 +53,8 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const [dialog, confirm] = useConfirm();
   const svgRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sidebar = useRef<HTMLElement>(null);
+  useFitHeight(sidebar); // the page list scrolls by itself, the window does not
   const shown = useRef<string>(""); // the page/sample already scrolled to, so reloads do not scroll again
 
   useEffect(() => {
@@ -259,7 +262,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
       {picking && (
         <GroupPicker groups={[...groups.values()]} count={selected.size} onPick={moveTo} onClose={() => setPicking(false)} />
       )}
-      <aside className="sidebar">
+      <aside className="sidebar" ref={sidebar}>
         <label className="button">
           Upload letter image…
           <input type="file" accept="image/*" onChange={upload} hidden />

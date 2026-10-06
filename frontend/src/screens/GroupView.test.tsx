@@ -68,6 +68,15 @@ describe("GroupView", () => {
     expect(screen.queryByRole("dialog", { name: "Merge a group" })).toBeNull();
   });
 
+  it("marks a group labelled automatically as reviewed", async () => {
+    renderView((ctx) => <GroupView group={group({ label_dev: "की", label_guj: "કી", status: "auto" })} ctx={ctx} />);
+    const box = await screen.findByRole("checkbox", { name: "Reviewed" });
+    expect(box).not.toBeChecked();
+    expect(box).toBeEnabled();
+    await userEvent.click(box);
+    expect(api.status).toHaveBeenCalledWith(1, 5, { reviewed: true });
+  });
+
   it("a locked group can only be unlocked", async () => {
     renderView((ctx) => <GroupView group={group({ locked: true })} ctx={ctx} />);
     await userEvent.click((await findTiles())[0]);

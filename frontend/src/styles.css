@@ -301,6 +301,7 @@ pre.settings {
   flex: 1;
   min-height: 0; /* the group list takes the rest of the side bar's height and scrolls */
   overflow-y: auto;
+  overscroll-behavior: contain; /* at its top or bottom, scrolling does not pass on to the window */
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -439,6 +440,7 @@ pre.settings {
 /* ---- page viewer (C5f) ---- */
 .page-scroll {
   overflow: auto;
+  overscroll-behavior: contain;
   max-height: 75vh;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -830,4 +832,33 @@ button.reading-badge.removable:hover {
 .row-choice {
   flex-wrap: wrap;
   gap: 4px 14px;
+}
+/* the group's label and its actions, together at the top while the letters scroll */
+.sticky-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sticky-label {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+.sticky-label .sticky-title {
+  padding-top: 6px;
+  min-width: 40px;
+}
+.sticky-label .label-picker {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.sticky-block .label-check {
+  min-height: 0;
+}
+.sticky-block .toolbar {
+  margin: 0;
+}
+.sticky-block .palette {
+  max-height: 45vh; /* the open letters scroll on their own instead of covering the page */
+  overflow-y: auto;
 }
