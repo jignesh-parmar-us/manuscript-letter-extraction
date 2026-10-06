@@ -17,6 +17,7 @@ Actions:
 - `accept_suggestions` labels one or many groups with their suggested labels, as one action (C12)
 - `reject_suggestion`  the group stops getting that suggested label (C12)
 - `label_samples`  samples to the group with a label, or to a new group that gets it (C12)
+- `split_mixed`    letters of a group read as another letter, with another shape, to new groups (C12d)
 
 Locked groups refuse every change except unlocking.
 """
@@ -322,6 +323,28 @@ def label_samples(lib: Library, book_id: int, sample_ids: Iterable[int], text: s
             smp.group_id, smp.kind = target.id, target.kind
         a = ch.finish("label_samples", {"samples": len(smps), "to": target.code, "label_dev": dev, "new": new})
         return _result(a, group_id=target.id)
+
+
+def split_mixed(lib: Library, book_id: int, engine: Optional[str] = None) -> Dict:
+    """Split mixed groups by their readings where the shapes agree (suggest.mixed_splits): each set
+    of letters read as another letter goes to a new group of its own (unlabelled: it gets its own
+    suggestion). One action; nothing is recorded when there is nothing to split."""
+    from .suggest import mixed_splits
+    with lib.session() as s:
+        book = s.get(Book, book_id)
+        found = mixed_splits(s, book, lib.book_config(book), engine)
+        if not found:
+            return {"groups": 0, "samples": 0, "action_id": None}
+        ch = _Change(s, book_id)
+        moved = 0
+        for gid, text, ids in found:
+            smps = ch.samples(ids)
+            g = ch.new_group(smps[0].kind)
+            for smp in smps:
+                smp.group_id = g.id
+            moved += len(smps)
+        a = ch.finish("split_mixed", {"groups": len(found), "samples": moved})
+        return _result(a)
 
 
 def set_status(lib: Library, book_id: int, group_id: int, reviewed: Optional[bool] = None,

@@ -142,3 +142,31 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 The number of voting groups (k) makes no difference: within the distance limit there is usually only one labelled group. The limit does: 0.55, the grouping distance, adds 4 wrong suggestions for 1 more right. **`books_distance` = 0.5.** Wrong readings are look-alikes (ते / ने, रि / वि, स / र). About half of the target groups get no suggestion: their letter is not labelled in the reference half, or too few of their samples were read.
 
 **The real job** on the copy, book 4 from books 1 and 3 (109 reference groups): 3.2 s for 14,302 samples; 5,513 read; 47 groups with a suggestion. Against book 4's 114 labelled groups (with the 37 labelled at capture): 42 of 48 suggestions right; wrong pairs व / य, ते / ने, वे / ने, बा / वा, बे / ने. (Inflated: the books share pages; the page-split numbers above are the fair ones.)
+
+## C12d. Groups that mix two letters (2026-10-06)
+
+**Reported by the user** on book 3 "Vachnamrut Printed 1933": g0001 read as ने 351, ते 152, मे 20; g0002 as न 105, ना 70, म 57; g0003 as प 92, व 36, वा 26. The user asked to tell these letters apart at grouping, for handwriting too, without splitting one letter into several groups by its strokes.
+
+**What the mixing is**, by looking at the samples: the ते in g0001, the म in g0002 and the व in g0003 really are those letters: grouping errors. The ना in g0002 are न: Tesseract read the ा bar that Phase 1 had cut onto the next letter. Reading errors, not grouping errors.
+
+**Data:** the masks of book 3's 11,646 letters with a Tesseract reading (and, for a first look, the 2,341 read as one of the 9 letters above, with ना → न and वा → व, since those readings are mostly न and व). Readings are an imperfect truth (C11: about 90% right on print), so purity numbers are low and only comparisons count.
+
+**The fingerprint is not the weak part.** On the 9 letters, a sample's nearest neighbour has its reading in 91% of cases with the current fingerprint (48 px, 24 px pixels, HOG 6 x 6) and with every variant tried (32 px pixels, HOG 8 x 8, 64 px / 32 px / HOG 8 x 8, less blur, more HOG weight, loop features): 90.8 to 91.8%. The groups mix because the grouping radius (0.55) is wide enough to hold ने and ते together.
+
+**Approaches tried and dropped:**
+- **A smaller grouping distance:** at 0.40 the 9 letters' groups are 95% pure, but 530 groups instead of 187, most of them tiny.
+- **Splitting groups in two by shape** (2-means, halves ≥ 10 samples and ≥ 0.25 apart): the 9 letters went from 73% to 90% purity with 24 more groups, but on the whole book 41 of the 96 candidate splits divided one letter by stroke weight or slant (क | क, त | त, प | प, र | र, छे | छे, seen by eye). Gap and spread tests did not separate these from real splits. This is the over-splitting the user asked to avoid.
+- **Even strokes** (thinned to a skeleton, thickened to one width, so stroke weight cannot matter): at the same number of groups no purer (53.0% against 52.9%), and each common letter kept only 57% of its samples in its largest group instead of 89%.
+
+**Splitting by reading, checked by shape** (kept): in a group, the samples read as another letter than the main reading form a candidate; its shape centre is compared with the main reading's. Over all groups of book 3 (sub-reading with ≥ 5 samples and 10% of its group), the distances fall in two clear bands: misreadings of the same shape are close (न / ना 0.10, त / ता 0.06, क / का 0.07, प / पा 0.10, अ / आ 0.12, व / वा 0.16, at most 0.22), real different letters far (ने / ते 0.32, न / म 0.36, नि / ति 0.31, य / व 0.41, ह / इ 0.46, भ / ध 0.48, अ / ज 0.49). **`split_distance` = 0.25** lies in the gap; one real pair below it (वे / बे 0.23) stays together, the safe side. A group with one reading is never split, however varied its strokes.
+
+| Book 3, all 11,646 read letters | Groups (≥ 5) | Purity | Mixed groups (≥ 5) |
+|---|---|---|---|
+| Current grouping | 252 | 52.9% | 46 |
+| Split by shape (dropped) | 388 | 59.7% | 73 |
+| **Split by reading, shape-checked** | 333 | **63.8%** | **28** |
+| The 9 confusable letters | 190 → 200 groups | 72.6% → 92.3% | |
+
+**On the real book** (a copy of the user's library, `split_mixed`): 81 groups split, 1,115 letters moved. g0001 lost its 152 ते (ने 351 and 20 मे stay: too few to leave); g0002 lost its 57 म and 34 मा, and kept its 70 ना, which are misread न; g0003 lost its 36 व and 26 वा, and kept 23 पा (misreadings).
+
+**Handwriting** (no labels yet): the two handwritten sample pages read with Tesseract, the noisiest reader (about a third wrong, C10): one split in 854 letters, 6 त-shaped letters out of a group that mixed त and न. The shape check keeps reading noise from splitting groups. With the labelled-books reader (C13) the same rule applies on handwriting.

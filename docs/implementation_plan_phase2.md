@@ -4,7 +4,7 @@ Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, grou
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. **C14 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. **C14 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -334,6 +334,28 @@ Rules that carry over from Phase 1:
 
 **Changes from the original plan:** a new chunk. The default stays the shape cut: it is the only one for handwriting, and on print the gain is real but modest. Labelling at capture goes further than C11's rule that a suggestion never sets a label by itself: the user asked for it for books cut by Tesseract, the labels need a 60% majority of the group's readings, and they stay marked not reviewed.
 
+### C12d. Splitting groups that mix two letters
+
+**Status:** built (2026-10-06). Reported by the user: in book 3, ने groups held ते, न groups held म, प groups held व; asked to tell these apart at grouping, for handwriting too, without splitting one letter into several groups by its strokes.
+
+**Goal:** groups hold one letter each, without more groups of the same letter.
+
+**Files:** additions to `app/suggest.py` (`mixed_splits`, `_after_reading`, `auto_label`), `app/actions.py` (`split_mixed`), `app/api.py`, `app/library.py` (capture summary), `config.py`; `frontend/src/screens/Suggestions.tsx`, `api.ts` (+ test); `tests/test_split_mixed.py`; `docs/TUNING_PHASE2.md`.
+
+**What it does:**
+- **Shape alone is not enough** (measured in `TUNING_PHASE2.md`): the fingerprint tells the letters apart about as well as any variant tried; a tighter grouping distance multiplies the groups; splitting groups by shape splits one letter by stroke weight; even strokes do not help. So the C4 grouping is unchanged.
+- **Split by reading, checked by shape** (`mixed_splits`): in each group, the samples read as another letter than the group's main reading leave it, to a new group of their own, when there are at least `split_min_samples` (5) of them and `split_min_share` (10%) of the group, the centre of their shapes is at least `split_distance` (0.25) from the centre of the main reading's samples, and each of them is closer to its own reading's centre. Misreadings of the same shape (न read as ना) are close and stay; real other letters (ते in a ने group) are far and leave. A group with one reading is never split, however varied its strokes, so one letter does not end in several groups. Locked groups are left alone.
+- **When it runs:** after every reading run (Tesseract, C11, or other books, C13) as one undoable action (`split_mixed`); at capture for books cut by Tesseract, before their labels are given (C12c); and from **"Split mixed groups"** in the Label suggestions panel (`POST /api/books/{id}/actions/split-mixed`). The new groups are unlabelled and get their own suggestions; a labelled group keeps its label.
+- **Handwriting:** the rule works with any reader. With the labelled-books reader (C13) it splits handwritten groups the same way; with Tesseract on handwriting, the shape check keeps its many wrong readings from splitting groups (measured: one split in 854 letters, a right one).
+
+**Tests:** two letters merged into one group come apart after reading, as one undoable action; a misreading of the same shape stays; one reading never splits a group of varied shapes; too few letters do not split; locked groups are left alone; running it again on clean groups does nothing; the panel button.
+
+**Measured** (`TUNING_PHASE2.md`): on all letters of book 3, mixed groups (≥ 5 samples) fall from 46 to 28 and purity rises from 52.9% to 63.8%, with 333 groups instead of 252; the 9 confusable letters from 72.6% to 92.3% purity with 10 more groups. The user's examples: g0001 lost its 152 ते, g0002 its 57 म and 34 मा (its 70 ना are misread न and stay), g0003 its 36 व and 26 वा.
+
+**Done when:** the user's mixed groups come apart without the common letters splitting into more groups. *Met on a copy of book 3; to be checked by the user.*
+
+**Changes from the original plan:** a new chunk. Three shape-only approaches were tried and dropped (smaller grouping distance, splitting by shape, even strokes); see `TUNING_PHASE2.md`.
+
 ### Part B: suggestions for handwriting
 
 ### C13. Suggestions from other labelled books
@@ -550,7 +572,8 @@ Rules that carry over from Phase 1:
 | C11 | Matching OCR to samples, group suggestions | done | suggestions on groups and unsure samples | FR-7 |
 | C12 | Reviewing suggestions, measuring | built (measurement after a full review) |
 | C12b | Fixing cuts with Tesseract's readings (printed books) | built | split samples holding several letters, join cut pieces; one undo | FR-8 |
-| C12c | Cutting by Tesseract's reading (printed books) | built | per-book choice of cutting; readings stored at capture | FR-5, FR-7 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
+| C12c | Cutting by Tesseract's reading (printed books) | built | per-book choice of cutting; readings stored at capture | FR-5, FR-7 |
+| C12d | Splitting groups that mix two letters | built | mixed groups split by reading where shapes agree; never by stroke | FR-7 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
 | C13 | Suggestions from other labelled books | built (handwriting measurement open) | handwriting suggestions, no training | FR-7 |
 | C14 | Letter classifier | **next** | `model.onnx`, per-class accuracy report | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
@@ -585,6 +608,7 @@ All in the same `Config` dataclass, per book, except where noted.
 | `recut_min_width` | C12b | 0.45 (x the line's median sample width) |
 | `recut_min_group` | C12b | 5 |
 | `reference_books` | C13 | all comparable books with the same writing (chosen per run in the panel, not a stored setting) |
+| `split_distance`, `split_min_samples`, `split_min_share` | C12d | 0.25, 5, 0.1 (measured in C12d) |
 | `books_k` | C13 | 5 |
 | `books_distance` | C13 | 0.5 (measured in C13) |
 | `min_class_samples` | C14 | 5 |

@@ -150,11 +150,7 @@ def run_tesseract(lib: Library, book_id: int, progress=None, cancel: Optional[Ca
         for r in rows:
             s.add(OcrReading(run_id=run.id, **r))
         s.flush()
-        result["groups_with_suggestion"] = sum(
-            v["suggestion"] is not None for v in group_readings(s, s.get(Book, book_id), cfg).values())
-        result["seconds"] = round(time.time() - t0, 1)
-        run.result = json.dumps(result)
-    return result
+    return _after_reading(lib, book_id, "tesseract", result, t0)
 
 
 # ---- the other labelled books (C13) -------------------------------------------------------------
@@ -255,10 +251,22 @@ def run_books(lib: Library, book_id: int, reference: Optional[Sequence[int]] = N
         for r in found:
             s.add(OcrReading(run_id=run.id, **r))
         s.flush()
-        b = s.get(Book, book_id)
+    return _after_reading(lib, book_id, "books", result, t0)
+
+
+def _after_reading(lib: Library, book_id: int, engine: str, result: Dict, t0: float) -> Dict:
+    """After a reading run: split the mixed groups it shows (C12d, one undoable action), then count
+    the groups with a suggestion and store the run's result."""
+    from .actions import split_mixed
+    split = split_mixed(lib, book_id, engine)
+    result["groups_split"], result["samples_moved"] = split["groups"], split["samples"]
+    with lib.session() as s:
+        book = s.get(Book, book_id)
         result["groups_with_suggestion"] = sum(
-            v["suggestion"] is not None for v in group_readings(s, b, cfg, engine="books").values())
+            v["suggestion"] is not None for v in group_readings(s, book, lib.book_config(book), engine=engine).values())
         result["seconds"] = round(time.time() - t0, 1)
+        run = s.scalar(select(OcrRun).where(OcrRun.book_id == book_id, OcrRun.engine == engine)
+                       .order_by(OcrRun.id.desc()))
         run.result = json.dumps(result, ensure_ascii=False)
     return result
 
@@ -458,6 +466,59 @@ def suggestion_accuracy(s, book: Book, cfg: Config, engine: Optional[str] = None
     return out
 
 
+# ---- splitting mixed groups by reading (C12d) ---------------------------------------------------
+
+def mixed_splits(s, book: Book, cfg: Config, engine: Optional[str] = None) -> List[Tuple[int, str, List[int]]]:
+    """Where a group holds two letters: (group id, reading, sample ids to move out).
+
+    Shape alone cannot keep ने and ते apart without splitting ने by its stroke weight (measured, see
+    TUNING_PHASE2.md), so the readings decide which letters may leave, and the shapes must agree:
+    the samples of a group read as another letter than its main reading leave it when there are at
+    least `split_min_samples` of them (and `split_min_share` of the group), the centre of their
+    shapes is at least `split_distance` from the centre of the main reading's samples (misreadings
+    such as न read as ना have the same shape and stay), and each of them is closer to its own
+    reading's centre. Locked groups are left alone. Groups are never split by shape alone, so one
+    letter written in different strokes stays one group."""
+    engine = _engine(s, book, engine)
+    run_id = _run_id(s, book.id, engine) if engine else None
+    if run_id is None:
+        return []
+    rows = s.execute(select(Sample.id, Sample.group_id, Sample.fingerprint, OcrReading.text_dev)
+                     .join(OcrReading, OcrReading.sample_id == Sample.id)
+                     .join(LetterGroup, LetterGroup.id == Sample.group_id)
+                     .where(OcrReading.run_id == run_id, Sample.deleted.is_(False), Sample.fingerprint.is_not(None),
+                            LetterGroup.book_id == book.id, LetterGroup.locked.is_(False))).all()
+    per_group: Dict[int, List] = defaultdict(list)
+    for sid, gid, fp, text in rows:
+        per_group[gid].append((sid, np.frombuffer(fp, np.float32), text))
+
+    def centre(vs):
+        c = np.mean(vs, axis=0)
+        return c / max(float(np.linalg.norm(c)), 1e-9)
+
+    out = []
+    for gid, items in per_group.items():
+        counts: Dict[str, int] = defaultdict(int)
+        for _, _, t in items:
+            counts[t] += 1
+        if len(counts) < 2:
+            continue
+        ranked = sorted(counts.items(), key=lambda kv: -kv[1])
+        main = ranked[0][0]
+        cm = centre([v for _, v, t in items if t == main])
+        for text, n in ranked[1:]:
+            if n < max(cfg.split_min_samples, cfg.split_min_share * len(items)):
+                continue
+            mine = [(sid, v) for sid, v, t in items if t == text]
+            ct = centre([v for _, v in mine])
+            if float(np.linalg.norm(cm - ct)) < cfg.split_distance:
+                continue
+            go = [sid for sid, v in mine if np.linalg.norm(v - ct) < np.linalg.norm(v - cm)]
+            if len(go) >= cfg.split_min_samples:
+                out.append((gid, text, go))
+    return out
+
+
 # ---- labels straight from the cut (C12c) -------------------------------------------------------
 
 def auto_label(s, book: Book, cfg: Config) -> Dict:
@@ -472,9 +533,26 @@ def auto_label(s, book: Book, cfg: Config) -> Dict:
 
     The labels are left "auto" (not reviewed): Tesseract gave them, not the user, and the "Not
     reviewed" filter shows them. Locked groups are not touched. Not an undoable action: it is part
-    of capturing the pages."""
+    of capturing the pages. Mixed groups are split by their readings first (C12d)."""
     from .centres import centres, recompute
     mapping = mapping_for(cfg)
+    n_split = 0
+    found = mixed_splits(s, book, cfg)
+    if found:
+        codes = s.scalars(select(LetterGroup.code).where(LetterGroup.book_id == book.id))
+        n = max((int(c[1:]) for c in codes if c[1:].isdigit()), default=0)
+        for gid, text, ids in found:
+            n += 1
+            kind = s.get(LetterGroup, gid).kind
+            g = LetterGroup(book_id=book.id, code=f"g{n:04d}", kind=kind)
+            s.add(g)
+            s.flush()
+            for smp in s.scalars(select(Sample).where(Sample.id.in_(ids))):
+                smp.group_id = g.id
+            n_split += 1
+        s.flush()
+        recompute(s, {gid for gid, _, _ in found} | set(s.scalars(select(LetterGroup.id).where(
+            LetterGroup.book_id == book.id))))
     ocr = group_readings(s, book, cfg)
     groups = {g.id: g for g in s.scalars(select(LetterGroup).where(LetterGroup.book_id == book.id))}
     sizes: Dict[int, int] = defaultdict(int)
@@ -529,4 +607,4 @@ def auto_label(s, book: Book, cfg: Config) -> Dict:
                 placed += 1
         s.flush()
         recompute(s, touched)
-    return {"labelled_groups": n_labelled, "merged_groups": n_merged, "placed": placed}
+    return {"labelled_groups": n_labelled, "merged_groups": n_merged, "placed": placed, "groups_split": n_split}

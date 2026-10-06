@@ -378,7 +378,7 @@ class Library:
             b.captured_at = b.updated_at = now()
         return {"pages": len(results), "pages_ok": sum(r.status == "OK" for r in results),
                 "lines": stored["lines"], "samples": stored["samples"],
-                "groups": len(group_ids) - labels.get("merged_groups", 0),
+                "groups": len(group_ids) - labels.get("merged_groups", 0) + labels.get("groups_split", 0),
                 "unsure": summary.get("unsure", 0) - labels.get("placed", 0), **labels}
 
     def _auto_label(self, s: Session, book: Book) -> Dict:

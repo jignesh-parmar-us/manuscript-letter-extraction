@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -130,6 +130,17 @@ describe("SuggestPanel", () => {
     await userEvent.click(start);
     expect(api.suggestBooks).toHaveBeenCalledWith(1, [2, 3]);
     expect(await screen.findByText("Reading: 0 of 50")).toBeInTheDocument();
+  });
+
+  it("splits mixed groups on request and says what it did", async () => {
+    vi.mocked(api.splitMixed).mockResolvedValueOnce({ groups: 2, samples: 31, undo: 1, redo: 0 })
+      .mockResolvedValueOnce({ groups: 0, samples: 0, undo: 1, redo: 0 });
+    const { act } = renderView((ctx) => <SuggestPanel book={withRun()} ctx={ctx} onRead={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Split mixed groups" }));
+    expect(act).toHaveBeenCalled();
+    expect(await screen.findByText("2 groups split off (31 letters).")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Split mixed groups" }));
+    expect(await screen.findByText("No mixed group to split.")).toBeInTheDocument();
   });
 
   it("says when no other book has labels", async () => {

@@ -113,6 +113,13 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     }
   }
 
+  const [splitNote, setSplitNote] = useState("");
+  async function splitMixed() {
+    setSplitNote("");
+    const r = await ctx.act(() => api.splitMixed(book.id));
+    if (r) setSplitNote(Number(r.groups) ? `${r.groups} groups split off (${r.samples} letters).` : "No mixed group to split.");
+  }
+
   const candidates = bulkCandidates(ctx.groups, threshold / 100);
   async function acceptAll() {
     const n = candidates.length;
@@ -151,7 +158,8 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         <p className="small muted">
           Read {localTime(booksRun.finished_at)}: {String(booksRun.result.samples_matched)} of{" "}
           {String(booksRun.result.samples)} letters, {String(booksRun.result.groups_with_suggestion)} groups with a
-          suggestion.
+          suggestion
+          {Number(booksRun.result.groups_split) > 0 && `; ${booksRun.result.groups_split} mixed groups split`}.
         </p>
       )}
     </div>
@@ -205,7 +213,8 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
       {run && !running && (
         <p className="small muted">
           Read {localTime(run.finished_at)}: {run.result.samples_matched} of {run.result.samples} letters,{" "}
-          {run.result.groups_with_suggestion} groups with a suggestion.
+          {run.result.groups_with_suggestion} groups with a suggestion
+          {Number(run.result.groups_split) > 0 && `; ${run.result.groups_split} mixed groups split`}.
         </p>
       )}
       {run && printed && (
@@ -214,6 +223,18 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         </button>
       )}
       {printed && fromBooks}
+      {(run || booksRun) && (
+        <div className="row small">
+          <button
+            disabled={running}
+            onClick={splitMixed}
+            title="Letters of a group read as another letter, and shaped differently, go to a group of their own"
+          >
+            Split mixed groups
+          </button>
+          {splitNote && <span className="muted">{splitNote}</span>}
+        </div>
+      )}
       {(run || booksRun) && (
         <div className="row small bulk-accept">
           <button disabled={!candidates.length} onClick={acceptAll} title="Label every group whose suggestion has at least this share">

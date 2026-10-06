@@ -372,6 +372,7 @@ export const api = {
     post<ActionResult>(`/api/books/${bookId}/actions/reject-suggestion`, { group_id: groupId, label_dev: labelDev }),
   labelSamples: (bookId: number, sampleIds: number[], text: string) =>
     post<ActionResult>(`/api/books/${bookId}/actions/label-samples`, { sample_ids: sampleIds, text }),
+  splitMixed: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/actions/split-mixed`),
   readAs: (groupId: number, text: string) =>
     get<{ ids: number[] }>(`/api/groups/${groupId}/read-as?text=${encodeURIComponent(text)}`),
   undo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/undo`),
