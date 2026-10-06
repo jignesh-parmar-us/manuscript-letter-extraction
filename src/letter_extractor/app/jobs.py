@@ -142,11 +142,24 @@ class Jobs:
         return self.start(book_id, "export",
                           lambda progress, cancel: export_book(self.lib, book_id, folder, image))
 
-    def suggest(self, book_id: int, engine: str = "tesseract", tesseract_path: str = "") -> Job:
-        """Read every line of the book and store the readings; groups then carry suggestions (C11)."""
+    def suggest(self, book_id: int, engine: str = "tesseract", tesseract_path: str = "",
+                books: Optional[List[int]] = None) -> Job:
+        """Read the book with Tesseract (C11) or with the labelled groups of other books (C13) and
+        store the readings; groups then carry suggestions."""
         from sqlalchemy import func, select
         from .db import Line, Page, Sample
-        from .suggest import run_tesseract, tesseract_reader
+        from .suggest import reference_books, run_books, run_tesseract, tesseract_reader
+        if engine == "books":
+            usable = [b for b in reference_books(self.lib, book_id)
+                      if b["comparable"] and (b["default"] if books is None else b["id"] in books)]
+            if not usable:
+                raise LibraryError("No other book with labelled groups to learn from. Label some groups in "
+                                   "another book of the same writing first.")
+            with self.lib.session() as s:
+                total = s.scalar(select(func.count(Sample.id)).where(Sample.book_id == book_id,
+                                                                     Sample.deleted.is_(False))) or 0
+            return self.start(book_id, "suggest", lambda progress, cancel:
+                              run_books(self.lib, book_id, books, progress, cancel), total=total)
         if engine != "tesseract":
             raise LibraryError(f"Unknown reader '{engine}'.")
         book = self.lib.get_book(book_id)

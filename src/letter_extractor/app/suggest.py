@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from .. import io_utils
 from ..config import Config
@@ -28,6 +28,7 @@ from ..mapping import LabelError, canonical_label, mapping_for
 from ..ocr.aksharas import line_aksharas
 from ..ocr.align import align_line
 from ..ocr.tesseract import LineReading, TesseractError, find_tesseract, read_line
+from .centres import centres
 from .db import Book, LetterGroup, Line, OcrReading, OcrRun, Page, Sample, now
 from .library import Cancelled, Library, LibraryError
 
@@ -156,6 +157,112 @@ def run_tesseract(lib: Library, book_id: int, progress=None, cancel: Optional[Ca
     return result
 
 
+# ---- the other labelled books (C13) -------------------------------------------------------------
+
+# fingerprint settings (C4): fingerprints of books with other values cannot be compared
+FP_KEYS = ("normalize_size", "fp_blur", "fp_pixels", "fp_pixel_weight", "fp_hog_weight", "fp_size_weight")
+
+
+def reference_books(lib: Library, book_id: int) -> List[Dict]:
+    """The other books with labelled groups: id, name, writing, labelled groups, whether their
+    fingerprints can be compared with this book's (same settings), and whether they are used by
+    default (comparable, with the same writing)."""
+    book = lib.get_book(book_id)
+    cfg = lib.book_config(book)
+    out = []
+    with lib.session() as s:
+        for other in s.scalars(select(Book).where(Book.id != book_id).order_by(Book.name)):
+            n = s.scalar(select(func.count(LetterGroup.id)).where(LetterGroup.book_id == other.id,
+                                                                  LetterGroup.label_dev != "")) or 0
+            if not n:
+                continue
+            ocfg = lib.book_config(other)
+            same_fp = all(getattr(cfg, k) == getattr(ocfg, k) for k in FP_KEYS)
+            out.append({"id": other.id, "name": other.name, "writing": other.writing, "labelled": n,
+                        "comparable": same_fp, "default": same_fp and other.writing == book.writing})
+    return out
+
+
+def run_books(lib: Library, book_id: int, reference: Optional[Sequence[int]] = None, progress=None,
+              cancel: Optional[Callable[[], bool]] = None) -> Dict:
+    """Read every sample of the book with the labelled groups of other books (C13): a sample's
+    reading is the vote of the `books_k` nearest labelled group centres within `books_distance`,
+    weighted by 1 / distance; its confidence is the winner's share of that vote (0 to 100).
+    Stored as the book's run of engine "books" (replacing the previous one); groups then vote from
+    these readings like from Tesseract's. `reference` is a list of book ids (default: see
+    `reference_books`); books whose fingerprints cannot be compared are left out."""
+    t0 = time.time()
+    book = lib.get_book(book_id)
+    cfg = lib.book_config(book)
+    known = {b["id"]: b for b in reference_books(lib, book_id)}
+    chosen = [b for b in known.values() if b["default"]] if reference is None else \
+        [known[i] for i in reference if i in known]
+    skipped = [b["name"] for b in chosen if not b["comparable"]]
+    chosen = [b for b in chosen if b["comparable"]]
+    if not chosen:
+        raise LibraryError("No other book with labelled groups to learn from"
+                           + (f" (not comparable: {', '.join(skipped)})" if skipped else "") + ".")
+    labels: List[str] = []
+    rows = []
+    with lib.session() as s:
+        for b in chosen:
+            gs, C = centres(s, b["id"], labelled_only=True)
+            labels += [g.label_dev for g in gs]
+            if len(gs):
+                rows.append(C)
+        C = np.concatenate(rows) if rows else np.zeros((0, 0), np.float32)
+        samples = s.execute(select(Sample.id, Sample.fingerprint).where(
+            Sample.book_id == book_id, Sample.deleted.is_(False), Sample.fingerprint.is_not(None))).all()
+    if C.size == 0:
+        raise LibraryError("The chosen books have no labelled groups with samples.")
+    k = max(1, min(cfg.books_k, len(labels)))
+    found: List[Dict] = []
+    chunk = 2000
+    for start in range(0, len(samples), chunk):
+        if cancel and cancel():
+            raise Cancelled("Cancelled; no suggestions were stored.")
+        part = samples[start:start + chunk]
+        X = np.stack([np.frombuffer(fp, np.float32) for _, fp in part])
+        D = np.sqrt(np.maximum(0.0, (X * X).sum(1)[:, None] + (C * C).sum(1)[None, :] - 2.0 * X @ C.T))
+        near = np.argsort(D, axis=1)[:, :k]
+        for (sid, _), idx, d in zip(part, near, np.take_along_axis(D, near, axis=1)):
+            weight: Dict[str, float] = defaultdict(float)
+            for j, dist in zip(idx, d):
+                if dist <= cfg.books_distance:
+                    weight[labels[j]] += 1.0 / max(float(dist), 1e-3)
+            if not weight:
+                continue
+            total = sum(weight.values())
+            ranked = sorted(weight.items(), key=lambda kv: -kv[1])
+            found.append({"sample_id": sid, "text_dev": ranked[0][0],
+                          "confidence": round(100.0 * ranked[0][1] / total, 1),
+                          "alternatives": json.dumps([[t, round(w / total, 3)] for t, w in ranked[:3]],
+                                                     ensure_ascii=False),
+                          "overlap": round(float(d[0]), 3)})       # distance to the nearest centre
+        if progress:
+            done = min(start + chunk, len(samples))
+            progress(done, len(samples), LineDone(f"samples {start + 1}-{done}", "OK",
+                                                  f"{len(found)} read so far", 0.0))
+    result = {"books": [b["name"] for b in chosen], "skipped_books": skipped, "reference_groups": len(labels),
+              "samples": len(samples), "samples_matched": len(found)}
+    with lib.session() as s:
+        s.execute(delete(OcrRun).where(OcrRun.book_id == book_id, OcrRun.engine == "books"))
+        run = OcrRun(book_id=book_id, engine="books", finished_at=now(),
+                     settings=json.dumps({"books": [b["id"] for b in chosen], "k": k,
+                                          "books_distance": cfg.books_distance}))
+        s.add(run)
+        s.flush()
+        for r in found:
+            s.add(OcrReading(run_id=run.id, **r))
+        s.flush()
+        b = s.get(Book, book_id)
+        result["groups_with_suggestion"] = sum(
+            v["suggestion"] is not None for v in group_readings(s, b, cfg, engine="books").values())
+        result["seconds"] = round(time.time() - t0, 1)
+        run.result = json.dumps(result, ensure_ascii=False)
+    return result
+
+
 # ---- votes --------------------------------------------------------------------------------------
 
 def vote(readings: Sequence[Tuple[str, float]], min_votes: int, min_share: float) -> Optional[Dict]:
@@ -189,12 +296,30 @@ def _run_id(s, book_id: int, engine: str = "tesseract") -> Optional[int]:
                                             OcrRun.finished_at.is_not(None)).order_by(OcrRun.id.desc()))
 
 
-def group_readings(s, book: Book, cfg: Config, group_ids: Optional[Iterable[int]] = None) -> Dict[int, Dict]:
-    """Per group of the book (or of `group_ids`) with readings in the newest Tesseract run:
-    `read` (samples with a reading), `readings` (the 3 most common, with counts: a mixed group shows
-    as two strong readings) and `suggestion` (the vote's winner, or None). Labelled groups, and
-    groups whose winning reading the user rejected, get no suggestion."""
-    run_id = _run_id(s, book.id)
+def engines(s, book: Book) -> List[str]:
+    """The readers with a finished run on the book, the main one first: Tesseract on printed books,
+    the other labelled books (C13) on handwritten ones, where Tesseract reads too many letters wrong."""
+    have = {r.engine for r in latest_runs(s, book.id)}
+    order = ("tesseract", "books") if book.writing == "printed" else ("books", "tesseract")
+    return [e for e in order if e in have]
+
+
+def _engine(s, book: Book, engine: Optional[str]) -> Optional[str]:
+    if engine is not None:
+        return engine
+    found = engines(s, book)
+    return found[0] if found else None
+
+
+def group_readings(s, book: Book, cfg: Config, group_ids: Optional[Iterable[int]] = None,
+                   engine: Optional[str] = None) -> Dict[int, Dict]:
+    """Per group of the book (or of `group_ids`) with readings in the newest run of `engine` (by
+    default the book's main reader, see `engines`): `read` (samples with a reading), `readings` (the
+    3 most common, with counts: a mixed group shows as two strong readings) and `suggestion` (the
+    vote's winner, or None). Labelled groups, and groups whose winning reading the user rejected, get
+    no suggestion."""
+    engine = _engine(s, book, engine)
+    run_id = _run_id(s, book.id, engine) if engine else None
     if run_id is None:
         return {}
     q = (select(Sample.group_id, OcrReading.text_dev, OcrReading.confidence)
@@ -225,36 +350,65 @@ def group_readings(s, book: Book, cfg: Config, group_ids: Optional[Iterable[int]
             v = vote(readings, cfg.suggest_min_votes, cfg.suggest_min_share)
             if v is not None and v["label_dev"] != g.rejected_dev:
                 other = by_label.get(v["label_dev"])
-                suggestion = {**v, "label_guj": mapping.gujarati(v["label_dev"]), "engine": "tesseract",
+                suggestion = {**v, "label_guj": mapping.gujarati(v["label_dev"]), "engine": engine,
                               "merge_into": {"id": other.id, "code": other.code} if other is not None else None}
         out[gid] = {"read": len(readings), "suggestion": suggestion,
                     "readings": [{"label_dev": t, "label_guj": mapping.gujarati(t), "count": n} for t, n in top]}
     return out
 
 
-def sample_readings(s, book: Book, cfg: Config, sample_ids: Sequence[int], unsure: bool = True) -> Dict[int, Dict]:
-    """Each sample's own Tesseract reading.
+def group_suggestions(s, book: Book, cfg: Config, group_ids: Optional[Iterable[int]] = None) -> Dict[int, Dict]:
+    """`group_readings` of the book's main reader, with the other reader's suggestion added (C13):
+    when both suggest the same label, the suggestion lists both in `agree`; when only the other one
+    suggests, its suggestion is shown; when they differ, the other one is `other_suggestion`."""
+    found = engines(s, book)
+    if not found:
+        return {}
+    main = group_readings(s, book, cfg, group_ids, found[0])
+    second = group_readings(s, book, cfg, group_ids, found[1]) if len(found) > 1 else {}
+    out: Dict[int, Dict] = {}
+    for gid in set(main) | set(second):
+        entry = dict(main.get(gid) or {"read": 0, "readings": [], "suggestion": None})
+        mine, theirs = entry["suggestion"], (second.get(gid) or {}).get("suggestion")
+        other = None
+        if mine and theirs and mine["label_dev"] == theirs["label_dev"]:
+            entry["suggestion"] = {**mine, "agree": [mine["engine"], theirs["engine"]]}
+        elif theirs and not mine:
+            entry["suggestion"] = theirs
+        else:
+            other = theirs
+        entry["other_suggestion"] = other
+        out[gid] = entry
+    return out
 
-    For unsure samples (`unsure`), only readings at or above `suggest_min_confidence`, and none on
-    handwritten books: there they would be offered for accepting, and Tesseract's confidence stays
-    high when it is wrong (C10). For samples in a group, every reading: they are shown as badges
-    where they differ from the group (C12), which is how mixed groups are found."""
-    run_id = _run_id(s, book.id)
-    if run_id is None or not sample_ids or (unsure and book.writing != "printed"):
+
+def sample_readings(s, book: Book, cfg: Config, sample_ids: Sequence[int], unsure: bool = True,
+                    engine: Optional[str] = None) -> Dict[int, Dict]:
+    """Each sample's own reading by `engine` (by default the book's main reader).
+
+    For unsure samples (`unsure`), only readings at or above `suggest_min_confidence`, and no
+    Tesseract readings on handwritten books: there they would be offered for accepting, and
+    Tesseract's confidence stays high when it is wrong (C10). For samples in a group, every reading:
+    they are shown as badges where they differ from the group (C12), which is how mixed groups are
+    found."""
+    engine = _engine(s, book, engine)
+    run_id = _run_id(s, book.id, engine) if engine else None
+    if run_id is None or not sample_ids or (unsure and engine == "tesseract" and book.writing != "printed"):
         return {}
     mapping = mapping_for(cfg)
     q = select(OcrReading.sample_id, OcrReading.text_dev, OcrReading.confidence).where(
         OcrReading.run_id == run_id, OcrReading.sample_id.in_(list(sample_ids)))
     if unsure:
         q = q.where(OcrReading.confidence >= cfg.suggest_min_confidence)
-    return {sid: {"label_dev": text, "label_guj": mapping.gujarati(text), "confidence": conf, "engine": "tesseract"}
+    return {sid: {"label_dev": text, "label_guj": mapping.gujarati(text), "confidence": conf, "engine": engine}
             for sid, text, conf in s.execute(q)}
 
 
-def samples_read_as(s, book: Book, group_id: int, text: str) -> List[int]:
-    """The group's samples (not deleted) that the newest Tesseract run read as `text` (C12: select
+def samples_read_as(s, book: Book, group_id: int, text: str, engine: Optional[str] = None) -> List[int]:
+    """The group's samples (not deleted) that the book's main reader read as `text` (C12: select
     them, to split a mixed group)."""
-    run_id = _run_id(s, book.id)
+    engine = _engine(s, book, engine)
+    run_id = _run_id(s, book.id, engine) if engine else None
     if run_id is None:
         return []
     return list(s.scalars(select(Sample.id).join(OcrReading, OcrReading.sample_id == Sample.id)
@@ -265,13 +419,14 @@ def samples_read_as(s, book: Book, group_id: int, text: str) -> List[int]:
 BANDS = [(0.9, "90% or more"), (0.75, "75 to 90%"), (0.0, "below 75%")]
 
 
-def suggestion_accuracy(s, book: Book, cfg: Config) -> Dict:
-    """How the suggestions compare with the user's labels (C12): each labelled group is voted as if
-    it had no label. Right / wrong per share band, groups without a suggestion, the most common
-    wrong pairs. Only meaningful once a good part of the book is labelled."""
-    run_id = _run_id(s, book.id)
+def suggestion_accuracy(s, book: Book, cfg: Config, engine: Optional[str] = None) -> Dict:
+    """How one reader's suggestions compare with the user's labels (C12): each labelled group is
+    voted as if it had no label. Right / wrong per share band, groups without a suggestion, the most
+    common wrong pairs. Only meaningful once a good part of the book is labelled."""
+    engine = _engine(s, book, engine)
+    run_id = _run_id(s, book.id, engine) if engine else None
     groups = s.scalars(select(LetterGroup).where(LetterGroup.book_id == book.id, LetterGroup.label_dev != "")).all()
-    out: Dict = {"labelled": len(groups), "suggested": 0, "right": 0, "none": 0,
+    out: Dict = {"engine": engine, "labelled": len(groups), "suggested": 0, "right": 0, "none": 0,
                  "bands": [{"band": name, "right": 0, "wrong": 0} for _, name in BANDS], "wrong": []}
     if run_id is None or not groups:
         out["none"] = len(groups)

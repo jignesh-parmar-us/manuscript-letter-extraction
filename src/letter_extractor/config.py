@@ -119,6 +119,8 @@ class Config:
     suggest_min_share: float = 0.6        # ...and the winning reading this share of the weighted votes
     suggest_min_confidence: float = 80.0  # an unsure sample shows its own reading from this confidence
     bulk_accept_share: float = 0.9        # "Accept all" in the Review tab starts at this share (C12)
+    books_k: int = 5                      # suggestions from other books (C13): nearest labelled groups that vote,
+    books_distance: float = 0.5           # if this close (stricter than group_distance: measured in C13)
     cut_method: str = "shapes"            # cutting letters: "shapes" (C3a, C3b) or "tesseract" (by its reading, C12c)
     tesseract_cut_min_gap: float = 0.3    # Tesseract cutting: cuts closer than this x a letter width are not made
     recut_window: float = 0.3             # fixing cuts (C12b): a cut may move this x a letter width from Tesseract's

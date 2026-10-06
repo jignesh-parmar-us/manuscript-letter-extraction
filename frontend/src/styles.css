@@ -587,3 +587,13 @@ table.list.compact {
   border: 1px solid var(--ok);
   color: var(--ok);
 }
+.suggest-source {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+.other-suggestion {
+  flex-basis: 100%;
+}

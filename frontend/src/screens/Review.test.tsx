@@ -7,7 +7,8 @@ import { group } from "./reviewTestUtils";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { groups: vi.fn(), undo: vi.fn(), redo: vi.fn(), tesseract: vi.fn(), accuracy: vi.fn() } };
+  return { ...real, api: { groups: vi.fn(), undo: vi.fn(), redo: vi.fn(), tesseract: vi.fn(), accuracy: vi.fn(),
+    referenceBooks: vi.fn() } };
 });
 
 const book: Book = {
@@ -26,6 +27,7 @@ describe("Review", () => {
     vi.mocked(api.groups).mockResolvedValue(groups);
     vi.mocked(api.undo).mockResolvedValue({ undo: 1, redo: 1 });
     vi.mocked(api.tesseract).mockResolvedValue({ ok: true, langs_needed: "script/Devanagari" });
+    vi.mocked(api.referenceBooks).mockResolvedValue([]);
   });
 
   it("lists the groups and undoes with Ctrl/Cmd+Z", async () => {

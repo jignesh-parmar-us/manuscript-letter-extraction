@@ -120,4 +120,25 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 40 random samples of the 7-page books, by eye: about 30 clean single letters cut by Tesseract against about 26 cut by shapes. The Tesseract cut's errors are mostly two letters left together (सर्वे, नांव) where Tesseract's boundary was unclear, and a few vowel bars on the wrong letter.
 
+**Labels at capture** (added the same day, asked for by the user): a new scratch book of the 23 pages cut by Tesseract got 77 labelled groups at capture (46 groups merged into them, 58 unsure samples placed): 24% of the 14,290 samples labelled without a step by the user. By eye the groups looked at are right (जे, इ; क्त mostly the क्त ligature, a few pieces with a stray dot or bar). The labelling itself takes about 4 s; the rest stay in mixed groups (no reading with 60% of the votes).
+
 **Conclusion:** on print, cutting by Tesseract is better (less than half as many multi-letter samples, fewer groups, more suggestions, every sample read), but not by a wide margin, and the number of mixed groups is the same. It stays an option per book; the default remains the shape cut, which is the only one that works on handwriting. Fix cuts (C12b) can still be run after either cut.
+
+## C13. Suggestions from other labelled books (2026-10-06)
+
+**No handwritten book is labelled yet**, so the plan's measurement (two handwritten pages, one suggesting the other) waits for the user's labels. Measured on print instead, on a copy of the user's library: book 3 "Vachnamrut Printed 1933" (cut by shapes, 82 labelled groups) suggests for book 4 "Vachnamrut Printed 1933 Tesseract Cuts" (the same 23 pages cut by Tesseract and grouped on their own; its labels reviewed by the user are the truth). Since the two books share pages, the reference centres are built only from book 3's samples on half of the pages, and only book 4's samples on the other half are judged (both ways round).
+
+**Within one book** (book 3, its own labelled groups split by page) every reading was right: a sample lies near the centre of its own group almost by definition. This is not a fair test, and is not used.
+
+**Across the two books** (book 4's groups labelled or reviewed by the user are judged; those labelled at capture are left out):
+
+| Distance limit | k | Samples read | Of them right | Groups right / wrong / none (both halves) |
+|---|---|---|---|---|
+| 0.40 | 5 | 902 + 966 | 93% | 29 / 1 / 43, 28 / 1 / 44 |
+| 0.45 | 1 to 9 | 1,078 + 1,174 | 90% | 30 / 1 / 42, 29 / 1 / 43 |
+| **0.50** | 5 | 1,214 + 1,312 | 89% | **31 / 1 / 41, 30 / 1 / 42** |
+| 0.55 (`group_distance`) | 1 to 9 | 1,305 + 1,380 | 86 to 87% | 31 / 5 / 37, 30 / 4 / 39 |
+
+The number of voting groups (k) makes no difference: within the distance limit there is usually only one labelled group. The limit does: 0.55, the grouping distance, adds 4 wrong suggestions for 1 more right. **`books_distance` = 0.5.** Wrong readings are look-alikes (ते / ने, रि / वि, स / र). About half of the target groups get no suggestion: their letter is not labelled in the reference half, or too few of their samples were read.
+
+**The real job** on the copy, book 4 from books 1 and 3 (109 reference groups): 3.2 s for 14,302 samples; 5,513 read; 47 groups with a suggestion. Against book 4's 114 labelled groups (with the 37 labelled at capture): 42 of 48 suggestions right; wrong pairs व / य, ते / ने, वे / ने, बा / वा, बे / ने. (Inflated: the books share pages; the page-split numbers above are the fair ones.)

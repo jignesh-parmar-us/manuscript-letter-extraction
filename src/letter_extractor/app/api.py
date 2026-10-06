@@ -11,7 +11,9 @@ Routes (all JSON unless noted):
              GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
   ocr (C11)  GET /api/tesseract (installed? version, languages); groups carry `suggestion` and `readings`,
              their samples and unsure samples `reading`, the book `ocr_runs`;
-             GET /api/groups/{id}/read-as?text=... (sample ids), GET /api/books/{id}/suggestion-accuracy (C12)
+             GET /api/groups/{id}/read-as?text=... (sample ids), GET /api/books/{id}/suggestion-accuracy[?engine=]
+             (C12); POST /api/books/{id}/suggest {"engine": "books"} and GET /api/books/{id}/reference-books
+             (C13): suggestions from the labelled groups of other books; groups also carry `other_suggestion`
   reading    GET /api/books/{id}/pages, /api/pages/{id}, /api/books/{id}/groups, /api/groups/{id},
              /api/groups/{id}/samples, /api/books/{id}/unsure, /api/samples/{id}
   actions    POST /api/books/{id}/actions/{move|new-group|merge|dissolve|label|status|delete|restore},
@@ -49,7 +51,8 @@ from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       GroupRef, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion, SampleIds, Split,
                       Status, SuggestRequest, Upload)
-from .suggest import group_readings, latest_runs, sample_readings, samples_read_as, suggestion_accuracy
+from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
+                      suggestion_accuracy)
 
 MAX_PAGE = 500
 
@@ -84,8 +87,8 @@ def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None) -> Di
             "example_id": mem[0].id if mem else None,
             "example_image": f"/files/books/{g.book_id}/{mem[0].image}?token={token}" if mem else None,
             "updated_at": g.updated_at.isoformat() if g.updated_at else None,
-            "suggestion": (ocr or {}).get("suggestion"), "readings": (ocr or {}).get("readings", []),
-            "read": (ocr or {}).get("read", 0)}
+            "suggestion": (ocr or {}).get("suggestion"), "other_suggestion": (ocr or {}).get("other_suggestion"),
+            "readings": (ocr or {}).get("readings", []), "read": (ocr or {}).get("read", 0)}
 
 
 def create_app(library: Library, token: str, context=None) -> FastAPI:
@@ -192,7 +195,12 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     @app.post("/api/books/{book_id}/suggest", dependencies=auth, status_code=202)
     def suggest(book_id: int, body: SuggestRequest = SuggestRequest()) -> Dict:
-        return jobs.suggest(book_id, body.engine, tesseract_setting()).as_dict()
+        return jobs.suggest(book_id, body.engine, tesseract_setting(), body.books).as_dict()
+
+    @app.get("/api/books/{book_id}/reference-books", dependencies=auth)
+    def ref_books(book_id: int) -> List[Dict]:
+        """The other books with labelled groups, for suggestions from labelled books (C13)."""
+        return reference_books(library, book_id)
 
     @app.post("/api/books/{book_id}/fix-cuts", dependencies=auth, status_code=202)
     def fix_cuts(book_id: int) -> Dict:
@@ -264,7 +272,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def groups(book_id: int) -> List[Dict]:
         with library.session() as s:
             book = book_or_404(s, book_id)
-            ocr = group_readings(s, book, library.book_config(book))
+            ocr = group_suggestions(s, book, library.book_config(book))
             return [_group_json(s, g, token, ocr.get(g.id)) for g in
                     s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id).order_by(LetterGroup.code))]
 
@@ -273,7 +281,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         with library.session() as s:
             g = group_or_404(s, group_id)
             book = s.get(Book, g.book_id)
-            ocr = group_readings(s, book, library.book_config(book), [g.id])
+            ocr = group_suggestions(s, book, library.book_config(book), [g.id])
             return _group_json(s, g, token, ocr.get(g.id))
 
     @app.get("/api/groups/{group_id}/samples", dependencies=auth)
@@ -296,10 +304,10 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             return {"ids": samples_read_as(s, s.get(Book, g.book_id), g.id, text)}
 
     @app.get("/api/books/{book_id}/suggestion-accuracy", dependencies=auth)
-    def accuracy(book_id: int) -> Dict:
+    def accuracy(book_id: int, engine: Optional[str] = None) -> Dict:
         with library.session() as s:
             book = book_or_404(s, book_id)
-            return suggestion_accuracy(s, book, library.book_config(book))
+            return suggestion_accuracy(s, book, library.book_config(book), engine)
 
     @app.get("/api/books/{book_id}/unsure", dependencies=auth)
     def unsure(book_id: int, offset: int = 0, limit: int = Query(200, le=MAX_PAGE),

@@ -1,5 +1,6 @@
 // Label suggestions in the Review tab (C12).
-// - SuggestPanel (in the side bar): read the book with Tesseract (a background job), accept all
+// - SuggestPanel (in the side bar): read the book with Tesseract (a background job) or with the
+//   labelled groups of other books (C13; the main reader of handwritten books), accept all
 //   suggestions above a share in one undoable step, and see how the suggestions compare with the
 //   labels given so far. On printed books, "Fix cuts with Tesseract" splits samples that hold several
 //   letters and joins letters cut in pieces (C12b), as one undoable step.
@@ -9,7 +10,7 @@
 //   split a mixed group.
 // A suggestion never labels a group by itself: every accept is a normal, undoable action.
 import { useCallback, useEffect, useState } from "react";
-import { api, Book, Group, Job, localTime, SuggestionAccuracy, TesseractStatus } from "../api";
+import { api, Book, ENGINE_NAME, Group, Job, localTime, ReferenceBook, SuggestionAccuracy, TesseractStatus } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import { useJob } from "../components/useJob";
@@ -39,7 +40,9 @@ const pct = (share: number) => `${Math.round(share * 100)}%`;
 export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewContext; onRead: () => void }) {
   const [status, setStatus] = useState<TesseractStatus | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [accuracy, setAccuracy] = useState<SuggestionAccuracy | null>(null);
+  const [accuracy, setAccuracy] = useState<SuggestionAccuracy[]>([]);
+  const [refs, setRefs] = useState<ReferenceBook[] | null>(null);
+  const [chosen, setChosen] = useState<Set<number> | null>(null); // null: the default reference books
   const [threshold, setThreshold] = useState(() => Math.round(100 * Number(book.settings.bulk_accept_share ?? 0.9)));
   const [dialog, confirm] = useConfirm();
   const onEnd = useCallback(
@@ -50,16 +53,39 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
   );
   const [job, setJob] = useJob(book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" ? book.job : null, onEnd);
   const run = book.ocr_runs?.find((r) => r.engine === "tesseract");
+  const booksRun = book.ocr_runs?.find((r) => r.engine === "books");
   const printed = book.writing === "printed";
 
   useEffect(() => {
     api.tesseract(book.id).then(setStatus, setError);
+    api.referenceBooks(book.id).then(setRefs, () => setRefs([]));
   }, [book.id]);
-  const runTime = run?.finished_at;
+  const runTimes = (book.ocr_runs ?? []).map((r) => `${r.engine}@${r.finished_at}`).join(",");
   useEffect(() => {
-    if (!runTime || book.labelled === 0) setAccuracy(null);
-    else api.accuracy(book.id).then(setAccuracy, () => setAccuracy(null));
-  }, [book.id, book.labelled, runTime, ctx.version]);
+    const ran = (book.ocr_runs ?? []).map((r) => r.engine);
+    if (!ran.length || book.labelled === 0) {
+      setAccuracy([]);
+      return;
+    }
+    Promise.all(ran.map((e) => api.accuracy(book.id, e))).then(setAccuracy, () => setAccuracy([]));
+  }, [book.id, book.labelled, runTimes, ctx.version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const usable = (refs ?? []).filter((r) => r.comparable);
+  const picked = chosen ?? new Set(usable.filter((r) => r.default).map((r) => r.id));
+  function toggle(id: number) {
+    const next = new Set(picked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setChosen(next);
+  }
+  async function startBooks() {
+    setError(null);
+    try {
+      setJob(await api.suggestBooks(book.id, [...picked]));
+    } catch (e) {
+      setError(e);
+    }
+  }
 
   async function start() {
     setError(null);
@@ -101,11 +127,41 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
   }
 
   const running = job?.status === "running";
+  const fromBooks = (
+    <div className="suggest-source">
+      <span className="small muted">From your labelled books</span>
+      {refs !== null && usable.length === 0 && (
+        <p className="small muted">
+          No other book with labels {refs.length > 0 ? "that can be compared (other fingerprint settings)" : "yet"}.
+          Label some groups in another book of the same {printed ? "print" : "hand"} first.
+        </p>
+      )}
+      {usable.map((r) => (
+        <label key={r.id} className="row small">
+          <input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} />
+          {r.name} <span className="muted">({r.labelled} labelled{r.writing !== book.writing ? `, ${r.writing}` : ""})</span>
+        </label>
+      ))}
+      {usable.length > 0 && (
+        <button className={printed ? "" : "primary"} disabled={running || picked.size === 0} onClick={startBooks}>
+          {booksRun ? "Suggest again from labelled books" : "Suggest from labelled books"}
+        </button>
+      )}
+      {booksRun && !running && (
+        <p className="small muted">
+          Read {localTime(booksRun.finished_at)}: {String(booksRun.result.samples_matched)} of{" "}
+          {String(booksRun.result.samples)} letters, {String(booksRun.result.groups_with_suggestion)} groups with a
+          suggestion.
+        </p>
+      )}
+    </div>
+  );
   return (
     <div className="card subtle suggest-panel">
       {dialog}
       <strong className="small">Label suggestions</strong>
       <ErrorBox error={error} onClose={() => setError(null)} />
+      {!printed && fromBooks}
       {!printed && (
         <p className="small muted">
           This book is handwritten. Tesseract reads print; on handwriting about a third of its letters are wrong, so
@@ -131,7 +187,7 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
       {running && (
         <div className="small">
           <progress max={job!.total || 1} value={job!.done} />
-          {job!.kind === "fix_cuts" ? "Checking cuts" : "Reading lines"}: {job!.done} of {job!.total}
+          {job!.kind === "fix_cuts" ? "Checking cuts" : "Reading"}: {job!.done} of {job!.total}
         </div>
       )}
       {job?.status === "failed" && <p className="small error-text">{job.error}</p>}
@@ -157,7 +213,8 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
           Fix cuts with Tesseract
         </button>
       )}
-      {run && (
+      {printed && fromBooks}
+      {(run || booksRun) && (
         <div className="row small bulk-accept">
           <button disabled={!candidates.length} onClick={acceptAll} title="Label every group whose suggestion has at least this share">
             Accept {candidates.length} with ≥
@@ -175,28 +232,31 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
           %
         </div>
       )}
-      {accuracy && accuracy.suggested > 0 && (
-        <details className="small">
-          <summary>
-            Checked against your labels: {accuracy.right} of {accuracy.suggested} right
-          </summary>
-          <ul>
-            {accuracy.bands
-              .filter((b) => b.right + b.wrong > 0)
-              .map((b) => (
-                <li key={b.band}>
-                  {b.band}: {b.right} of {b.right + b.wrong} right
+      {accuracy
+        .filter((acc) => acc.suggested > 0)
+        .map((acc) => (
+          <details key={acc.engine ?? ""} className="small">
+            <summary>
+              {acc.engine ? `${ENGINE_NAME[acc.engine]}: ` : ""}checked against your labels: {acc.right} of{" "}
+              {acc.suggested} right
+            </summary>
+            <ul>
+              {acc.bands
+                .filter((b) => b.right + b.wrong > 0)
+                .map((b) => (
+                  <li key={b.band}>
+                    {b.band}: {b.right} of {b.right + b.wrong} right
+                  </li>
+                ))}
+              <li>{acc.none} labelled groups would get no suggestion</li>
+              {acc.wrong.map((w) => (
+                <li key={w.label + w.suggested}>
+                  {w.label} suggested as {w.suggested} ({w.groups})
                 </li>
               ))}
-            <li>{accuracy.none} labelled groups would get no suggestion</li>
-            {accuracy.wrong.map((w) => (
-              <li key={w.label + w.suggested}>
-                {w.label} suggested as {w.suggested} ({w.groups})
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+            </ul>
+          </details>
+        ))}
     </div>
   );
 }
@@ -208,6 +268,7 @@ export function SuggestionChip({ group, ctx, onChange }: { group: Group; ctx: Re
   if (!sug || group.label_dev) return null;
   const { bookId, act } = ctx;
   const into = sug.merge_into;
+  const other = group.other_suggestion;
 
   async function merge() {
     if (into && (await confirm(`Merge ${group.code} (${group.samples} samples) into ${into.code}, labelled ${sug!.label_guj}?`, "Merge"))) {
@@ -222,7 +283,8 @@ export function SuggestionChip({ group, ctx, onChange }: { group: Group; ctx: Re
       <span className="small muted">Suggested:</span> <span className="big-letter">{sug.label_guj}</span>{" "}
       <span className="muted">{sug.label_dev}</span>{" "}
       <span className="small muted">
-        {sug.count} of {sug.read} read ({pct(sug.share)})
+        {sug.count} of {sug.read} read ({pct(sug.share)}) ·{" "}
+        {sug.agree ? `${ENGINE_NAME[sug.agree[0]]} and ${ENGINE_NAME[sug.agree[1]]} agree` : `from ${ENGINE_NAME[sug.engine]}`}
       </span>
       <span className="row">
         {into ? (
@@ -245,6 +307,23 @@ export function SuggestionChip({ group, ctx, onChange }: { group: Group; ctx: Re
           Reject
         </button>
       </span>
+      {other && (
+        <span className="small other-suggestion">
+          {ENGINE_NAME[other.engine]} suggest{other.engine === "tesseract" ? "s" : ""} <strong>{other.label_guj}</strong>{" "}
+          <span className="muted">
+            {other.label_dev} · {other.count} of {other.read} ({pct(other.share)})
+          </span>{" "}
+          {!other.merge_into && (
+            <button
+              className="link"
+              disabled={group.locked}
+              onClick={() => act(() => api.acceptSuggestions(bookId, [{ group_id: group.id, label_dev: other.label_dev }]))}
+            >
+              Accept this instead
+            </button>
+          )}
+        </span>
+      )}
     </div>
   );
 }

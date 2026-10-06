@@ -4,7 +4,7 @@ Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, grou
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. **C13 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. **C14 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -338,17 +338,31 @@ Rules that carry over from Phase 1:
 
 ### C13. Suggestions from other labelled books
 
-**Goal:** use the labelled groups of earlier books (printed or handwritten) to suggest labels in a new book, with no training and no new dependency.
+**Status:** built (2026-10-06). Open: the measurement on handwriting, once a handwritten book is labelled (see "Done when").
 
-**Files:** additions to `app/suggest.py`, `app/centres.py`, `app/api.py`; `tests/test_suggest_books.py`.
+**Goal:** use the labelled groups of earlier books (printed or handwritten) to suggest labels in a new book, with no training and no new dependency. It is the first reader for handwriting, where Tesseract reads too many letters wrong (C10).
+
+**Files:** additions to `app/suggest.py` (`reference_books`, `run_books`, `engines`, `group_suggestions`; the reader is a parameter of `group_readings`, `sample_readings`, `samples_read_as`, `suggestion_accuracy`), `app/jobs.py`, `app/api.py`, `app/schemas.py`, `config.py`; `frontend/src/screens/Suggestions.tsx`, `api.ts`, `styles.css` (+ tests); `tests/test_suggest_books.py`, a change in `tests/test_api.py`; `docs/TUNING_PHASE2.md`.
 
 **What it does:**
-- **Reference set:** the centres of all labelled groups in the chosen books (the user picks them; by default, all books with the **same writing**, handwritten or printed, as the new book; added in C10). Fingerprints come from the C4 fingerprint, so all books must use the same fingerprint settings. Groups from books with other `normalize_size` / `fp_*` settings are skipped, with a message.
-- **For each group of the new book:** the nearest reference centres (k = 5). Their labels are voted, weighted by 1 / distance. A suggestion is made when the nearest is within `group_distance` and the vote share is at least `suggest_min_share`.
-- Stored as an `OcrRun` with `engine = books`. It is shown in the same chip as Tesseract suggestions, with the source named ("from Book 2"). When both engines suggest, the screen shows both, and agreement raises the share shown.
-- **Measured** on the two handwritten sample pages: label page1 in one book and page2 in another, suggest page2 from page1, and record the accuracy in `TUNING_PHASE2.md`.
+- **Reference books** (`GET /api/books/{id}/reference-books`): every other book with labelled groups, with its number of labelled groups, whether its fingerprints can be compared (the same C4 settings `normalize_size`, `fp_*`), and whether it is used by default (comparable and the same writing). The user can tick others, for example printed books for a handwritten one. Books that cannot be compared are not offered.
+- **Reading each sample** (`run_books`, engine `books`): the labelled group centres of the chosen books; a sample's reading is the vote of the `books_k` (5) nearest centres within `books_distance` (0.5), weighted by 1 / distance; its confidence is the winner's share of that vote. Samples with no centre that close get no reading. One reading per sample is stored as the book's run of engine `books` (replacing the previous one), with the 3 best labels as alternatives and the nearest distance.
+- **Groups vote live from these readings**, as from Tesseract's (C11): so moves, merges and splits are followed, and C12's readings line, badges, "Mixed readings", bulk accept and the accuracy check work unchanged.
+- **Two readers on one book:** the book's main reader is Tesseract on printed books and the other books on handwritten ones (`engines`). A group carries the main reader's suggestion; when the other reader suggests the same label, the suggestion lists both (`agree`); when only the other one suggests, its suggestion is shown; when they differ, the other one is `other_suggestion`.
+- **In the app:** the Label suggestions panel gets **"From your labelled books"**: the reference books with check boxes (defaults ticked), "Suggest from labelled books" (the main button on handwritten books, first in the panel), and when it last ran. The chip says where a suggestion comes from ("from your labelled books", "your labelled books and Tesseract agree") and shows the other reader's different suggestion with "Accept this instead". "Checked against your labels" is shown per reader.
+- **API:** `POST /api/books/{id}/suggest {"engine": "books", "books": [ids]}` (a job; 400 with the reason when no other book can teach this one); groups carry `other_suggestion`; `GET /api/books/{id}/suggestion-accuracy?engine=books`.
 
-**Done when:** a second book of the same hand gets suggestions for most of its common letters, with the measured accuracy recorded.
+**Tests:** reference books and defaults; another writing is not used by default but can be chosen; other fingerprint settings cannot be compared; a second book of the same pages gets the labels of the first, with suggestions from engine `books`; the accuracy check against labels; a new run replaces the old one, and the main reader follows the writing; agreement and `other_suggestion` with Tesseract; the API routes. Screen: the reference books (defaults ticked, not comparable ones hidden), starting the job, no other labelled book, the chip's source, agreement and the other suggestion.
+
+**Measured** (`TUNING_PHASE2.md`): no handwritten book is labelled yet, so it was measured on print. Book 3 (cut by shapes) suggesting for book 4 (the same pages cut by Tesseract, grouped on its own), with the pages split in halves so no page is on both sides: 89% of the read samples right, group suggestions 31 right / 1 wrong and 30 / 1 (about half the groups get none: their letter is not labelled in the reference half). The distance limit matters (0.55: 5 and 4 wrong), the number of voting groups does not. The job takes about 3 s for 14,000 samples.
+
+**Done when:** a second book of the same hand gets suggestions for most of its common letters, with the measured accuracy recorded. *Measured on print (above). On handwriting: open until a handwritten book is labelled; then the page-split measurement is repeated on it.*
+
+**Changes from the original plan:**
+- **Readings per sample, not suggestions per group.** The plan voted the nearest reference centres for each group's centre. Reading each sample and letting groups vote (as C11 does for Tesseract) keeps suggestions right after moves and merges, and gives C12's readings, badges and mixed-group tools for free.
+- **`books_distance` (0.5) instead of `group_distance` (0.55)**, measured: the grouping distance lets look-alikes in (4 to 5 wrong group suggestions instead of 1).
+- **Agreement is shown, not added to the share:** "agreement raises the share shown" would mix two different votes; the chip says both readers agree instead.
+- **Measured on print** for now: there are no handwritten labels yet.
 
 ### C14. Letter classifier: training and suggestions (FR-11)
 
@@ -537,8 +551,8 @@ Rules that carry over from Phase 1:
 | C12 | Reviewing suggestions, measuring | built (measurement after a full review) |
 | C12b | Fixing cuts with Tesseract's readings (printed books) | built | split samples holding several letters, join cut pieces; one undo | FR-8 |
 | C12c | Cutting by Tesseract's reading (printed books) | built | per-book choice of cutting; readings stored at capture | FR-5, FR-7 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
-| C13 | Suggestions from other labelled books | **next** | handwriting suggestions, no training | FR-7 |
-| C14 | Letter classifier | planned | `model.onnx`, per-class accuracy report | FR-11 |
+| C13 | Suggestions from other labelled books | built (handwriting measurement open) | handwriting suggestions, no training | FR-7 |
+| C14 | Letter classifier | **next** | `model.onnx`, per-class accuracy report | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
 | C16a | Training pages and pages to convert | planned | two page sets per book, separate folders, `Page.role` | FR-12 (pages to convert) |
 | C16b | Page conversion | planned | `text/<page>.txt` in Gujarati, `[?]` marks | FR-12 |
@@ -570,7 +584,9 @@ All in the same `Config` dataclass, per book, except where noted.
 | `recut_window` | C12b, C12c | 0.3 (x the line's median sample width) |
 | `recut_min_width` | C12b | 0.45 (x the line's median sample width) |
 | `recut_min_group` | C12b | 5 |
-| `reference_books` | C13 | all books with the same writing |
+| `reference_books` | C13 | all comparable books with the same writing (chosen per run in the panel, not a stored setting) |
+| `books_k` | C13 | 5 |
+| `books_distance` | C13 | 0.5 (measured in C13) |
 | `min_class_samples` | C14 | 5 |
 | `active_model` (app setting) | C14 | none |
 | `word_lists` | C15 | none |

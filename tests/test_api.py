@@ -260,7 +260,7 @@ class SuggestionTests(ApiTestCase):
         self.assertEqual(job["status"], "done", job["error"])
         self.assertEqual(job["kind"], "suggest")
         self.assertGreater(job["result"]["lines"], 0)
-        self.assertEqual(self.post(f"/api/books/{self.book}/suggest", {"engine": "books"}).status_code, 422)
+        self.assertEqual(self.post(f"/api/books/{self.book}/suggest", {"engine": "classifier"}).status_code, 422)
 
 
     def test_review_routes(self):

@@ -73,7 +73,8 @@ class LabelSamples(SampleIds):
 
 
 class SuggestRequest(BaseModel):
-    engine: Literal["tesseract"] = "tesseract"    # other books and the classifier follow (C13, C14)
+    engine: Literal["tesseract", "books"] = "tesseract"   # Tesseract (C11) or other labelled books (C13)
+    books: Optional[List[int]] = None             # engine "books": the books to learn from (None: the default ones)
 
 
 class BookSettings(BaseModel):

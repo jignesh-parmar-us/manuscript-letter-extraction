@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -47,6 +47,7 @@ describe("suggestion helpers", () => {
 describe("SuggestPanel", () => {
   beforeEach(() => {
     vi.mocked(api.tesseract).mockResolvedValue({ ok: true, langs_needed: "script/Devanagari" });
+    vi.mocked(api.referenceBooks).mockResolvedValue([]);
     vi.mocked(api.acceptSuggestions).mockResolvedValue(ok);
   });
 
@@ -59,7 +60,7 @@ describe("SuggestPanel", () => {
     await waitFor(() => expect(start).toBeEnabled());
     await userEvent.click(start);
     expect(api.suggest).toHaveBeenCalledWith(1);
-    expect(await screen.findByText("Reading lines: 0 of 9")).toBeInTheDocument();
+    expect(await screen.findByText("Reading: 0 of 9")).toBeInTheDocument();
   });
 
   it("is a 'try' on handwritten books and explains why", async () => {
@@ -104,11 +105,37 @@ describe("SuggestPanel", () => {
   });
 
   it("shows how the suggestions compare with the labels", async () => {
-    vi.mocked(api.accuracy).mockResolvedValue({ labelled: 27, suggested: 13, right: 13, none: 14,
+    vi.mocked(api.accuracy).mockResolvedValue({ engine: "tesseract", labelled: 27, suggested: 13, right: 13, none: 14,
       bands: [{ band: "90% or more", right: 12, wrong: 0 }, { band: "75 to 90%", right: 1, wrong: 0 }, { band: "below 75%", right: 0, wrong: 0 }],
       wrong: [] });
     renderView((ctx) => <SuggestPanel book={withRun({ labelled: 27 })} ctx={ctx} onRead={() => {}} />);
-    expect(await screen.findByText("Checked against your labels: 13 of 13 right")).toBeInTheDocument();
+    expect(await screen.findByText("Tesseract: checked against your labels: 13 of 13 right")).toBeInTheDocument();
+  });
+
+  it("suggests a handwritten book from the other labelled books", async () => {
+    vi.mocked(api.referenceBooks).mockResolvedValue([
+      { id: 2, name: "Hand A", writing: "handwritten", labelled: 40, comparable: true, default: true },
+      { id: 3, name: "Print", writing: "printed", labelled: 80, comparable: true, default: false },
+      { id: 4, name: "Other settings", writing: "handwritten", labelled: 9, comparable: false, default: false },
+    ]);
+    vi.mocked(api.suggestBooks).mockResolvedValue({ id: "j3", book_id: 1, kind: "suggest", status: "running", done: 0,
+      total: 50, current: "", pages: [], result: null, error: "", seconds: 0 });
+    renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
+    expect(await screen.findByRole("checkbox", { name: /Hand A/ })).toBeChecked();      // same writing: default
+    expect(screen.getByRole("checkbox", { name: /Print/ })).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /Other settings/ })).toBeNull();      // cannot be compared
+    await userEvent.click(screen.getByRole("checkbox", { name: /Print/ }));
+    const start = screen.getByRole("button", { name: "Suggest from labelled books" });
+    expect(start).toHaveClass("primary");
+    await userEvent.click(start);
+    expect(api.suggestBooks).toHaveBeenCalledWith(1, [2, 3]);
+    expect(await screen.findByText("Reading: 0 of 50")).toBeInTheDocument();
+  });
+
+  it("says when no other book has labels", async () => {
+    renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
+    expect(await screen.findByText(/No other book with labels yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /labelled books/ })).toBeNull();
   });
 });
 
@@ -143,6 +170,21 @@ describe("suggestions on a group", () => {
     expect(api.merge).toHaveBeenCalledWith(1, 9, [5]);
     await userEvent.click(within(chip).getByRole("button", { name: "Change…" }));
     expect(screen.getByDisplayValue("ક")).toBeInTheDocument();
+  });
+
+  it("names the source, says when both readers agree, and offers the other reader's suggestion", async () => {
+    renderView((ctx) => <GroupView group={group({ suggestion: sug({ engine: "books", agree: ["books", "tesseract"] }) })} ctx={ctx} />);
+    expect(screen.getByRole("group", { name: "Suggested label" })).toHaveTextContent("your labelled books and Tesseract agree");
+  });
+
+  it("offers the other reader's different suggestion", async () => {
+    const g = group({ suggestion: sug({ engine: "books" }), other_suggestion: sug({ label_dev: "ब", label_guj: "બ", engine: "tesseract" }) });
+    renderView((ctx) => <GroupView group={g} ctx={ctx} />);
+    const chip = screen.getByRole("group", { name: "Suggested label" });
+    expect(chip).toHaveTextContent("from your labelled books");
+    expect(chip).toHaveTextContent("Tesseract suggests બ");
+    await userEvent.click(within(chip).getByRole("button", { name: "Accept this instead" }));
+    expect(api.acceptSuggestions).toHaveBeenCalledWith(1, [{ group_id: 5, label_dev: "ब" }]);
   });
 
   it("selects the samples of one reading to split a mixed group", async () => {

@@ -93,7 +93,7 @@ export interface Book extends BookSummary {
   undo: number;
   redo: number;
   job: Job | null;
-  ocr_runs?: { engine: string; finished_at: string | null; result: Record<string, number> }[]; // C11
+  ocr_runs?: { engine: Engine; finished_at: string | null; result: Record<string, number | string[]> }[]; // C11, C13
 }
 
 export interface JobPage {
@@ -149,7 +149,8 @@ export interface Group {
   example_id: number | null;
   example_image: string | null;
   updated_at: string | null;
-  suggestion: LabelSuggestion | null; // voted from the samples' OCR readings (C11)
+  suggestion: LabelSuggestion | null; // voted from the samples' readings (C11, C13)
+  other_suggestion?: LabelSuggestion | null; // the other reader's suggestion, when it differs (C13)
   readings: Reading[]; // the 3 most common OCR readings of its samples; two strong ones = a mixed group
   read: number; // samples with an OCR reading
 }
@@ -161,8 +162,24 @@ export interface LabelSuggestion {
   share: number; // weighted share of the winning reading, 0 to 1
   count: number; // samples read as it
   read: number; // samples read
-  engine: "tesseract";
+  engine: Engine;
+  agree?: Engine[]; // both readers suggest this label (C13)
   merge_into: { id: number; code: string } | null; // another group already has this label
+}
+
+/** Who reads the letters: Tesseract (C11) or the labelled groups of other books (C13). */
+export type Engine = "tesseract" | "books";
+
+export const ENGINE_NAME: Record<Engine, string> = { tesseract: "Tesseract", books: "your labelled books" };
+
+/** Another book whose labelled groups can suggest labels here (C13). */
+export interface ReferenceBook {
+  id: number;
+  name: string;
+  writing: Writing;
+  labelled: number;
+  comparable: boolean; // same fingerprint settings: its letters can be compared with this book's
+  default: boolean; // comparable and the same writing: used unless others are chosen
 }
 
 /** Whether Tesseract can run with the book's languages (GET /api/tesseract). */
@@ -175,6 +192,7 @@ export interface TesseractStatus {
 
 /** Suggestions compared with the user's labels: each labelled group voted as if unlabelled (C12). */
 export interface SuggestionAccuracy {
+  engine: Engine | null;
   labelled: number;
   suggested: number;
   right: number;
@@ -214,7 +232,7 @@ export interface Sample {
   image: string;
   suggestion?: Suggestion | null;
   // its own OCR reading (C11): for unsure samples only confident ones on printed books; in groups all of them
-  reading?: { label_dev: string; label_guj: string; confidence: number; engine: "tesseract" } | null;
+  reading?: { label_dev: string; label_guj: string; confidence: number; engine: Engine } | null;
 }
 
 export interface SamplePage {
@@ -304,7 +322,11 @@ export const api = {
   suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),
   fixCuts: (id: number) => post<Job>(`/api/books/${id}/fix-cuts`),
   tesseract: (bookId: number) => get<TesseractStatus>(`/api/tesseract?book_id=${bookId}`),
-  accuracy: (bookId: number) => get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy`),
+  accuracy: (bookId: number, engine?: Engine) =>
+    get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy${engine ? `?engine=${engine}` : ""}`),
+  referenceBooks: (bookId: number) => get<ReferenceBook[]>(`/api/books/${bookId}/reference-books`),
+  suggestBooks: (id: number, books: number[] | null) =>
+    post<Job>(`/api/books/${id}/suggest`, { engine: "books", books }),
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),
   setSettings: (id: number, settings: Record<string, unknown> | null) =>
     patch<Book>(`/api/books/${id}/settings`, { settings }),
