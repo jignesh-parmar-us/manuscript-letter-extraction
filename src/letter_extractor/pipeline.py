@@ -37,13 +37,20 @@ class PageData:
 
 
 def process_page(rgb, cfg: Config) -> PageData:
-    """Every step for one page: ink masks (C1), lines (C2), stroke pieces (C3a), letters (C3b)."""
+    """Every step for one page: ink masks (C1), lines (C2), stroke pieces (C3a), letters (C3b); with
+    `cut_method = "tesseract"` the letters are cut by Tesseract's reading of each line (C12c)."""
+    if cfg.cut_method not in ("shapes", "tesseract"):
+        raise ValueError(f"Unknown cut_method '{cfg.cut_method}' (shapes or tesseract)")
     page = prepare_page(rgb, cfg)
     layout = detect_lines(page, cfg)
     if layout is None:
         return PageData(page, None, [], 0, [])
     pieces, specks = split_lines(page, layout, cfg)
-    return PageData(page, layout, pieces, specks, make_letters(page, layout, pieces, cfg))
+    letters = make_letters(page, layout, pieces, cfg)
+    if cfg.cut_method == "tesseract":
+        from .ocr.cut import tesseract_letters
+        letters = tesseract_letters(page, layout.lines, letters, cfg)
+    return PageData(page, layout, pieces, specks, letters)
 
 
 def _png(img, path: Path) -> None:
@@ -65,7 +72,7 @@ def _write_letters(page: PreparedPage, letters: List[Letter], spacing: float, st
         x, y, w, h = L.box
         row = {"page": res.file, "line": L.line, "pos": L.pos, "x": x, "y": y, "w": w, "h": h,
                "ink": L.ink, "kind": L.kind, "pieces": L.pieces, "rules": " ".join(L.rules),
-               "image": f"letters/{stem}/{name}"}
+               "image": f"letters/{stem}/{name}", "text": L.text}
         if cfg.save_masks:
             mask_name = f"L{L.line:02d}_{L.pos:03d}_mask.png"
             Image.fromarray(L.mask.astype(np.uint8) * 255).save(folder / mask_name)

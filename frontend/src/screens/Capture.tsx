@@ -58,6 +58,16 @@ export default function Capture({ book, onChanged }: Props) {
     }
   }
 
+  const cutMethod = (book.settings.cut_method as string) === "tesseract" ? "tesseract" : "shapes";
+  async function changeCut(method: "shapes" | "tesseract") {
+    try {
+      await api.setSettings(book.id, { ...book.settings, cut_method: method });
+      onChanged();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   async function changeWriting(writing: Writing) {
     try {
       await api.setWriting(book.id, writing);
@@ -83,6 +93,21 @@ export default function Capture({ book, onChanged }: Props) {
           Last capture: {localTime(book.captured_at)}
         </p>
         <WritingChoice value={book.writing} onChange={changeWriting} />
+        {(book.writing === "printed" || cutMethod === "tesseract") && (
+          <fieldset className="plain">
+            <legend className="small muted">Cutting into letters</legend>
+            <label className="row small">
+              <input type="radio" name="cut" checked={cutMethod === "shapes"} onChange={() => changeCut("shapes")} />
+              <strong>By the shapes of the ink</strong> <span className="muted">works for handwriting and print</span>
+            </label>
+            <label className="row small">
+              <input type="radio" name="cut" checked={cutMethod === "tesseract"} onChange={() => changeCut("tesseract")} />
+              <strong>By Tesseract's reading</strong>{" "}
+              <span className="muted">printed books: each line is cut into the letters Tesseract reads, which also become their readings</span>
+            </label>
+            <p className="small muted">The choice is used the next time the pages are captured or cut again.</p>
+          </fieldset>
+        )}
         <div className="row">
           <button
             className="primary"
@@ -184,6 +209,10 @@ function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
         <p className="small">
           {result.pages} pages, {result.lines} lines, {result.samples} letters
           {"groups" in result && `, ${result.groups} groups, ${result.unsure} unsure`}
+          {"labelled_groups" in result &&
+            `. Labelled from Tesseract's reading: ${result.labelled_groups} groups` +
+              (Number(result.placed) > 0 ? `, ${result.placed} unsure letters placed` : "") +
+              " (not reviewed yet)"}
         </p>
       )}
       {job.pages.some((p) => p.status !== "OK") && (

@@ -66,6 +66,19 @@ describe("Capture", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  it("chooses how a printed book is cut", async () => {
+    const onChanged = vi.fn();
+    vi.mocked(api.setSettings).mockResolvedValue({ ...book, writing: "printed" });
+    const { unmount } = render(<Capture book={book} info={null} onChanged={onChanged} />);
+    expect(screen.queryByRole("radio", { name: /By Tesseract's reading/ })).toBeNull();    // handwritten
+    unmount();
+    render(<Capture book={{ ...book, writing: "printed" }} info={null} onChanged={onChanged} />);
+    expect(screen.getByRole("radio", { name: /By the shapes of the ink/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: /By Tesseract's reading/ }));
+    expect(api.setSettings).toHaveBeenCalledWith(1, { group_distance: 0.55, cut_method: "tesseract" });
+    expect(onChanged).toHaveBeenCalled();
+  });
+
   it("shows new pages and adds them", async () => {
     vi.mocked(api.addPages).mockResolvedValue(job({ kind: "add_pages", total: 1 }));
     vi.mocked(api.job).mockResolvedValue(job({ kind: "add_pages", status: "done", total: 1, done: 1, result: { pages: 1, lines: 3, samples: 27 } }));

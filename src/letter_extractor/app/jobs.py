@@ -100,8 +100,19 @@ class Jobs:
     # ---- the three kinds of job ----------------------------------------------------------------
     # Cancelling: process_folder stops starting pages when cancel() is true and the library then
     # raises Cancelled before storing anything (library._run).
+    def _check_cutter(self, book_id: int) -> None:
+        """Cutting by Tesseract's reading (C12c) needs Tesseract: say so now, not page by page."""
+        cfg = self.lib.book_config(self.lib.get_book(book_id))
+        if cfg.cut_method == "tesseract":
+            from ..ocr.tesseract import TesseractError, find_tesseract
+            try:
+                find_tesseract().check_langs(cfg.ocr_langs)
+            except TesseractError as e:
+                raise LibraryError(f"This book is cut by Tesseract's reading: {e}") from e
+
     def capture(self, book_id: int, force: bool = False) -> Job:
         self.lib.get_book(book_id)
+        self._check_cutter(book_id)
         if not force and self.lib.has_manual_work(book_id):
             raise BookHasReviewError("This book has groups, labels or other changes made by hand; "
                                      "capturing again would discard them.")
@@ -110,12 +121,14 @@ class Jobs:
                           total=len(self._images(book_id)))
 
     def add_pages(self, book_id: int) -> Job:
+        self._check_cutter(book_id)
         known = {p["file"] for p in self.lib.check_pages(book_id) if p["problem"] == "new"}
         return self.start(book_id, "add_pages",
                           lambda progress, cancel: self.lib.add_new_pages(book_id, progress, cancel),
                           total=len(known))
 
     def recut_page(self, book_id: int, page_id: int, force: bool = False) -> Job:
+        self._check_cutter(book_id)
         if not force and self.lib.page_has_manual_work(page_id):
             raise BookHasReviewError("This page has samples that were reviewed or changed by hand; "
                                      "cutting it again would replace them.")

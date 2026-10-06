@@ -301,3 +301,77 @@ def suggestion_accuracy(s, book: Book, cfg: Config) -> Dict:
     out["wrong"] = [{"label": mapping.gujarati(a), "suggested": mapping.gujarati(b), "groups": n}
                     for (a, b), n in sorted(wrong.items(), key=lambda kv: -kv[1])[:10]]
     return out
+
+
+# ---- labels straight from the cut (C12c) -------------------------------------------------------
+
+def auto_label(s, book: Book, cfg: Config) -> Dict:
+    """For books cut by Tesseract's reading: label groups and place unsure samples from the readings
+    at once, so no review step is needed to get labels (asked for by the user, 2026-10-06).
+
+    - every unlabelled group whose vote gives a suggestion gets that label; groups whose suggestion
+      is the same label are merged into the largest one (one label, one group), and a label another
+      group already has makes them join that group;
+    - an unsure sample whose reading is the label of a group, and whose shape is within
+      `group_distance` of that group's centre, joins it.
+
+    The labels are left "auto" (not reviewed): Tesseract gave them, not the user, and the "Not
+    reviewed" filter shows them. Locked groups are not touched. Not an undoable action: it is part
+    of capturing the pages."""
+    from .centres import centres, recompute
+    mapping = mapping_for(cfg)
+    ocr = group_readings(s, book, cfg)
+    groups = {g.id: g for g in s.scalars(select(LetterGroup).where(LetterGroup.book_id == book.id))}
+    sizes: Dict[int, int] = defaultdict(int)
+    for (gid,) in s.execute(select(Sample.group_id).where(Sample.book_id == book.id, Sample.deleted.is_(False),
+                                                          Sample.group_id.is_not(None))):
+        sizes[gid] += 1
+    by_label: Dict[str, List[LetterGroup]] = defaultdict(list)
+    for gid, entry in ocr.items():
+        g = groups.get(gid)
+        if g is not None and entry["suggestion"] and not g.label_dev and not g.locked:
+            by_label[entry["suggestion"]["label_dev"]].append(g)
+    labelled = {g.label_dev: g for g in groups.values() if g.label_dev}
+    touched, n_labelled, n_merged = set(), 0, 0
+    for label, gs in by_label.items():
+        owner = labelled.get(label)
+        if owner is not None and owner.locked:
+            continue
+        target = owner or max(gs, key=lambda g: sizes[g.id])
+        if owner is None:
+            target.label_dev, target.label_guj, target.status = label, mapping.gujarati(label), "auto"
+            labelled[label] = target
+            n_labelled += 1
+        for g in gs:
+            if g.id == target.id:
+                continue
+            for smp in s.scalars(select(Sample).where(Sample.group_id == g.id)):
+                smp.group_id, smp.kind = target.id, target.kind
+            s.flush()
+            s.delete(g)
+            n_merged += 1
+        touched.add(target.id)
+    s.flush()
+    recompute(s, touched)
+
+    # unsure samples whose reading and shape agree with a labelled group
+    placed = 0
+    gs, C = centres(s, book.id, labelled_only=True)
+    centre = {g.label_dev: (g, C[i]) for i, g in enumerate(gs) if not g.locked}
+    run_id = _run_id(s, book.id)
+    if run_id is not None and centre:
+        rows = s.execute(select(Sample, OcrReading.text_dev).join(OcrReading, OcrReading.sample_id == Sample.id)
+                         .where(OcrReading.run_id == run_id, Sample.book_id == book.id, Sample.deleted.is_(False),
+                                Sample.group_id.is_(None))).all()
+        for smp, text in rows:
+            hit = centre.get(text)
+            if hit is None or smp.fingerprint is None:
+                continue
+            g, c = hit
+            if float(np.linalg.norm(np.frombuffer(smp.fingerprint, np.float32) - c)) <= cfg.group_distance:
+                smp.group_id, smp.kind = g.id, g.kind
+                touched.add(g.id)
+                placed += 1
+        s.flush()
+        recompute(s, touched)
+    return {"labelled_groups": n_labelled, "merged_groups": n_merged, "placed": placed}

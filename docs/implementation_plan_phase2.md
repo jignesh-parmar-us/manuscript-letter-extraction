@@ -4,7 +4,7 @@ Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, grou
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. **C13 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. **C13 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -59,6 +59,7 @@ src/letter_extractor/
 │   ├── __main__.py       # python -m letter_extractor.ocr LINE.png: print a line's aksharas  (C10)
 │   ├── tesseract.py      # find the program, list languages, run on an image, parse hOCR      (C10)
 │   ├── aksharas.py       # split Devanagari text into aksharas (our letter units)             (C10)
+│   ├── cut.py            # cut a line into the aksharas Tesseract reads (printed books)       (C12c)
 │   ├── align.py          # match OCR aksharas to cut samples in a line                        (C11)
 │   ├── classifier.py     # load an ONNX model, classify sample images                         (C14)
 │   ├── train.py          # build the training set, train, evaluate, export to ONNX            (C14)
@@ -309,6 +310,30 @@ Rules that carry over from Phase 1:
 
 **Changes from the original plan:** a new chunk. Added after the user's first use (2026-10-06): the vowel-bar rule, and placing new samples by their reading (the original C12b put all of them in Unsure). This labels groups without the user, which C11's rule "a suggestion never sets a label by itself" did not allow: the user asked for it, the reading must agree with the shape, and the groups it makes are marked not reviewed. Two approaches were tried and dropped on the way: re-reading each new piece with Tesseract as the check (it cannot read a lone letter: 16 of 120 passed), and joining any samples under one akshara (half of the joins merged two letters).
 
+### C12c. Cutting by Tesseract's reading (printed books, an option at capture)
+
+**Status:** built (2026-10-06). Asked for by the user: "give an option at the initial stage for cutting with Tesseract instead of Phase 1 cuts, so the user decides; try it and see how accurate the results are".
+
+**Goal:** a printed book can be cut into letters by Tesseract's reading instead of by the shapes of the ink, chosen per book, and the two are compared on the same pages.
+
+**Files:** `ocr/cut.py`, additions to `pipeline.py` (`process_page`), `letters.py` (`Letter.text`), `report.py` (`text` column of samples.csv), `config.py`, `app/library.py` (`_store_readings`), `app/jobs.py` (Tesseract checked before a capture), `app/recut.py` (shares `best_cut`), `frontend/src/screens/Capture.tsx` (+ test); `tests/test_cut.py`; `docs/TUNING_PHASE2.md`.
+
+**What it does:**
+- **Setting `cut_method`** per book: `shapes` (C3a, C3b, the default) or `tesseract`. In the app: **Pages & capture → "Cutting into letters"**, shown for printed books; it is used at the next capture, add-pages or cut-a-page-again. In the CLI: a config file with `{"cut_method": "tesseract"}`.
+- **Cutting a line:** Phase 1 still finds the lines and each line's own ink (C2). Tesseract reads the line image (C10); between two aksharas the cut goes to the column with the least ink, the headline rows left out, within `recut_window` (0.3) x the median akshara width of Tesseract's boundary. Cuts closer than `tesseract_cut_min_gap` (0.3) x that width are not made, and an akshara without a usable box stays with its neighbour: those aksharas are one sample with their text together. Splits only fall between aksharas, so conjuncts, reph and vowel signs stay with their letter. A text of dandas is kind `danda`, of digits `digit`.
+- **Fallback:** a line Tesseract cannot read, or reads as fewer than half as many aksharas as the shape cut finds letters, is cut by shapes.
+- **Readings come with the cut:** each letter keeps its akshara(s) (`Letter.text`, the `text` column of samples.csv). The app stores them as readings of the book's Tesseract run (`_store_readings`; texts that are not labels are left out), so suggestions, mixed groups and "Fix cuts" work right after capture, without "Suggest labels". Capturing again removes the old runs.
+- **Labels at capture** (asked for by the user, 2026-10-06: "those cuts should be labelled by what Tesseract reads at that time, so I don't need an extra step"): after grouping, every group whose vote gives a suggestion (C11) gets that label; groups whose suggestion is the same label are merged into the largest (one label, one group). Then an unsure sample whose reading is the label of a group, and whose shape is within `group_distance` of that group's centre, joins it. The same runs after "Add new pages" and "Cut a page again". These labels are **"auto" (not reviewed)**: the "Not reviewed" filter lists them, and they do not count as work done by hand, so capturing again does not ask. Mixed groups (no reading with 60% of the votes) stay unlabelled. Locked groups are not touched (`suggest.auto_label`).
+- **Tesseract missing:** a capture (or add pages, cut a page again) of a book cut by Tesseract stops at once with the reason, instead of failing page by page. Tesseract runs one thread per process, since the pages are cut in worker processes.
+
+**Tests:** a line is cut at the gaps into one letter per akshara, with its text, kind and position; cuts too close together keep two aksharas in one sample; an akshara without a box stays with its neighbour; a line Tesseract cannot read (an error or nothing read) keeps the shape cut; a readable line is cut by the reading; a capture with a stand-in for Tesseract cuts by the reading and stores the readings; the capture labels the groups from the readings (merged into one group per label, "auto", not counted as work by hand); a shape-cut capture gives no labels; an unknown cut method is refused; the Cutting choice in Pages & capture (printed books only).
+
+**Measured** (`TUNING_PHASE2.md`): on 3 transcribed lines the Tesseract cut gives 52 / 50 / 47 samples for 51 / 52 / 46 aksharas (shapes: 57 / 46 / 51). On the user's 23-page printed book: samples read as several letters fall from 1,325 to 583, groups from 531 to 399, groups (≥ 5 samples) with a suggestion rise from 27% to 34%, unsure samples from 2,145 to 1,995; time 234 s against 255 s for shapes plus a Tesseract run. By eye about 30 of 40 random samples are clean single letters (shapes: about 26). The number of mixed groups does not change (52 / 53).
+
+**Done when:** a printed book can be captured either way, and the two are compared on the same pages. *Met; the user compares on their own books.*
+
+**Changes from the original plan:** a new chunk. The default stays the shape cut: it is the only one for handwriting, and on print the gain is real but modest. Labelling at capture goes further than C11's rule that a suggestion never sets a label by itself: the user asked for it for books cut by Tesseract, the labels need a 60% majority of the group's readings, and they stay marked not reviewed.
+
 ### Part B: suggestions for handwriting
 
 ### C13. Suggestions from other labelled books
@@ -510,7 +535,8 @@ Rules that carry over from Phase 1:
 | C10 | Tesseract engine, akshara splitting, book writing | done | OCR of a line as aksharas with boxes; handwritten / printed per book | FR-7 |
 | C11 | Matching OCR to samples, group suggestions | done | suggestions on groups and unsure samples | FR-7 |
 | C12 | Reviewing suggestions, measuring | built (measurement after a full review) |
-| C12b | Fixing cuts with Tesseract's readings (printed books) | built | split samples holding several letters, join cut pieces; one undo | FR-8 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
+| C12b | Fixing cuts with Tesseract's readings (printed books) | built | split samples holding several letters, join cut pieces; one undo | FR-8 |
+| C12c | Cutting by Tesseract's reading (printed books) | built | per-book choice of cutting; readings stored at capture | FR-5, FR-7 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
 | C13 | Suggestions from other labelled books | **next** | handwriting suggestions, no training | FR-7 |
 | C14 | Letter classifier | planned | `model.onnx`, per-class accuracy report | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
@@ -539,7 +565,9 @@ All in the same `Config` dataclass, per book, except where noted.
 | `suggest_min_share` | C11 | 0.6 |
 | `suggest_min_confidence` | C11 | 80 (Tesseract scale 0 to 100) |
 | `bulk_accept_share` | C12 | 0.9 (to be set from the C12 measurement after a full review) |
-| `recut_window` | C12b | 0.3 (x the line's median sample width) |
+| `cut_method` | C12c | `shapes` (or `tesseract`) |
+| `tesseract_cut_min_gap` | C12c | 0.3 (x the median akshara width) |
+| `recut_window` | C12b, C12c | 0.3 (x the line's median sample width) |
 | `recut_min_width` | C12b | 0.45 (x the line's median sample width) |
 | `recut_min_group` | C12b | 5 |
 | `reference_books` | C13 | all books with the same writing |

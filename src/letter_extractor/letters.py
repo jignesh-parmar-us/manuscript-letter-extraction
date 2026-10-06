@@ -52,6 +52,7 @@ class Letter:
     kind: str                         # "letter" | "danda" | "digit"
     pieces: int                       # stroke pieces joined into it
     rules: List[str] = field(default_factory=list)   # rules applied (for tuning)
+    text: str = ""                    # the akshara(s) Tesseract read, when cut by its reading (C12c)
 
 
 @dataclass

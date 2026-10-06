@@ -92,3 +92,32 @@ The plan's 70% is therefore not reached by splitting alone. Most of the rest are
 - **Bar rule** (`left_bar`): the next sample starts with a tall stroke (ink in ≥ 60% of the rows below the headline, at most 0.35 letter widths) and a gap. First run on a fresh copy of the user's library (after the user's own Fix cuts run): 657 bars moved. By eye the new ता group then held ताथ, तात and ोता pieces: a letter that itself began with the previous letter's bar (ो|त), and bad pieces from the earlier run. Guards added: a letter that starts with a bar is left alone; the letter with its bar may be at most 0.6 letter widths wider than before; samples put into a new group must look alike (within `group_distance` of their own centre).
 - **With the guards:** 586 bars moved, 43 more splits, 3 joins (67 s; the user's earlier run had done most splits). 705 of 1,258 new samples were placed by reading and shape, into 40 new groups (labelled, not reviewed). By eye the new आ (21), ता (45), ना (56) groups hold only that letter. In g0004, the samples read as आ went from 28 to 9, and जा from 18 to 5.
 
+## C12c. Cutting by Tesseract's reading (2026-10-06)
+
+**Asked for by the user:** offer cutting by Tesseract at capture, as an alternative to the shape cut (C3a, C3b), and see how accurate it is. Phase 1 still finds the lines; each line is cut into the aksharas Tesseract reads, at the least-ink column (headline rows left out) within 0.3 letter widths of its boundary. Cuts closer than `tesseract_cut_min_gap` (0.3) letter widths are not made.
+
+**Three transcribed lines** (from C10): akshara counts, against the truth:
+
+| Line | Truth | Cut by Tesseract | Cut by shapes |
+|---|---|---|---|
+| Untitled-15 L03 | 51 | 52 | 57 |
+| Untitled-26 L05 | 52 | 50 | 46 |
+| Untitled-41 L08 | 46 | 47 | 51 |
+
+By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their letters (ता, रे, कां, के, ने) and the conjuncts whole (स्वा, क्त, श्री), but misses some boundaries (श्री | जि) and once made two cuts a few pixels apart (hence the minimum gap). The shape cut finds more boundaries but cuts bars off (क | ां, ह | ा) and conjuncts in two (स | ्वा).
+
+**Whole books, both ways** (new scratch books from the same pages; the shape-cut book then read with Tesseract as in C11):
+
+| | 7 pages: shapes | 7 pages: Tesseract | 23 pages: shapes | 23 pages: Tesseract |
+|---|---|---|---|---|
+| Time (cutting + reading) | 71 s | 87 s | 255 s | 234 s |
+| Samples | 4,604 | 4,253 | 14,570 | 14,290 |
+| Unsure | 688 | 563 | 2,145 | 1,995 |
+| Groups | 253 | 200 | 531 | 399 |
+| Groups ≥ 5 samples with a suggestion | 43 / 149 (29%) | 47 / 132 (36%) | 90 / 332 (27%) | 96 / 282 (34%) |
+| Mixed groups (two strong readings) | 34 | 33 | 53 | 52 |
+| Samples read as 2+ letters | 291 | 218 | 1,325 | 583 |
+
+40 random samples of the 7-page books, by eye: about 30 clean single letters cut by Tesseract against about 26 cut by shapes. The Tesseract cut's errors are mostly two letters left together (सर्वे, नांव) where Tesseract's boundary was unclear, and a few vowel bars on the wrong letter.
+
+**Conclusion:** on print, cutting by Tesseract is better (less than half as many multi-letter samples, fewer groups, more suggestions, every sample read), but not by a wide margin, and the number of mixed groups is the same. It stays an option per book; the default remains the shape cut, which is the only one that works on handwriting. Fix cuts (C12b) can still be run after either cut.

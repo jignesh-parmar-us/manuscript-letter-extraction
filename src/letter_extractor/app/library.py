@@ -218,10 +218,10 @@ class Library:
         with self.session() as s:
             if s.scalar(select(func.count(Action.id)).where(Action.book_id == book_id)):
                 return True
+            # labels given at capture (C12c) stay "auto": they are not work done by hand
             if s.scalar(select(func.count(LetterGroup.id)).where(LetterGroup.book_id == book_id,
                                                                  (LetterGroup.status != "auto")
-                                                                 | LetterGroup.locked
-                                                                 | (LetterGroup.label_dev != ""))):
+                                                                 | LetterGroup.locked)):
                 return True
             return bool(s.scalar(select(func.count(Sample.id)).where(Sample.book_id == book_id,
                                                                      Sample.source != "auto")))
@@ -312,8 +312,40 @@ class Library:
                 })
             if rows:
                 s.execute(insert(Sample), rows)
+                Library._store_readings(s, book, page.id, r.samples)
             n_samples += len(rows)
         return {"lines": n_lines, "samples": n_samples}
+
+    @staticmethod
+    def _store_readings(s: Session, book: Book, page_id: int, rows: List[Dict]) -> None:
+        """Letters cut by Tesseract's reading (C12c) bring their text: it is stored as their reading in
+        the book's Tesseract run (made if there is none), so suggestions are there at once. Texts that
+        are not labels (punctuation Tesseract read) are left out."""
+        texts = {(row["line"], row["pos"]): row.get("text", "") for row in rows if row.get("text")}
+        if not texts:
+            return
+        from ..mapping import LabelError, canonical_label, mapping_for
+        from .db import OcrReading, OcrRun
+        run = s.scalars(select(OcrRun).where(OcrRun.book_id == book.id, OcrRun.engine == "tesseract")
+                        .order_by(OcrRun.id.desc())).first()
+        cfg = load_config(None, **json.loads(book.settings))
+        if run is None:
+            run = OcrRun(book_id=book.id, engine="tesseract", finished_at=now(),
+                         settings=json.dumps({"source": "capture", "ocr_langs": cfg.ocr_langs}))
+            s.add(run)
+            s.flush()
+        mapping = mapping_for(cfg)
+        for sid, line, pos in s.execute(select(Sample.id, Sample.line_number, Sample.pos)
+                                        .where(Sample.page_id == page_id)):
+            text = texts.get((line, pos))
+            if not text:
+                continue
+            try:
+                text = canonical_label(text, mapping, words=True)
+            except LabelError:
+                continue
+            s.add(OcrReading(run_id=run.id, sample_id=sid, text_dev=text, confidence=95.0, alternatives="[]",
+                             overlap=1.0))
 
     def capture(self, book_id: int, progress: Optional[ProgressFn] = None,
                 cancel: Optional[Callable[[], bool]] = None, force: bool = False) -> Dict:
@@ -329,6 +361,8 @@ class Library:
         with self.session() as s:
             for table in (Action, Sample, LetterGroup, Page):   # lines go with their pages
                 s.execute(delete(table).where(table.book_id == book_id))
+            from .db import OcrRun                              # readings of the old samples are gone
+            s.execute(delete(OcrRun).where(OcrRun.book_id == book_id))
             group_ids: Dict[str, int] = {}
             for r in results:
                 for row in r.samples:
@@ -339,11 +373,22 @@ class Library:
                         s.flush()
                         group_ids[gid] = g.id
             stored = self._store(s, book, results, group_ids)
+            labels = self._auto_label(s, book)
             b = s.get(Book, book_id)
             b.captured_at = b.updated_at = now()
         return {"pages": len(results), "pages_ok": sum(r.status == "OK" for r in results),
-                "lines": stored["lines"], "samples": stored["samples"], "groups": len(group_ids),
-                "unsure": summary.get("unsure", 0)}
+                "lines": stored["lines"], "samples": stored["samples"],
+                "groups": len(group_ids) - labels.get("merged_groups", 0),
+                "unsure": summary.get("unsure", 0) - labels.get("placed", 0), **labels}
+
+    def _auto_label(self, s: Session, book: Book) -> Dict:
+        """Books cut by Tesseract's reading get their labels at capture (suggest.auto_label)."""
+        cfg = self.book_config(book)
+        if cfg.cut_method != "tesseract":
+            return {}
+        s.flush()
+        from .suggest import auto_label
+        return auto_label(s, s.get(Book, book.id), cfg)
 
     def add_new_pages(self, book_id: int, progress: Optional[ProgressFn] = None,
                       cancel: Optional[Callable[[], bool]] = None) -> Dict:
@@ -361,8 +406,9 @@ class Library:
         self._install(book, work, results, replace_all=False)
         with self.session() as s:
             stored = self._store(s, book, results)
+            labels = self._auto_label(s, book)
             s.get(Book, book_id).updated_at = now()
-        return {"pages": len(results), **stored, "files": [r.file for r in results]}
+        return {"pages": len(results), **stored, **labels, "files": [r.file for r in results]}
 
     def page_has_manual_work(self, page_id: int) -> bool:
         """Samples of the page that were changed by hand, are in a reviewed, labelled or locked
@@ -414,13 +460,14 @@ class Library:
             stored = self._store(s, book, results)
             recompute(s, touched)
             for gid in touched:                           # groups left empty and never reviewed go
-                g = s.get(LetterGroup, gid)
-                if g is not None and not g.label_dev and g.status == "auto" and not g.locked and \
+                g = s.get(LetterGroup, gid)                # (labels given at capture are "auto" too)
+                if g is not None and g.status == "auto" and not g.locked and \
                         not s.scalar(select(func.count(Sample.id)).where(Sample.group_id == gid,
                                                                        Sample.deleted.is_(False))):
                     s.delete(g)
+            labels = self._auto_label(s, book)
             s.get(Book, book_id).updated_at = now()
-        return {"pages": len(results), **stored, "files": [file]}
+        return {"pages": len(results), **stored, **labels, "files": [file]}
 
     def check_pages(self, book_id: int) -> List[Dict]:
         """Pages whose input file is missing or changed since capture, and new image files."""

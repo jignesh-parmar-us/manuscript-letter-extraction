@@ -18,7 +18,7 @@ CSV_COLUMNS = ["file", "status", "message", "width", "height",
                "lines", "line_spacing", "pieces", "specks", "letters", "dandas", "digits", "seconds"]
 
 SAMPLE_COLUMNS = ["page", "line", "pos", "x", "y", "w", "h", "ink", "kind", "pieces", "rules", "image",
-                  "group_id", "distance"]
+                  "group_id", "distance", "text"]          # text: Tesseract's reading when cut by it (C12c)
 
 
 @dataclass
