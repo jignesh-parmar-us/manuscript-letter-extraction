@@ -312,6 +312,7 @@ export const api = {
   app: () => get<AppInfo>("/api/app"),
   chooseLibrary: (path: string) => post<{ library: string; restart_needed: boolean }>("/api/app/library", { path }),
   pickFolder: () => post<{ path: string | null }>("/api/app/pick-folder"),
+  openHelp: (page: string) => post<{ opened: string }>("/api/app/open-help", { page }),
 
   books: () => get<BookSummary[]>("/api/books"),
   book: (id: number) => get<Book>(`/api/books/${id}`),

@@ -1,0 +1,10 @@
+{
+  "name": "manuscript-letter-extraction",
+  "private": true,
+  "description": "Shortcuts so npm works from the project folder: the screen itself is in frontend/.",
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix frontend test",
+    "typecheck": "npm --prefix frontend run typecheck"
+  }
+}

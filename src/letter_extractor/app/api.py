@@ -26,7 +26,8 @@ Routes (all JSON unless noted):
   samples    POST /api/books/{id}/samples/{crop|join|split|upload}   (C5f)
   export     POST /api/books/{id}/export (a job), POST /api/app/open-folder   (C5g)
   app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
-             PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it
+             PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it;
+             GET /help/<page> the help pages (no token), POST /api/app/open-help (window mode)
 """
 from __future__ import annotations
 
@@ -50,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      GroupRef, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion, SampleIds, Split,
+                      GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion, SampleIds, Split,
                       Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
                       suggestion_accuracy)
@@ -479,6 +480,16 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             raise HTTPException(501, "No folder dialog in the browser; type the folder path.")
         return {"path": context.pick_folder()}
 
+    @app.post("/api/app/open-help", dependencies=auth)
+    def open_help(body: HelpPage, request: Request) -> Dict:
+        """In the app window, help opens in the web browser (the window has no tabs)."""
+        if not body.page.replace("-", "").replace(".", "").isalnum():
+            raise HTTPException(400, "Not a help page.")
+        url = str(request.base_url) + f"help/{body.page}"
+        import webbrowser
+        webbrowser.open(url)
+        return {"opened": url}
+
     @app.post("/api/app/open-folder", dependencies=auth)
     def open_folder(body: FolderPath) -> Dict:
         path = Path(body.path).expanduser()
@@ -511,5 +522,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     if (context.static_dir / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=context.static_dir / "assets"), name="assets")
+    if (context.static_dir / "help").is_dir():
+        # help pages (copied from docs/help/ by the screen's build); no data, so no token needed
+        app.mount("/help", StaticFiles(directory=context.static_dir / "help", html=True), name="help")
 
     return app

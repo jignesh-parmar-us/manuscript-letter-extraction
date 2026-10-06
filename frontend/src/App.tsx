@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { api, AppInfo } from "./api";
 import ErrorBox from "./components/ErrorBox";
+import HelpLink from "./components/HelpLink";
 import { go, useRoute } from "./route";
 import Books from "./screens/Books";
 import BookView from "./screens/BookView";
@@ -30,6 +31,9 @@ export default function App() {
             {info.library}
           </span>
         )}
+        <HelpLink page="new-book.html" info={info}>
+          Help: adding a new book
+        </HelpLink>
       </header>
       <main>
         <ErrorBox error={error} onClose={() => setError(null)} />

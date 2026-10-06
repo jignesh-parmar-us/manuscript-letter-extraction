@@ -101,5 +101,9 @@ class ExportRequest(BaseModel):
     image: Optional[str] = None                   # original | normalized | fixed64; None: the book's setting
 
 
+class HelpPage(BaseModel):
+    page: str                                     # a file of docs/help/, for example "new-book.html"
+
+
 class FolderPath(BaseModel):
     path: str

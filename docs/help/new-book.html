@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adding a new book</title>
+<!--
+  Help page of the review app, served at /help/new-book.html (the "Help" link in the app's header).
+  The source is docs/help/new-book.html; `npm run build` in frontend/ copies it into the app.
+  docs/NEW_BOOK_GUIDE.md has the same steps as Markdown: change both together.
+-->
+<style>
+  :root {
+    --bg: #f6f4f0; --panel: #ffffff; --text: #22201d; --muted: #6b665e; --line: #e2ddd4;
+    --accent: #8a3b12; --ok: #1f7a3d; --warn: #9a6700; --tip: #eef6f0; --note: #fbf3e2;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1a18; --panel: #24221f; --text: #eeeae4; --muted: #a39d93; --line: #3a3732;
+      --accent: #e0915f; --ok: #4cc27a; --warn: #e6b450; --tip: #1f2b22; --note: #2e2717;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 22px 0 6px; }
+  p, li { max-width: 72ch; }
+  .lead { color: var(--muted); margin: 0 0 18px; }
+  a { color: var(--accent); }
+  nav.toc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; }
+  nav.toc ol { margin: 6px 0 0; padding-left: 20px; }
+  nav.toc li { margin: 2px 0; }
+  ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 12px 0; }
+  ol.steps > li {
+    counter-increment: step; position: relative; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 16px 12px 52px; margin: 0 0 10px;
+  }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 14px; top: 12px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--accent); color: var(--panel); font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  ol.steps > li > strong:first-child { display: block; margin-bottom: 2px; }
+  .ui { font-weight: 600; white-space: nowrap; }
+  .result { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .box { border-radius: 10px; padding: 10px 14px; margin: 12px 0; border: 1px solid var(--line); }
+  .tip { background: var(--tip); }
+  .note { background: var(--note); }
+  .box > strong:first-child { margin-right: 4px; }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); margin: 10px 0; font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); }
+  code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+  .badge { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px; border: 1px solid currentColor; }
+  .printed { color: var(--accent); }
+  .hand { color: var(--ok); }
+  @media (max-width: 560px) {
+    ol.steps > li { padding-left: 44px; }
+    ol.steps > li::before { left: 10px; }
+    th, td { padding: 6px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Adding a new book</h1>
+  <p class="lead">How to turn a folder of page images into clean letters with clean labels, with as little hand work
+    as possible, and get it ready for training the letter reader.</p>
+
+  <nav class="toc" aria-label="Contents">
+    <strong>Contents</strong>
+    <ol>
+      <li><a href="#before">Before you start</a></li>
+      <li><a href="#printed">A printed book</a></li>
+      <li><a href="#handwritten">A handwritten book</a></li>
+      <li><a href="#review">Reviewing the labels</a></li>
+      <li><a href="#ready">When is a book ready for training?</a></li>
+      <li><a href="#cleanup">Replacing old books</a></li>
+      <li><a href="#trouble">If something goes wrong</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="before">1. Before you start</h2>
+  <ul>
+    <li><strong>One folder per book</strong> with its page images (JPG, PNG, TIFF or BMP), in page order by name
+      (page2 comes before page10). The app only reads this folder; it never changes your images.</li>
+    <li><strong>Printed or handwritten?</strong> This decides how the letters are cut and who suggests labels:
+      <span class="badge printed">printed</span> books are read by Tesseract;
+      <span class="badge hand">handwritten</span> books learn from the books you have already labelled.</li>
+    <li><strong>For printed books, Tesseract must be installed</strong> (see <code>docs/INSTALL_TESSERACT.md</code>).
+      The Review tab says so if it is missing.</li>
+    <li><strong>Keep your older labelled books</strong> until the new book has learned from them
+      (<a href="#cleanup">section 6</a>): their labels are the fastest way to label the new one.</li>
+  </ul>
+
+  <h2 id="printed">2. A printed book <span class="badge printed">printed</span></h2>
+  <p>About 10 minutes of waiting for 20 to 25 pages, and a few clicks. Expect about a quarter of the letters to be
+    labelled right after capture, and more after step 4 if you have other labelled books.</p>
+  <ol class="steps">
+    <li><strong>Create the book</strong>
+      <span class="ui">Books</span> → <span class="ui">New book</span>: a name, the folder with the page images,
+      and Writing <span class="ui">Printed</span>.</li>
+    <li><strong>Choose the cutting before the first capture</strong>
+      <span class="ui">Pages &amp; capture</span> → <span class="ui">Cutting into letters</span> →
+      <span class="ui">By Tesseract's reading</span>.
+      <div class="result">Each line is cut into the letters Tesseract reads: about half as many letters left
+        joined as with the shape cut.</div></li>
+    <li><strong>Capture</strong>
+      <span class="ui">Capture letters</span>, then wait (about 4 to 5 minutes for 23 pages).
+      <div class="result">At the end, every letter has Tesseract's reading, groups that mixed two letters are split,
+        and the groups Tesseract is sure about are labelled, marked <em>not reviewed</em>.</div></li>
+    <li><strong>Learn from your other labelled books</strong>
+      <span class="ui">Review groups</span> → <span class="ui">Details</span>: tick the labelled books of the same
+      kind of print, then <span class="ui">Suggest from labelled books</span> (a few seconds).
+      <div class="result">Each letter gets the label of the closest group you labelled there. Where Tesseract and
+        your books agree, the group's suggestion says so.</div></li>
+    <li><strong>Split mixed groups</strong>
+      <span class="ui">Split mixed groups</span>, once.
+      <div class="result">Letters read as another letter <em>and</em> shaped differently move to a group of their
+        own. A group of one letter is never split by its strokes.</div></li>
+    <li><strong>Accept the sure suggestions</strong>
+      <span class="ui">Accept N with ≥ 90 %</span>. One <span class="ui">Undo</span> takes it all back.</li>
+    <li><strong>Review</strong> as in <a href="#review">section 4</a>.</li>
+  </ol>
+  <div class="box tip"><strong>Tip:</strong> books cut by Tesseract do not need
+    <span class="ui">Fix cuts with Tesseract</span>: their cuts already follow its reading. Fix cuts is for printed
+    books cut by the shapes of the ink.</div>
+
+  <h2 id="handwritten">3. A handwritten book <span class="badge hand">handwritten</span></h2>
+  <p>Tesseract reads handwriting poorly (about a third of the letters wrong), so the labels come from you and
+    from your other handwritten books.</p>
+  <ol class="steps">
+    <li><strong>Create the book</strong>
+      <span class="ui">Books</span> → <span class="ui">New book</span>, Writing <span class="ui">Handwritten</span>.
+      The cutting stays <span class="ui">By the shapes of the ink</span>.</li>
+    <li><strong>Capture</strong>
+      <span class="ui">Capture letters</span>.</li>
+    <li><strong>If you have another labelled handwritten book in the same hand</strong>
+      <span class="ui">Review groups</span> → <span class="ui">Suggest from labelled books</span>, then
+      <span class="ui">Split mixed groups</span> and <span class="ui">Accept N with ≥ 90 %</span>.</li>
+    <li><strong>Otherwise, label the biggest groups by hand</strong>
+      Sort the group list <span class="ui">by size</span> and label the largest 30 to 50 groups: they hold most
+      of the letters. Use <span class="ui">Letters…</span> or type in Gujarati or Devanagari.
+      <div class="result">These labels are what the letter reader (C14) learns this hand from, and what the next
+        handwritten book will learn from.</div></li>
+    <li><strong>Unsure</strong>
+      Accept the suggested groups (→) for the letters that clearly belong to one.</li>
+  </ol>
+
+  <h2 id="review">4. Reviewing the labels</h2>
+  <p>Labels given by Tesseract or by other books are marked <em>not reviewed</em>. Check them in this order; the
+    first steps do the most good. You do not need to finish every group.</p>
+  <table>
+    <tr><th>Where</th><th>What to do</th></tr>
+    <tr><td>Group list: <span class="ui">Show → Not reviewed</span>, <span class="ui">by size</span></td>
+      <td>Open the big groups first. Look at the letter images: letters read differently carry a small coloured
+        badge. If all is right, tick <span class="ui">Reviewed</span>; if not, fix the label or move the wrong
+        letters out.</td></tr>
+    <tr><td><span class="ui">Show → Mixed readings</span></td>
+      <td>Groups whose letters were read as two letters. Click a reading under the group's name to select its
+        letters, then <span class="ui">New group</span>.</td></tr>
+    <tr><td><span class="ui">Show → Suggested</span></td>
+      <td>Accept, change or reject each suggestion. <span class="ui">Merge into gXXXX</span> appears when another
+        group already has that label.</td></tr>
+    <tr><td><span class="ui">Unsure</span></td>
+      <td>Select letters with a green reading and click <span class="ui">Accept readings</span>, or accept the
+        suggested groups (→).</td></tr>
+    <tr><td><span class="ui">Letter overview</span></td>
+      <td>Which letters have a group (green), are only suggested (amber) or are missing (grey), and every other
+        label below the table.</td></tr>
+  </table>
+  <div class="box note"><strong>Remember:</strong> every change can be undone (<span class="ui">Undo</span>, or
+    Ctrl/Cmd+Z). Locked groups never change until you unlock them.</div>
+
+  <h2 id="ready">5. When is a book ready for training?</h2>
+  <p class="lead">The letter reader (C14) is the next part of the app. This is how it is planned to work.</p>
+  <ul>
+    <li><strong>Not every label is needed.</strong> The letter reader will learn only from labelled letters;
+      letters with fewer than 5 samples will be left out and listed. Its report will show the accuracy of every
+      letter, so you see which ones need more samples.</li>
+    <li><strong>Wrong labels are the problem.</strong> A group labelled ने that still holds ते letters teaches the
+      reader that both are ने. That is why the review matters more than the number of labels.</li>
+    <li><strong>By default it will learn only from groups you labelled or reviewed.</strong> The labels given at
+      capture or by suggestions count once you have reviewed them; including them unreviewed will be an option.</li>
+    <li><strong>Good enough to start:</strong> the big groups reviewed, and the mixed ones split. You can train
+      again whenever you have reviewed more.</li>
+  </ul>
+
+  <h2 id="cleanup">6. Replacing old books</h2>
+  <ol class="steps">
+    <li><strong>Make the new book first</strong> and run <span class="ui">Suggest from labelled books</span> with the
+      old books ticked, so their labels reach the new one.</li>
+    <li><strong>Accept and review</strong> in the new book (sections 2 and 4).</li>
+    <li><strong>Then delete the old books</strong>
+      <span class="ui">Books</span> → <span class="ui">Delete</span>. This removes only the book's letters, groups
+      and labels in the library; your page images are never touched. It cannot be undone.</li>
+  </ol>
+  <div class="box tip"><strong>Tip:</strong> keep at least one labelled book of each kind (one printed, one
+    handwritten): new books of the same kind learn from it.</div>
+
+  <h2 id="trouble">7. If something goes wrong</h2>
+  <table>
+    <tr><th>What you see</th><th>What to do</th></tr>
+    <tr><td>The Tesseract buttons are greyed out</td>
+      <td>Tesseract or its Devanagari model is missing: hover over the button for the reason, and see
+        <code>docs/INSTALL_TESSERACT.md</code>.</td></tr>
+    <tr><td><span class="ui">Capture again</span> asks before it starts</td>
+      <td>The book has labels or changes made by hand, and capturing again would discard them. Labels given
+        automatically do not count. To try other settings without losing work, make a new book from the same folder
+        instead.</td></tr>
+    <tr><td>"No other book with labels yet"</td>
+      <td>Suggestions from labelled books need another book of the same writing with labelled groups. Label the
+        biggest groups of one book first.</td></tr>
+    <tr><td>A group mixes two letters</td>
+      <td>Click one of its readings to select those letters, then <span class="ui">New group</span>; or run
+        <span class="ui">Split mixed groups</span>.</td></tr>
+    <tr><td>Letters cut wrongly (two letters in one, a vowel bar on its own)</td>
+      <td>On printed books cut by shapes: <span class="ui">Fix cuts with Tesseract</span>. On any book: the
+        <span class="ui">Pages</span> tab's <span class="ui">Join</span>, <span class="ui">Split</span> and
+        <span class="ui">Draw a box</span>.</td></tr>
+    <tr><td>Something went wrong after a click</td>
+      <td><span class="ui">Undo</span>. Fixing cuts, accepting suggestions and splitting groups are each one undo
+        step.</td></tr>
+  </table>
+</main>
+</body>
+</html>

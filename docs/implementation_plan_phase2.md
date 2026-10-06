@@ -84,6 +84,9 @@ frontend/src/screens/
 
 docs/
 ├── INSTALL_TESSERACT.md
+├── NEW_BOOK_GUIDE.md     # step by step through a new book (added 2026-10-06)
+├── help/new-book.html    # the same guide as the app's help page: `npm run build` copies docs/help/ into the
+│                           app, which serves it at /help/ (no token); the header's "Help" link opens it
 ├── implementation_plan_phase2.md   (this file)
 └── TUNING_PHASE2.md      # measured suggestion accuracy and text error rates, per chunk
 

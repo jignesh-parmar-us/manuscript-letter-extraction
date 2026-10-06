@@ -728,3 +728,8 @@ table.list.compact {
   gap: 4px;
   background: color-mix(in srgb, var(--ok) 14%, var(--panel));
 }
+.help-link {
+  margin-left: auto;
+  color: var(--accent);
+  white-space: nowrap;
+}

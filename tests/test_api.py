@@ -294,5 +294,44 @@ class SuggestionTests(ApiTestCase):
         self.assertEqual(job["status"], "failed")                                             # not read yet
         self.assertIn("Tesseract first", job["error"])
 
+
+class HelpTests(unittest.TestCase):
+    """The help pages (docs/help/, copied into the built screen) are served without a token."""
+
+    def setUp(self):
+        import tempfile
+        from letter_extractor.app.main import AppContext
+        self.tmp, self.lib, self.book, _ = appbook.fresh_copy()
+        self.static = Path(tempfile.mkdtemp())
+        (self.static / "help").mkdir()
+        (self.static / "help" / "new-book.html").write_text("<h1>Adding a new book</h1>", encoding="utf-8")
+        self.client = TestClient(create_app(self.lib, TOKEN, AppContext(static_dir=self.static)))
+
+    def tearDown(self):
+        import shutil
+        self.client.close()
+        appbook.cleanup(self.tmp, self.lib)
+        shutil.rmtree(self.static, ignore_errors=True)
+
+    def test_help_page_needs_no_token(self):
+        r = self.client.get("/help/new-book.html")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Adding a new book", r.text)
+        self.assertEqual(self.client.get("/help/missing.html").status_code, 404)
+
+    def test_open_help_in_the_browser(self):
+        from unittest import mock
+        with mock.patch("webbrowser.open") as opened:
+            r = self.client.post("/api/app/open-help", headers=H, json={"page": "new-book.html"})
+        self.assertEqual(r.status_code, 200)
+        opened.assert_called_once()
+        self.assertTrue(opened.call_args[0][0].endswith("/help/new-book.html"))
+        self.assertEqual(self.client.post("/api/app/open-help", headers=H, json={"page": "../x"}).status_code, 400)
+        self.assertEqual(self.client.post("/api/app/open-help", json={"page": "new-book.html"}).status_code, 401)
+
+    def test_the_real_guide_is_in_docs(self):
+        page = Path(__file__).resolve().parents[1] / "docs" / "help" / "new-book.html"
+        self.assertIn("<title>Adding a new book</title>", page.read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()

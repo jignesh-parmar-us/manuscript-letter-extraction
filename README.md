@@ -11,7 +11,7 @@ Requirements: [docs/requirements-fetch-text.md](docs/requirements-fetch-text.md)
 On macOS, in Terminal, from the project folder (after the one-time install below):
 
 ```sh
-cd frontend && npm run build && cd ..                          # build the screen (again after changes in frontend/)
+npm run build                                                  # build the screen (again after changes in frontend/)
 PYTHONPATH=src .venv/bin/python -m letter_extractor.app        # the app in its own window
 PYTHONPATH=src .venv/bin/python -m letter_extractor.app --browser   # or in the web browser
 ```
@@ -24,6 +24,8 @@ set PYTHONPATH=src
 ```
 
 Stop the app by closing its window, or with Ctrl+C in the Terminal in browser mode. More about the app: [The app](#the-app-c5d).
+
+**Step by step through a new book** (printed or handwritten, with the least hand work): [docs/NEW_BOOK_GUIDE.md](docs/NEW_BOOK_GUIDE.md). The same guide opens from the **Help** link in the app's header ([docs/help/new-book.html](docs/help/new-book.html)).
 
 ## Install
 
