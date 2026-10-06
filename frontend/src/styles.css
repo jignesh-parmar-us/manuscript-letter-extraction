@@ -136,6 +136,12 @@ select {
   color: var(--text);
   min-width: 260px;
 }
+input[type="checkbox"],
+input[type="radio"] {
+  min-width: 0;
+  padding: 0;
+  margin: 0 4px 0 0;
+}
 
 .card {
   background: var(--panel);
@@ -292,6 +298,8 @@ pre.settings {
   flex: 1;
 }
 .side-list {
+  flex: 1;
+  min-height: 0; /* the group list takes the rest of the side bar's height and scrolls */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -520,20 +528,6 @@ table.list.compact {
 }
 
 /* ---- label suggestions (C12) ---- */
-.suggest-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  margin: 0;
-}
-.suggest-panel p {
-  margin: 0;
-}
-.suggest-panel ul {
-  margin: 4px 0 0;
-  padding-left: 18px;
-}
 .share-input {
   width: 64px;
   min-width: 0;
@@ -587,13 +581,150 @@ table.list.compact {
   border: 1px solid var(--ok);
   color: var(--ok);
 }
-.suggest-source {
+.other-suggestion {
+  flex-basis: 100%;
+}
+
+/* ---- Review tab layout (top bar, C12/C13) ---- */
+.review-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.undo-redo {
+  flex: none;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+}
+.suggest-bar {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 0;
-  border-top: 1px solid var(--line);
 }
-.other-suggestion {
-  flex-basis: 100%;
+.suggest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.suggest-actions > strong {
+  margin-right: 4px;
+}
+.suggest-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: center;
+  min-height: 18px;
+}
+.suggest-status progress {
+  width: 180px;
+  margin: 0 8px 0 0;
+}
+.suggest-details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.suggest-details-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  padding: 6px 0 2px;
+}
+.suggest-details-body ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+@media (max-width: 860px) {
+  .review {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    max-height: 45vh;
+  }
+  .review-top {
+    flex-direction: column;
+  }
+  .undo-redo {
+    border-right: none;
+    padding-right: 0;
+  }
+}
+
+/* ---- Missing letters ---- */
+.missing-table-wrap {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+.missing-table {
+  border-collapse: collapse;
+  background: var(--panel);
+}
+.missing-table th,
+.missing-table td {
+  border: 1px solid var(--line);
+  padding: 2px 4px;
+  text-align: center;
+  min-width: 46px;
+}
+.missing-table th {
+  font-size: 18px;
+  font-weight: normal;
+  color: var(--muted);
+}
+.missing-table td {
+  font-size: 20px;
+  height: 40px;
+}
+.missing-table td .link {
+  font-size: 20px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.cell-count {
+  font-size: 10px;
+  color: var(--muted);
+}
+.cell-have {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.cell-suggested {
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+}
+.cell-missing {
+  color: var(--muted);
+  opacity: 0.55;
+}
+.legend span {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.legend .cell-missing {
+  border: 1px solid var(--line);
+}
+.missing-letters h3 {
+  margin: 18px 0 4px;
+}
+.other-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.other-label {
+  font-size: 18px;
+  padding: 2px 10px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  background: color-mix(in srgb, var(--ok) 14%, var(--panel));
 }

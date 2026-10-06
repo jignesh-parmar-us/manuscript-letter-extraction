@@ -1,5 +1,6 @@
-// "Review" tab: the groups of the book on the left, the chosen group (or the unsure or deleted
-// samples) on the right. Address: #/books/<id>/review/<group id | unsure | deleted>.
+// "Review" tab: undo / redo and the label suggestions in a bar on top; the groups of the book on
+// the left; the chosen group (or the unsure or deleted samples, or the missing letters) on the
+// right. Address: #/books/<id>/review/<group id | unsure | deleted | letters>.
 //
 // Every change goes through `act()`, which calls the backend, keeps the undo / redo counts and
 // reloads the lists. Samples are dragged with @dnd-kit: drop them on a group or on "Unsure".
@@ -14,6 +15,7 @@ import { emptySelection, Selection } from "../components/selection";
 import { go } from "../route";
 import GroupView from "./GroupView";
 import SamplesView from "./SamplesView";
+import LetterOverview, { missingCount } from "./LetterOverview";
 import { isMixed, SuggestPanel } from "./Suggestions";
 
 type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "suggested" | "readmixed" | "empty";
@@ -21,7 +23,7 @@ type Sort = "code" | "label" | "size" | "spread" | "share";
 
 interface Props {
   book: Book;
-  view: string | undefined; // group id, "unsure" or "deleted"
+  view: string | undefined; // group id, "unsure", "deleted" or "letters" (the letter overview)
   onChanged: () => void;
 }
 
@@ -41,7 +43,7 @@ export default function Review({ book, view, onChanged }: Props) {
   const [error, setError] = useState<unknown>(null);
   const [selection, setSelection] = useState<Selection>(emptySelection);
   const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("code");
+  const [sort, setSort] = useState<Sort>("label");
 
   useEffect(() => {
     api.groups(book.id).then(setGroups, setError);
@@ -108,16 +110,19 @@ export default function Review({ book, view, onChanged }: Props) {
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <ErrorBox error={error} onClose={() => setError(null)} />
+      <div className="review-top">
+        <div className="row undo-redo">
+          <button onClick={undo} disabled={counts.undo === 0} title="Undo (Ctrl/Cmd+Z)">
+            ↶ Undo
+          </button>
+          <button onClick={redo} disabled={counts.redo === 0} title="Redo (Shift+Ctrl/Cmd+Z)">
+            ↷ Redo
+          </button>
+        </div>
+        <SuggestPanel book={book} ctx={ctx} onRead={reload} />
+      </div>
       <div className="review">
         <aside className="sidebar">
-          <div className="row">
-            <button onClick={undo} disabled={counts.undo === 0} title="Undo (Ctrl/Cmd+Z)">
-              ↶ Undo
-            </button>
-            <button onClick={redo} disabled={counts.redo === 0} title="Redo (Shift+Ctrl/Cmd+Z)">
-              ↷ Redo
-            </button>
-          </div>
           <SideTarget id="unsure" active={view === "unsure"} onClick={() => go(`/books/${book.id}/review/unsure`)}>
             Unsure <span className="muted">({book.unsure})</span>
           </SideTarget>
@@ -127,7 +132,13 @@ export default function Review({ book, view, onChanged }: Props) {
           >
             Deleted samples
           </button>
-          <SuggestPanel book={book} ctx={ctx} onRead={reload} />
+          <button
+            className={`side-item${view === "letters" ? " active" : ""}`}
+            onClick={() => go(`/books/${book.id}/review/letters`)}
+            title="Every consonant with every vowel sign, which have a labelled group, and all other labels"
+          >
+            Letter overview <span className="muted">({missingCount(groups)} missing)</span>
+          </button>
           <div className="row small">
             <select aria-label="Show" value={filter} onChange={(e) => chooseFilter(e.target.value as Filter)}>
               <option value="all">All groups</option>
@@ -140,8 +151,8 @@ export default function Review({ book, view, onChanged }: Props) {
               <option value="empty">Empty</option>
             </select>
             <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+              <option value="label">by label</option>
               <option value="code">by code</option>
-              <option value="label">by label (Unicode)</option>
               <option value="size">by size</option>
               <option value="spread">by spread</option>
               <option value="share">by suggestion share</option>
@@ -177,6 +188,8 @@ export default function Review({ book, view, onChanged }: Props) {
         <div className="pane">
           {current ? (
             <GroupView key={current.id} group={current} ctx={ctx} />
+          ) : view === "letters" ? (
+            <LetterOverview ctx={ctx} />
           ) : view === "unsure" || view === "deleted" ? (
             <SamplesView key={view} kind={view} ctx={ctx} />
           ) : (

@@ -11,7 +11,7 @@ import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
-import { isTyping, ReviewContext } from "./Review";
+import { isTyping, ReviewContext, sortGroups } from "./Review";
 
 export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted"; ctx: ReviewContext }) {
   const { bookId, selection, setSelection, act } = ctx;
@@ -24,7 +24,7 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
   const [moveTo, setMoveTo] = useState("");
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
-  const targets = ctx.groups.filter((g) => g.samples > 0 || g.label_dev);
+  const targets = sortGroups(ctx.groups.filter((g) => g.samples > 0 || g.label_dev), "label");
 
   const onClick = (id: number, e: MouseEvent) =>
     setSelection(select(selection, order, id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));

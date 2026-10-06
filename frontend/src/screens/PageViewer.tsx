@@ -13,6 +13,7 @@ import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
 import { go } from "../route";
+import { sortGroups } from "./Review";
 
 type Mode = "select" | "draw" | "split";
 type Box = [number, number, number, number];
@@ -218,19 +219,12 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   }
 
   const sel = page?.samples.filter((s) => selected.has(s.id)) ?? [];
-  // Groups to move into: labelled ones first in alphabet order, then the others, largest first.
-  // Locked groups refuse changes, so they are left out.
-  const targets = [...groups.values()]
-    .filter((g) => !g.locked && (g.samples > 0 || g.label_dev))
-    .sort((a, b) =>
-      a.label_dev && b.label_dev
-        ? a.label_guj.localeCompare(b.label_guj, "gu")
-        : a.label_dev
-          ? -1
-          : b.label_dev
-            ? 1
-            : b.samples - a.samples,
-    );
+  // Groups to move into, by label as everywhere: labelled ones first in letter order, then the
+  // others by code. Locked groups refuse changes, so they are left out.
+  const targets = sortGroups(
+    [...groups.values()].filter((g) => !g.locked && (g.samples > 0 || g.label_dev)),
+    "label",
+  );
   const single = sel.length === 1 ? sel[0] : null;
   const singleGroup = single?.group_id ? groups.get(single.group_id) : undefined;
 

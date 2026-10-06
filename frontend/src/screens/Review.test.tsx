@@ -40,6 +40,15 @@ describe("Review", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  it("lists the groups by label, and offers the letter overview", async () => {
+    render(<Review book={book} view={undefined} onChanged={() => {}} />);
+    await screen.findByText("ક");
+    const list = screen.getByLabelText("Groups");
+    expect(screen.getByRole("combobox", { name: "Sort" })).toHaveValue("label");
+    expect(list.textContent!.indexOf("ક")).toBeLessThan(list.textContent!.indexOf("g0002"));
+    expect(screen.getByRole("button", { name: /Letter overview .* missing/ })).toBeInTheDocument();
+  });
+
   it("filters and sorts groups", () => {
     expect(filterGroups(groups, "all").map((g) => g.id)).toEqual([1, 2]);
     expect(filterGroups(groups, "empty").map((g) => g.id)).toEqual([3]);

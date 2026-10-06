@@ -134,97 +134,56 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
   }
 
   const running = job?.status === "running";
-  const fromBooks = (
-    <div className="suggest-source">
-      <span className="small muted">From your labelled books</span>
-      {refs !== null && usable.length === 0 && (
-        <p className="small muted">
-          No other book with labels {refs.length > 0 ? "that can be compared (other fingerprint settings)" : "yet"}.
-          Label some groups in another book of the same {printed ? "print" : "hand"} first.
-        </p>
-      )}
-      {usable.map((r) => (
-        <label key={r.id} className="row small">
-          <input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} />
-          {r.name} <span className="muted">({r.labelled} labelled{r.writing !== book.writing ? `, ${r.writing}` : ""})</span>
-        </label>
-      ))}
-      {usable.length > 0 && (
-        <button className={printed ? "" : "primary"} disabled={running || picked.size === 0} onClick={startBooks}>
-          {booksRun ? "Suggest again from labelled books" : "Suggest from labelled books"}
-        </button>
-      )}
-      {booksRun && !running && (
-        <p className="small muted">
-          Read {localTime(booksRun.finished_at)}: {String(booksRun.result.samples_matched)} of{" "}
-          {String(booksRun.result.samples)} letters, {String(booksRun.result.groups_with_suggestion)} groups with a
-          suggestion
-          {Number(booksRun.result.groups_split) > 0 && `; ${booksRun.result.groups_split} mixed groups split`}.
-        </p>
-      )}
-    </div>
+  const anyRun = !!(run || booksRun);
+  const lastRun = (r: typeof run, who: string) =>
+    r &&
+    `${who} read ${localTime(r.finished_at)}: ${String(r.result.samples_matched)} of ${String(r.result.samples)} letters, ` +
+      `${String(r.result.groups_with_suggestion)} groups with a suggestion` +
+      (Number(r.result.groups_split) > 0 ? `, ${String(r.result.groups_split)} mixed groups split` : "");
+  const tesseractButton = (
+    <button
+      key="tesseract"
+      className={printed ? "primary" : ""}
+      disabled={running || !status?.ok}
+      title={
+        status && !status.ok
+          ? status.error
+          : printed
+            ? "Tesseract reads every line; each group gets the label most of its letters were read as"
+            : "Tesseract reads print; on handwriting about a third of its letters are wrong"
+      }
+      onClick={start}
+    >
+      {printed ? (run ? "Read again with Tesseract" : "Suggest labels (Tesseract)") : "Try Tesseract"}
+    </button>
   );
+  const booksButton = usable.length > 0 && (
+    <button
+      key="books"
+      className={printed ? "" : "primary"}
+      disabled={running || picked.size === 0}
+      onClick={startBooks}
+      title={`Each letter takes the label of the nearest labelled group in: ${usable
+        .filter((r) => picked.has(r.id))
+        .map((r) => r.name)
+        .join(", ")}`}
+    >
+      {booksRun ? "Suggest again from labelled books" : "Suggest from labelled books"}
+    </button>
+  );
+
   return (
-    <div className="card subtle suggest-panel">
+    <section className="suggest-bar" aria-label="Label suggestions">
       {dialog}
-      <strong className="small">Label suggestions</strong>
-      <ErrorBox error={error} onClose={() => setError(null)} />
-      {!printed && fromBooks}
-      {!printed && (
-        <p className="small muted">
-          This book is handwritten. Tesseract reads print; on handwriting about a third of its letters are wrong, so
-          check its suggestions closely.
-        </p>
-      )}
-      <div className="row">
-        <button
-          className={printed ? "primary" : ""}
-          disabled={running || !status?.ok}
-          title={status && !status.ok ? status.error : undefined}
-          onClick={start}
-        >
-          {printed ? (run ? "Read again with Tesseract" : "Suggest labels (Tesseract)") : "Try Tesseract"}
-        </button>
-        {running && (
-          <button className="small" onClick={() => api.cancelJob(job!.id).then(setJob, setError)}>
-            Cancel
+      <div className="suggest-actions">
+        <strong className="small">Label suggestions</strong>
+        {printed ? [tesseractButton, booksButton] : [booksButton, tesseractButton]}
+        {run && printed && (
+          <button disabled={running || !status?.ok} onClick={fixCuts} title="Split and join samples where Tesseract shows a wrong cut">
+            Fix cuts with Tesseract
           </button>
         )}
-      </div>
-      {status && !status.ok && <p className="small error-text">{status.error}</p>}
-      {running && (
-        <div className="small">
-          <progress max={job!.total || 1} value={job!.done} />
-          {job!.kind === "fix_cuts" ? "Checking cuts" : "Reading"}: {job!.done} of {job!.total}
-        </div>
-      )}
-      {job?.status === "failed" && <p className="small error-text">{job.error}</p>}
-      {job?.kind === "fix_cuts" && job.status === "done" && job.result && (
-        <p className="small">
-          Fixed cuts: {String(job.result.splits)} split, {String(job.result.bars)} vowel bars put back,{" "}
-          {String(job.result.joins)} joined. {String(job.result.placed)} of {String(job.result.samples_new)} new
-          samples went into groups by their reading
-          {Array.isArray(job.result.new_groups) && job.result.new_groups.length > 0
-            ? ` (${job.result.new_groups.length} new groups, not reviewed yet)`
-            : ""}
-          ; the rest are in Unsure. Undo takes it all back.
-        </p>
-      )}
-      {run && !running && (
-        <p className="small muted">
-          Read {localTime(run.finished_at)}: {run.result.samples_matched} of {run.result.samples} letters,{" "}
-          {run.result.groups_with_suggestion} groups with a suggestion
-          {Number(run.result.groups_split) > 0 && `; ${run.result.groups_split} mixed groups split`}.
-        </p>
-      )}
-      {run && printed && (
-        <button disabled={running || !status?.ok} onClick={fixCuts} title="Split and join samples where Tesseract shows a wrong cut">
-          Fix cuts with Tesseract
-        </button>
-      )}
-      {printed && fromBooks}
-      {(run || booksRun) && (
-        <div className="row small">
+        {anyRun && (
           <button
             disabled={running}
             onClick={splitMixed}
@@ -232,53 +191,119 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
           >
             Split mixed groups
           </button>
-          {splitNote && <span className="muted">{splitNote}</span>}
-        </div>
-      )}
-      {(run || booksRun) && (
-        <div className="row small bulk-accept">
-          <button disabled={!candidates.length} onClick={acceptAll} title="Label every group whose suggestion has at least this share">
-            Accept {candidates.length} with ≥
+        )}
+        {anyRun && (
+          <span className="row small bulk-accept">
+            <button disabled={!candidates.length} onClick={acceptAll} title="Label every group whose suggestion has at least this share">
+              Accept {candidates.length} with ≥
+            </button>
+            <input
+              aria-label="Least share to accept"
+              type="number"
+              min={60}
+              max={100}
+              step={5}
+              value={threshold}
+              onChange={(e) => setThreshold(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+              className="share-input"
+            />
+            %
+          </span>
+        )}
+        {running && (
+          <button className="small" onClick={() => api.cancelJob(job!.id).then(setJob, setError)}>
+            Cancel
           </button>
-          <input
-            aria-label="Least share to accept"
-            type="number"
-            min={60}
-            max={100}
-            step={5}
-            value={threshold}
-            onChange={(e) => setThreshold(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-            className="share-input"
-          />
-          %
-        </div>
-      )}
-      {accuracy
-        .filter((acc) => acc.suggested > 0)
-        .map((acc) => (
-          <details key={acc.engine ?? ""} className="small">
-            <summary>
-              {acc.engine ? `${ENGINE_NAME[acc.engine]}: ` : ""}checked against your labels: {acc.right} of{" "}
-              {acc.suggested} right
-            </summary>
-            <ul>
-              {acc.bands
-                .filter((b) => b.right + b.wrong > 0)
-                .map((b) => (
-                  <li key={b.band}>
-                    {b.band}: {b.right} of {b.right + b.wrong} right
-                  </li>
+        )}
+      </div>
+
+      <div className="suggest-status small">
+        <ErrorBox error={error} onClose={() => setError(null)} />
+        {running && (
+          <span className="row">
+            <progress max={job!.total || 1} value={job!.done} />
+            {job!.kind === "fix_cuts" ? "Checking cuts" : "Reading"}: {job!.done} of {job!.total}
+          </span>
+        )}
+        {status && !status.ok && <span className="error-text">{status.error}</span>}
+        {job?.status === "failed" && <span className="error-text">{job.error}</span>}
+        {job?.kind === "fix_cuts" && job.status === "done" && job.result && (
+          <span>
+            Fixed cuts: {String(job.result.splits)} split, {String(job.result.bars)} vowel bars put back,{" "}
+            {String(job.result.joins)} joined. {String(job.result.placed)} of {String(job.result.samples_new)} new
+            samples went into groups by their reading
+            {Array.isArray(job.result.new_groups) && job.result.new_groups.length > 0
+              ? ` (${job.result.new_groups.length} new groups, not reviewed yet)`
+              : ""}
+            ; the rest are in Unsure. Undo takes it all back.
+          </span>
+        )}
+        {splitNote && <span>{splitNote}</span>}
+        {!running && (
+          <span className="muted">
+            {[lastRun(run, "Tesseract"), lastRun(booksRun, "Labelled books")].filter(Boolean).join(" · ") ||
+              (printed
+                ? "Not read yet: Tesseract reads the lines and suggests a label for each group."
+                : usable.length
+                  ? "Not read yet: your labelled books suggest labels by shape."
+                  : "")}
+          </span>
+        )}
+        {refs !== null && usable.length === 0 && !printed && (
+          <span className="muted">
+            No other book with labels {refs.length > 0 ? "that can be compared (other fingerprint settings)" : "yet"}:
+            label some groups in another handwritten book to get suggestions from it.
+          </span>
+        )}
+      </div>
+
+      {(usable.length > 0 || accuracy.some((acc) => acc.suggested > 0)) && (
+        <details className="suggest-details small">
+          <summary>Details: reference books, accuracy</summary>
+          <div className="suggest-details-body">
+            {usable.length > 0 && (
+              <fieldset className="plain">
+                <legend className="muted">Learn from these labelled books</legend>
+                {usable.map((r) => (
+                  <label key={r.id} className="row">
+                    <input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} />
+                    {r.name}{" "}
+                    <span className="muted">
+                      ({r.labelled} labelled{r.writing !== book.writing ? `, ${r.writing}` : ""})
+                    </span>
+                  </label>
                 ))}
-              <li>{acc.none} labelled groups would get no suggestion</li>
-              {acc.wrong.map((w) => (
-                <li key={w.label + w.suggested}>
-                  {w.label} suggested as {w.suggested} ({w.groups})
-                </li>
+              </fieldset>
+            )}
+            {accuracy
+              .filter((acc) => acc.suggested > 0)
+              .map((acc) => (
+                <div key={acc.engine ?? ""}>
+                  <span className="muted">
+                    {acc.engine ? `${ENGINE_NAME[acc.engine]}: ` : ""}checked against your labels: {acc.right} of{" "}
+                    {acc.suggested} right
+                  </span>
+                  <ul>
+                    {acc.bands
+                      .filter((b) => b.right + b.wrong > 0)
+                      .map((b) => (
+                        <li key={b.band}>
+                          {b.band}: {b.right} of {b.right + b.wrong} right
+                        </li>
+                      ))}
+                    <li>{acc.none} labelled groups would get no suggestion</li>
+                    {acc.wrong.map((w) => (
+                      <li key={w.label + w.suggested}>
+                        {w.label} suggested as {w.suggested} ({w.groups})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
-          </details>
-        ))}
-    </div>
+          </div>
+        </details>
+      )}
+    </section>
   );
 }
 

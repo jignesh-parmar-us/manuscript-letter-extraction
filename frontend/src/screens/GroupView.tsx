@@ -14,7 +14,7 @@ import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
-import { isTyping, ReviewContext } from "./Review";
+import { isTyping, ReviewContext, sortGroups } from "./Review";
 import { expectedReading, ReadingsLine, SuggestionChip } from "./Suggestions";
 
 export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewContext }) {
@@ -27,7 +27,8 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const [dialog, confirm] = useConfirm();
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
-  const others = ctx.groups.filter((g) => g.id !== group.id && g.kind === group.kind && g.samples > 0);
+  // labelled groups first, in letter order, then the others by code (as the side bar's "by label")
+  const others = sortGroups(ctx.groups.filter((g) => g.id !== group.id && g.kind === group.kind && g.samples > 0), "label");
 
   const onClick = (id: number, e: MouseEvent) =>
     setSelection(select(selection, order, id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));

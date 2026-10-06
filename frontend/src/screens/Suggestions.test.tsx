@@ -65,8 +65,8 @@ describe("SuggestPanel", () => {
 
   it("is a 'try' on handwritten books and explains why", async () => {
     renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
-    expect(await screen.findByRole("button", { name: "Try Tesseract" })).toBeInTheDocument();
-    expect(screen.getByText(/about a third of its letters are wrong/)).toBeInTheDocument();
+    const tryIt = await screen.findByRole("button", { name: "Try Tesseract" });
+    await waitFor(() => expect(tryIt).toHaveAttribute("title", expect.stringMatching(/about a third of its letters are wrong/)));
   });
 
   it("is disabled with the reason when Tesseract is missing", async () => {
