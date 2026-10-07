@@ -7,8 +7,9 @@
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
 //   Split    click inside the selected sample where it should be cut in two
 // Boxes are coloured by group; unsure samples have a dashed grey box.
-// The selection panel sits below the page and stays at the bottom of the window, so the page does not
-// move when it opens or closes; after a change (delete, join, split, move, label, new box) a dashed
+// The page is chosen in a dialog (PagePicker.tsx: all pages, with a search box), so the page has the
+// whole width. The page and the selection panel under it fill exactly the rest of the window, so the
+// page scrolls by itself to its very bottom, and the panel never covers it; after a change (delete, join, split, move, label, new box) a dashed
 // marker stays on that spot until the next click, so the place is easy to find again.
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Sample } from "../api";
@@ -18,6 +19,7 @@ import LabelPicker from "../components/LabelPicker";
 import { useFitHeight } from "../components/useFitHeight";
 import { go } from "../route";
 import GroupPicker, { MoveTarget } from "./GroupPicker";
+import PagePicker from "./PagePicker";
 
 type Mode = "select" | "draw" | "split";
 type Box = [number, number, number, number];
@@ -53,8 +55,10 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const [dialog, confirm] = useConfirm();
   const svgRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sidebar = useRef<HTMLElement>(null);
-  useFitHeight(sidebar); // the page list scrolls by itself, the window does not
+  const area = useRef<HTMLDivElement>(null);
+  // the page and the selection panel fill the rest of the window; fitted again once the page is there
+  useFitHeight(area, 8, "height", page?.id ?? null);
+  const [choosing, setChoosing] = useState(false); // the page picker is open
   const shown = useRef<string>(""); // the page/sample already scrolled to, so reloads do not scroll again
 
   useEffect(() => {
@@ -86,11 +90,16 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     shown.current = key;
     setSelected(new Set([s.id]));
     setFocusId(s.id);
-    const box = scrollRef.current;
-    box?.scrollTo?.({
-      left: (s.box[0] + s.box[2] / 2) * zoom - box.clientWidth / 2,
-      top: (s.box[1] + s.box[3] / 2) * zoom - box.clientHeight / 2,
-    });
+    // after the selection panel has opened under the page (it takes room), bring the sample to the middle
+    const centre = () => {
+      const box = scrollRef.current;
+      box?.scrollTo?.({
+        left: (s.box[0] + s.box[2] / 2) * zoom - box.clientWidth / 2,
+        top: (s.box[1] + s.box[3] / 2) * zoom - box.clientHeight / 2,
+      });
+    };
+    centre();
+    window.requestAnimationFrame?.(() => window.requestAnimationFrame(centre));
   }, [page, pageId, sampleId, zoom]);
 
   /** Run an action, then reload the page and the book's numbers. */
@@ -253,37 +262,52 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   }
 
   const sel = page?.samples.filter((s) => selected.has(s.id)) ?? [];
+  const current = pages.find((p) => p.id === pageId);
+  const at = current ? pages.indexOf(current) : -1;
+  const prev = at > 0 ? pages[at - 1] : undefined;
+  const next = at >= 0 && at < pages.length - 1 ? pages[at + 1] : undefined;
   const single = sel.length === 1 ? sel[0] : null;
   const singleGroup = single?.group_id ? groups.get(single.group_id) : undefined;
 
   return (
-    <div className="review">
+    <div className="pages-tab">
       {dialog}
+      {choosing && (
+        <PagePicker
+          pages={pages}
+          currentId={pageId}
+          onPick={(p) => {
+            setChoosing(false);
+            go(`/books/${book.id}/pages/${p.id}`);
+          }}
+          onClose={() => setChoosing(false)}
+        />
+      )}
       {picking && (
         <GroupPicker groups={[...groups.values()]} count={selected.size} onPick={moveTo} onClose={() => setPicking(false)} />
       )}
-      <aside className="sidebar" ref={sidebar}>
-        <label className="button">
-          Upload letter image…
-          <input type="file" accept="image/*" onChange={upload} hidden />
-        </label>
-        <div className="side-list" aria-label="Pages">
-          {pages.map((p) => (
-            <button
-              key={p.id}
-              className={`side-item${p.id === pageId ? " active" : ""}`}
-              onClick={() => go(`/books/${book.id}/pages/${p.id}`)}
-            >
-              <span className="side-label small">{p.file}</span>
-              <span className="muted small">{p.samples}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
       <div className="pane">
         <ErrorBox error={error} onClose={() => setError(null)} />
+        <div className="row page-nav">
+          <button disabled={!prev} onClick={() => prev && go(`/books/${book.id}/pages/${prev.id}`)} aria-label="Previous page" title="Previous page">
+            ◀
+          </button>
+          <button className="page-choose" onClick={() => setChoosing(true)} title="Choose a page">
+            {current ? `${current.file}` : "Choose a page"}{" "}
+            <span className="muted small">
+              {current ? `${pages.indexOf(current) + 1} of ${pages.length}` : `${pages.length} pages`} ▾
+            </span>
+          </button>
+          <button disabled={!next} onClick={() => next && go(`/books/${book.id}/pages/${next.id}`)} aria-label="Next page" title="Next page">
+            ▶
+          </button>
+          <label className="button upload">
+            Upload letter image…
+            <input type="file" accept="image/*" onChange={upload} hidden />
+          </label>
+        </div>
         {!page ? (
-          <p className="muted">Choose a page on the left.</p>
+          <p className="muted">Choose a page: the button above lists all pages, with a search box.</p>
         ) : (
           <>
             <div className="toolbar row">
@@ -313,7 +337,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
               </button>
               <button onClick={() => act(() => api.undo(book.id))}>↶ Undo</button>
               <button onClick={() => act(() => api.redo(book.id))}>↷ Redo</button>
-              <select aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
+              <select className="narrow" aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
                 {[0.25, 0.35, 0.5, 0.75, 1].map((z) => (
                   <option key={z} value={z}>
                     {Math.round(z * 100)}%
@@ -329,6 +353,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                   : "Click a box to select it; Shift or Ctrl/Cmd+click to select more."}{" "}
               {message}
             </p>
+            <div className="page-area" ref={area}>
             <div className="page-scroll" ref={scrollRef}>
             <div className="page-canvas" style={{ width: page.width * zoom, height: page.height * zoom }}>
               <img
@@ -403,6 +428,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                 )}
               </svg>
             </div>
+            <div className="page-room" aria-hidden="true" />
             </div>
             {(offer.length > 0 || sel.length > 0) && (
               <div className="selection-dock" aria-label="Selection">
@@ -460,6 +486,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
             )}
               </div>
             )}
+            </div>
           </>
         )}
       </div>

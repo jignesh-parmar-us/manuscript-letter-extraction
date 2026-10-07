@@ -106,6 +106,26 @@ describe("PageViewer", () => {
     expect(api.move).toHaveBeenLastCalledWith(1, [2, 1], null);
   });
 
+  it("moves between pages with the page chooser and the arrows", async () => {
+    vi.mocked(api.pages).mockResolvedValue([
+      { id: 2, file: "p0.png", width: 1000, height: 500, status: "OK", message: "", lines: 1, samples: 5, image: "" },
+      { id: 3, file: "p1.png", width: 1000, height: 500, status: "OK", message: "", lines: 1, samples: 3, image: "" },
+      { id: 4, file: "p2.png", width: 1000, height: 500, status: "OK", message: "", lines: 1, samples: 7, image: "" },
+    ]);
+    window.location.hash = "";
+    render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
+    const choose = await screen.findByRole("button", { name: /p1.png 2 of 3/ });
+    await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(window.location.hash).toBe("#/books/1/pages/4");
+    await userEvent.click(screen.getByRole("button", { name: "Previous page" }));
+    expect(window.location.hash).toBe("#/books/1/pages/2");
+    await userEvent.click(choose);
+    const dialog = screen.getByRole("dialog", { name: "Choose a page" });
+    await userEvent.click(within(dialog).getByRole("option", { name: /p2.png/ }));
+    expect(window.location.hash).toBe("#/books/1/pages/4");
+    expect(screen.queryByRole("dialog", { name: "Choose a page" })).toBeNull();
+  });
+
   it("keeps the selection below the page, and marks the spot of the last change", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);

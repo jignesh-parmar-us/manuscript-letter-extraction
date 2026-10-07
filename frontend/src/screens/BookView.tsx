@@ -1,7 +1,9 @@
-// One book: its name and numbers on top, and tabs for the work on it.
-// Each tab is its own screen file; the address is #/books/<id>/<tab>.
+// One book: the top bar holds a menu of its sections (Pages & capture, Review groups, Pages, Export)
+// and its name and numbers on one line; each section is its own screen file.
+// The address is #/books/<id>/<section>.
 import { useCallback, useEffect, useState } from "react";
 import { api, AppInfo, Book, WRITING_LABEL } from "../api";
+import AppBar from "../components/AppBar";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
 import Capture from "./Capture";
@@ -33,49 +35,62 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
   }, [bookId]);
   useEffect(reload, [reload]);
 
+  const section = (
+    <select
+      className="section-menu"
+      aria-label="Section"
+      value={tab}
+      onChange={(e) => go(`/books/${bookId}/${e.target.value}`)}
+    >
+      {TABS.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.label}
+        </option>
+      ))}
+    </select>
+  );
+
   if (!book) {
     return (
-      <section>
-        <ErrorBox error={error} />
-        {!error && <p className="muted">Loading…</p>}
-        <button onClick={() => go("/")}>Back to the books</button>
-      </section>
+      <>
+        <AppBar info={info} left={section} middle={<span className="muted small">Loading…</span>} />
+        <main>
+          <ErrorBox error={error} />
+        </main>
+      </>
     );
   }
 
   return (
-    <section>
-      <div className="row between">
-        <div>
-          <button className="link small" onClick={() => go("/")}>
-            ← Books
-          </button>
-          <h1>{book.name}</h1>
-          <p className="muted small">
-            {WRITING_LABEL[book.writing]} · {book.pages} pages · {book.samples} letters · {book.groups} groups · {book.labelled} labelled ·{" "}
-            {book.unsure} unsure
-          </p>
-        </div>
-      </div>
-      <nav className="tabs">
-        {TABS.map((t) => (
-          <button key={t.id} className={t.id === tab ? "tab active" : "tab"} onClick={() => go(`/books/${bookId}/${t.id}`)}>
-            {t.label}
-          </button>
-        ))}
-      </nav>
-      <ErrorBox error={error} onClose={() => setError(null)} />
-      {tab === "capture" && <Capture book={book} info={info} onChanged={reload} />}
-      {tab === "review" && <Review book={book} view={sub} onChanged={reload} />}
-      {tab === "export" && <Export book={book} info={info} />}
-      {tab === "pages" && (
-        <PageViewer
-          book={book}
-          pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null}
-          sampleId={item && /^\d+$/.test(item) ? Number(item) : null}
-          onChanged={reload}
-        />
-      )}
-    </section>
+    <>
+      <AppBar
+        info={info}
+        left={section}
+        middle={
+          <span className="book-line" title={book.input_dir}>
+            <strong>{book.name}</strong>
+            <span className="muted small">
+              {" "}
+              · {WRITING_LABEL[book.writing]} · {book.pages} pages · {book.samples} letters · {book.groups} groups ·{" "}
+              {book.labelled} labelled · {book.unsure} unsure
+            </span>
+          </span>
+        }
+      />
+      <main>
+        <ErrorBox error={error} onClose={() => setError(null)} />
+        {tab === "capture" && <Capture book={book} info={info} onChanged={reload} />}
+        {tab === "review" && <Review book={book} view={sub} onChanged={reload} />}
+        {tab === "export" && <Export book={book} info={info} />}
+        {tab === "pages" && (
+          <PageViewer
+            book={book}
+            pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null}
+            sampleId={item && /^\d+$/.test(item) ? Number(item) : null}
+            onChanged={reload}
+          />
+        )}
+      </main>
+    </>
   );
 }

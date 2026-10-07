@@ -2,13 +2,13 @@
 
 How to turn a folder of page images into clean letters with clean labels, with as little hand work as possible, and get it ready for training the letter reader.
 
-The same guide is in the app: the **Help** link in the header opens [docs/help/new-book.html](help/new-book.html). Change both together.
+The same guide is in the app: the **Help** link at the top right opens [docs/help/new-book.html](help/new-book.html). Change both together.
 
 ## 1. Before you start
 
 - **One folder per book** with its page images (JPG, PNG, TIFF or BMP), in page order by name (page2 comes before page10). The app only reads this folder; it never changes your images.
 - **Printed or handwritten?** This decides how the letters are cut and who suggests labels: printed books are read by Tesseract; handwritten books learn from the books you have already labelled.
-- **For printed books, Tesseract must be installed** (see [INSTALL_TESSERACT.md](INSTALL_TESSERACT.md)). The Review tab says so if it is missing.
+- **For printed books, Tesseract must be installed** (see [INSTALL_TESSERACT.md](INSTALL_TESSERACT.md)). The Review groups section says so if it is missing.
 - **Keep your older labelled books** until the new book has learned from them ([section 6](#6-replacing-old-books)): their labels are the fastest way to label the new one.
 
 ## 2. A printed book

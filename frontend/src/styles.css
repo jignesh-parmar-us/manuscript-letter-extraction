@@ -56,10 +56,35 @@ code {
 .app .top {
   display: flex;
   gap: 16px;
-  align-items: baseline;
-  padding: 10px 20px;
+  align-items: center;
+  padding: 6px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  min-height: 44px;
+}
+.top-left {
+  flex: none;
+}
+.top-middle {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* a long book name and its numbers stay on one line */
+}
+.top-right {
+  flex: none;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+select.narrow {
+  min-width: 0;
+}
+.section-menu {
+  min-width: 0;
+  font-weight: 600;
+  padding: 4px 8px;
 }
 .brand {
   font-weight: 700;
@@ -441,7 +466,8 @@ pre.settings {
 .page-scroll {
   overflow: auto;
   overscroll-behavior: contain;
-  max-height: 75vh;
+  flex: 1;
+  min-height: 0; /* fills the page area; the selection panel below takes what it needs */
   border: 1px solid var(--line);
   border-radius: 6px;
 }
@@ -771,12 +797,11 @@ button.reading-badge.removable:hover {
   margin-right: 4px;
 }
 .selection-dock {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
+  flex: none;
+  max-height: 45%;
+  overflow-y: auto;
   background: var(--bg);
-  padding: 6px 0 4px;
-  border-top: 1px solid var(--line);
+  padding: 4px 0 0;
 }
 .selection-dock .card {
   margin: 4px 0;
@@ -861,4 +886,60 @@ button.reading-badge.removable:hover {
 .sticky-block .palette {
   max-height: 45vh; /* the open letters scroll on their own instead of covering the page */
   overflow-y: auto;
+}
+
+/* ---- Pages tab: page chooser and a page area that fills the window ---- */
+.page-nav {
+  margin-bottom: 6px;
+}
+.page-choose {
+  min-width: 220px;
+  text-align: left;
+  font-weight: 600;
+}
+.page-nav .upload {
+  margin-left: auto;
+}
+.page-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+.page-room {
+  height: 35vh; /* room below the page, so its last line can be brought to the middle */
+  width: 1px;
+}
+.dialog.page-picker {
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.page-picker h2 {
+  margin: 0;
+}
+.page-search {
+  min-width: 0;
+  width: 100%;
+}
+.page-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+.page-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+.page-item.active {
+  border-color: var(--accent);
+  background: var(--selected);
 }

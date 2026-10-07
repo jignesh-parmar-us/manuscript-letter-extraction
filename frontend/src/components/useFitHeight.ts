@@ -6,17 +6,25 @@ import { RefObject, useLayoutEffect } from "react";
 
 export const NARROW = 860; // the width below which the two columns stack (styles.css)
 
-export function useFitHeight(ref: RefObject<HTMLElement | null>, margin = 8): void {
+/** `prop`: "maxHeight" (a side bar: at most to the bottom) or "height" (an area that fills the rest
+ *  of the window, such as the Pages tab's page and selection panel). `key` changes when the element
+ *  appears or moves (for example when a page has loaded), so it is fitted again. */
+export function useFitHeight(
+  ref: RefObject<HTMLElement | null>,
+  margin = 8,
+  prop: "maxHeight" | "height" = "maxHeight",
+  key: unknown = null,
+): void {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const fit = () => {
-      if (window.innerWidth <= NARROW) {
+      if (window.innerWidth <= NARROW && prop === "maxHeight") {
         el.style.maxHeight = "";
         return;
       }
       const top = Math.max(el.getBoundingClientRect().top, margin);
-      el.style.maxHeight = `${Math.max(200, window.innerHeight - top - margin)}px`;
+      el.style[prop] = `${Math.max(prop === "height" ? 320 : 200, window.innerHeight - top - margin)}px`;
     };
     fit();
     window.addEventListener("resize", fit);
@@ -25,5 +33,5 @@ export function useFitHeight(ref: RefObject<HTMLElement | null>, margin = 8): vo
       window.removeEventListener("resize", fit);
       window.removeEventListener("scroll", fit);
     };
-  }, [ref, margin]);
+  }, [ref, margin, prop, key]);
 }
