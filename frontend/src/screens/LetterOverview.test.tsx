@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import LetterOverview, { CONSONANTS, missingCount, otherLabelled, rowsOf, SIGNS, VOWELS } from "./LetterOverview";
+import LetterOverview, { CONSONANTS, missingCount, otherLabelled, rowsOf, COLUMNS, VOWELS } from "./LetterOverview";
 import { group, renderView } from "./reviewTestUtils";
 
 const sug = (label_dev: string) => ({ label_dev, label_guj: "", share: 0.9, count: 9, read: 10, engine: "tesseract" as const,
@@ -31,8 +31,8 @@ describe("LetterOverview", () => {
 
 
   it("counts the letters without a labelled group", () => {
-    const total = VOWELS.length + CONSONANTS.length * SIGNS.length;
-    expect(missingCount(groups)).toBe(total - 3);                     // क, कि and अ have groups
+    const total = VOWELS.length + 3 + CONSONANTS.length * COLUMNS.length;   // अं अः अँ
+    expect(missingCount(groups)).toBe(total - 4);                     // क, कि, कं and अ have groups
   });
 
   it("shows labelled, suggested and missing letters, and opens their groups", async () => {
@@ -43,17 +43,20 @@ describe("LetterOverview", () => {
     const ne = within(table).getByTitle(/^ને \(ने\): no labelled group; g0003/);
     expect(ne.closest("td")).toHaveClass("cell-suggested");
     expect(within(table).getByTitle(/^ખ \(ख\): no group yet/).closest("td")).toHaveClass("cell-missing");
+    expect(within(table).getByTitle(/^કં \(कं\): 4 letters in g0007/).closest("td")).toHaveClass("cell-have");
+    expect(within(table).getByTitle(/^અઃ \(अः\): no group yet/)).toBeInTheDocument();
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent).slice(-5)).toEqual(["◌્", "◌ં", "◌ઃ", "◌ઁ", "◌઼"]);
     await userEvent.click(ne);
     expect(window.location.hash).toBe("#/books/1/review/3");
   });
 
   it("lists the labelled groups that are not letters of the table", async () => {
     window.location.hash = "";
-    expect(otherLabelled(groups).map((g) => g.label_dev)).toEqual(["कं", "क्ष", "रहे"]);
-    expect(otherLabelled(groups, ["conjuncts"]).map((g) => g.label_dev)).toEqual(["कं", "रहे"]);   // क्ष is in the table now
+    expect(otherLabelled(groups).map((g) => g.label_dev)).toEqual(["क्ष", "रहे"]);   // कं is in the table
+    expect(otherLabelled(groups, ["conjuncts"]).map((g) => g.label_dev)).toEqual(["रहे"]);   // क्ष is in the table now
     renderView((ctx) => <LetterOverview ctx={ctx} />, groups);
     const others = screen.getByLabelText("Other labelled groups");
-    expect(within(others).getAllByRole("button").map((b) => b.textContent)).toEqual(["કં4", "ક્ષ5", "રહે8"]);
+    expect(within(others).getAllByRole("button").map((b) => b.textContent)).toEqual(["ક્ષ5", "રહે8"]);
     await userEvent.click(within(others).getByTitle(/^રહે/));
     expect(window.location.hash).toBe("#/books/1/review/5");
   });

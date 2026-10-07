@@ -1,6 +1,8 @@
 // "Letter overview" in the Review tab: every consonant with every vowel sign (and the vowels), and
 // which of them have no labelled group yet. A letter with a labelled group links to it; a letter
 // that no group has as its label but some group is suggested as, links to that group to review.
+// After the vowel signs, columns for the marks: halant (क्), anusvara (कं), visarga (कः), candrabindu
+// (कँ) and nukta (क़); the vowels row has अं अः अँ there and nothing under halant and nukta.
 // Optional rows: the conjuncts क्ष त्र ज्ञ श्र, every consonant with rakar (क्र; ट्र and ड्र are drawn
 // with the bottom churn) and every consonant with reph (र्क).
 // Labels are matched exactly (Devanagari, as stored); a word label does not count for its letters.
@@ -17,8 +19,12 @@ export const CONSONANTS = "क ख ग घ ङ च छ ज झ ञ ट ठ ड �
 export const CONJUNCTS = "क्ष त्र ज्ञ श्र".split(" ");
 // columns: the consonant alone, then each vowel sign
 export const SIGNS = ["", "ा", "ि", "ी", "ु", "ू", "ृ", "े", "ै", "ो", "ौ"];
-// the vowels in the same columns: अ alone, आ with ा, इ with ि, ...
+// then each mark: halant, anusvara, visarga, candrabindu, nukta
+export const MARKS = ["्", "ं", "ः", "ँ", "़"];
+export const COLUMNS = [...SIGNS, ...MARKS];
+// the vowels in the same columns: अ alone, आ with ा, इ with ि, ...; "" is an empty cell
 export const VOWELS = "अ आ इ ई उ ऊ ऋ ए ऐ ओ औ".split(" ");
+const VOWEL_MARKS = ["", "अं", "अः", "अँ", ""];
 export const RAKAR = "्र";
 export const REPH = "र्";
 
@@ -52,8 +58,8 @@ export interface Row {
 /** The rows of the table: the vowels and every consonant, and the chosen extra rows. */
 export function rowsOf(extras: Iterable<Extra> = []): Row[] {
   const on = new Set(extras);
-  const withSigns = (head: string, section: string): Row => ({ head, section, letters: SIGNS.map((sg) => head + sg) });
-  const rows: Row[] = [{ head: "अ", section: "", letters: VOWELS }, ...CONSONANTS.map((c) => withSigns(c, ""))];
+  const withSigns = (head: string, section: string): Row => ({ head, section, letters: COLUMNS.map((sg) => head + sg) });
+  const rows: Row[] = [{ head: "अ", section: "", letters: [...VOWELS, ...VOWEL_MARKS] }, ...CONSONANTS.map((c) => withSigns(c, ""))];
   if (on.has("conjuncts")) rows.push(...CONJUNCTS.map((c) => withSigns(c, "Conjuncts")));
   // र with rakar or reph (र्र) is not written that way
   if (on.has("rakar")) rows.push(...CONSONANTS.filter((c) => c !== "र").map((c) => withSigns(c + RAKAR, "With rakar ્ર")));
@@ -70,6 +76,7 @@ export function cellsOf(groups: Group[], letters: string[]): Map<string, Cell> {
   }
   const out = new Map<string, Cell>();
   for (const text of letters) {
+    if (!text) continue; // an empty cell
     const own = labelled.get(text);
     const sug = suggested.get(text);
     if (own) out.set(text, { text, state: "have", group: own[0], samples: own.reduce((n, g) => n + g.samples, 0) });
@@ -83,7 +90,7 @@ export function cellsOf(groups: Group[], letters: string[]): Map<string, Cell> {
 
 /** How many letters of the basic table (vowels and consonants) have no labelled group: for the side bar. */
 export function missingCount(groups: Group[]): number {
-  const letters = rowsOf().flatMap((r) => r.letters);
+  const letters = rowsOf().flatMap((r) => r.letters).filter(Boolean);
   return [...cellsOf(groups, letters).values()].filter((c) => c.state !== "have").length;
 }
 
@@ -143,14 +150,15 @@ export function LetterTable(props: {
       section = r.section;
       body.push(
         <tr key={`section-${section}`} className="table-section">
-          <th colSpan={SIGNS.length + 1}>{section}</th>
+          <th colSpan={COLUMNS.length + 1}>{section}</th>
         </tr>,
       );
     }
     body.push(
       <tr key={r.head}>
         <th scope="row">{r.head === "अ" ? "vowels" : toGujarati(r.head)}</th>
-        {r.letters.map((t) => {
+        {r.letters.map((t, i) => {
+          if (!t) return <td key={`empty-${i}`} className="cell-empty" />;
           const c = props.cells.get(t)!;
           const label = toGujarati(t);
           const title = props.title(c, label);
@@ -176,7 +184,7 @@ export function LetterTable(props: {
         <thead>
           <tr>
             <th />
-            {SIGNS.map((sg) => (
+            {COLUMNS.map((sg) => (
               <th key={sg || "none"} scope="col">
                 {sg ? toGujarati("◌" + sg) : "—"}
               </th>
@@ -215,7 +223,7 @@ export default function LetterOverview({ ctx }: { ctx: ReviewContext }) {
     <div className="missing-letters">
       <h2>Letter overview</h2>
       <p className="small muted">
-        Every consonant with every vowel sign, and the vowels{extras.size ? ", with the rows chosen below" : ""}:{" "}
+        Every consonant with every vowel sign and mark (્ ં ઃ ઁ ઼), and the vowels{extras.size ? ", with the rows chosen below" : ""}:{" "}
         {all.length} letters. <strong>{have}</strong> have a labelled group, <strong>{suggested}</strong> are only
         suggested for a group (amber: click to review it), <strong>{missing}</strong> have none yet. Many combinations
         are rare in any text, so not all of them will appear in a book.
@@ -250,7 +258,7 @@ export default function LetterOverview({ ctx }: { ctx: ReviewContext }) {
       ) : (
         <>
           <p className="small muted">
-            Labels that are not in the table: words, other joined letters, letters with ં or ઃ, dandas and digits (
+            Labels that are not in the table: words, other joined letters, a vowel sign with a mark (કાં), dandas and digits (
             {others.length}).
           </p>
           <div className="other-labels" aria-label="Other labelled groups">

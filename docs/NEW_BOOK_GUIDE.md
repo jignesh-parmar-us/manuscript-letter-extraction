@@ -45,7 +45,7 @@ Labels given by Tesseract or by other books are marked *not reviewed*. Check the
 | **Show → Mixed readings** | Groups whose letters were read as two letters. Click a reading under the group's name to select its letters, then **New group**. |
 | **Show → Suggested** | Accept, change or reject each suggestion. **Merge into gXXXX** appears when another group already has that label. |
 | **Unsure** | Select letters with a green reading and click **Accept readings**, or accept the suggested groups (→). |
-| **Letter overview** | Which letters have a group (green), are only suggested (amber) or are missing (grey), and every other label below the table. Tick the rakar ્ર and reph ર્ rows to see joined letters (ક્ર, ટ્ર, ર્ક). |
+| **Letter overview** | Which letters have a group (green), are only suggested (amber) or are missing (grey): every consonant with every vowel sign and with ્ ં ઃ ઁ ઼ (ક્, કં, કઃ, કઁ, ક઼), and every other label below the table. Tick the rakar ્ર and reph ર્ rows to see joined letters (ક્ર, ટ્ર, ર્ક). |
 | **Move to…** (on selected letters) | Click a letter in the table: the letters go into its group, or into a new group with that label. Unlabelled groups are listed newest first below it. |
 
 > **Remember:** every change can be undone (**Undo**, or Ctrl/Cmd+Z). Locked groups never change until you unlock them.

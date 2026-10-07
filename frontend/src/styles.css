@@ -721,6 +721,10 @@ button.reading-badge.removable:hover {
   text-align: center;
   min-width: 46px;
 }
+/* a line between the vowel signs and the marks (row header + 11 sign columns before them) */
+.missing-table tr > :nth-child(13) {
+  border-left: 3px solid var(--line);
+}
 .missing-table th {
   font-size: 18px;
   font-weight: normal;
