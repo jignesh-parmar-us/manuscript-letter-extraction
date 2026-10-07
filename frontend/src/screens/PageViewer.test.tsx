@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, Book, PageDetail } from "../api";
+import { openOnPage } from "../components/returnSpot";
 import PageViewer, { groupColour } from "./PageViewer";
 import { group, sample } from "./reviewTestUtils";
 
@@ -171,6 +172,17 @@ describe("PageViewer", () => {
     await waitFor(() => expect(api.label).toHaveBeenCalledWith(1, 8, "ગ"));
     expect(api.newGroup).toHaveBeenCalledWith(1, [2]);
     expect(await screen.findByText(/new group labelled ગ/)).toBeInTheDocument();
+  });
+
+  it("offers the way back to the letter it was opened from, after any changes", async () => {
+    render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
+    await screen.findByTestId("box-2");
+    expect(screen.queryByRole("button", { name: /^← Back/ })).toBeNull();
+    window.location.hash = "#/books/1/review/7";
+    openOnPage(1, sample(2), [sample(1), sample(2)], "ને (g0007)");
+    render(<PageViewer book={book} pageId={3} sampleId={2} onChanged={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "← Back to ને (g0007)" }));
+    expect(window.location.hash).toBe("#/books/1/review/7");
   });
 
   it("opens the letters above the one-line label box, and Esc hides them", async () => {

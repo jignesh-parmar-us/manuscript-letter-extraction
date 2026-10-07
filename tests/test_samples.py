@@ -156,6 +156,35 @@ class UploadTests(SampleTestCase):
             S.upload_sample(self.lib, self.book, "blank.png", _png(np.full((40, 40, 3), 230, np.uint8)))
 
 
+class LineContextTests(SampleTestCase):
+    def test_a_sample_with_its_neighbours(self):
+        mid = self.l1[len(self.l1) // 2]
+        with Image.open(io.BytesIO(S.line_context(self.lib, mid, around=1, height=1000))) as im:
+            rgb = np.asarray(im.convert("RGB"))
+        with self.lib.session() as s:
+            near = [s.get(Sample, i) for i in self.l1]
+            k = self.l1.index(mid)
+            three = near[k - 1:k + 2]
+            width = max(m.x + m.w for m in three) - min(m.x for m in three)
+        self.assertGreaterEqual(rgb.shape[1], width)                       # the letter and one on each side
+        self.assertLess(rgb.shape[1], width + 3 * near[k].h)               # but not the whole line
+        self.assertTrue((np.abs(rgb.astype(int) - S.CONTEXT_COLOUR).sum(axis=2) < 10).any())   # outlined
+        with Image.open(io.BytesIO(S.line_context(self.lib, mid))) as im:
+            self.assertLessEqual(im.height, 96)                            # scaled down, never up
+
+    def test_uploaded_samples_have_none(self):
+        img = np.full((50, 50, 3), 220, np.uint8)
+        img[10:40, 20:28] = 20
+        sid = S.upload_sample(self.lib, self.book, "a.png", _png(img))["sample"]["id"]
+        with self.assertRaises(S.NotFound):
+            S.line_context(self.lib, sid)
+        c = TestClient(create_app(self.lib, "t"))
+        self.assertEqual(c.get(f"/files/samples/{sid}/context?token=t").status_code, 404)
+        r = c.get(f"/files/samples/{self.l1[0]}/context?token=t")
+        self.assertEqual((r.status_code, r.headers["content-type"]), (200, "image/png"))
+        c.close()
+
+
 class ApiTests(SampleTestCase):
     def test_routes(self):
         c = TestClient(create_app(self.lib, "t"))

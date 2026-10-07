@@ -4,9 +4,12 @@
 // Deleted: select samples and restore them (they come back as unsure).
 // On printed books read with Tesseract (C12), unsure samples with a confident reading show it as a
 // second chip: accepting it puts the sample in the group with that label, or a new group that gets it.
+// One selected letter shows its line; double-click opens it on its page, and "Back" there returns here.
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { api, Sample } from "../api";
 import ErrorBox from "../components/ErrorBox";
+import LineContext from "../components/LineContext";
+import { openOnPage, useArrive, useComeBack } from "../components/returnSpot";
 import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
@@ -21,13 +24,20 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
       kind === "unsure" ? api.unsure(bookId, offset, limit) : api.deleted(bookId, offset, limit),
     [kind, bookId],
   );
-  const { samples, total, more, error } = usePagedSamples(load, ctx.version);
+  const back = useComeBack();
+  const { samples, total, more, error, loading } = usePagedSamples(load, ctx.version, back.first);
+  useArrive(back, samples, loading, (id) => setSelection({ ids: new Set([id]), anchor: id }));
   const [picking, setPicking] = useState(false); // the "Move to…" picker is open
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
 
-  const onClick = (id: number, e: MouseEvent) =>
+  const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
+  const open = (s: Sample) => openOnPage(bookId, s, samples, kind === "unsure" ? "Unsure" : "Deleted samples");
+
+  const onClick = (id: number, e: MouseEvent) => {
+    back.clear();
     setSelection(select(selection, order, id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));
+  };
 
   /** Accept the suggested group of these samples: one move per suggested group. */
   const accept = useCallback(
@@ -132,10 +142,12 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
             Restore
           </button>
         )}
+        <LineContext sample={single} version={ctx.version} onOpen={open} />
       </div>
+      {back.note && <p className="small muted">{back.note}</p>}
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} onAccept={(s) => accept([s])}
         onAcceptReading={kind === "unsure" ? (s) => acceptReadings([s]) : undefined}
-        onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
+        onOpen={open} marked={back.marked}
       />
       {samples.length < total && (
         <button onClick={more}>

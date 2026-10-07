@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.orm import object_session
@@ -74,7 +74,8 @@ def _sample_json(smp: Sample, book_id: int, token: str) -> Dict:
             "box": [smp.x, smp.y, smp.w, smp.h], "ink": smp.ink, "kind": smp.kind, "source": smp.source,
             "group_id": smp.group_id, "distance": None if smp.distance is None else round(smp.distance, 3),
             "deleted": smp.deleted, "rules": smp.rules,
-            "image": f"/files/books/{book_id}/{smp.image}?token={token}"}
+            "image": f"/files/books/{book_id}/{smp.image}?token={token}",
+            "context": f"/files/samples/{smp.id}/context?token={token}" if smp.page_id is not None else None}
 
 
 def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None) -> Dict:
@@ -459,6 +460,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         if not target.is_file():
             raise HTTPException(404, f"The input page {p.file} is missing.")
         return FileResponse(target)
+
+    @app.get("/files/samples/{sample_id}/context", dependencies=auth)
+    def sample_context(sample_id: int):
+        """The sample on its line with 4 neighbours on each side (shown when one sample is selected)."""
+        return Response(manual.line_context(library, sample_id), media_type="image/png", headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/version")
     def version() -> Dict:

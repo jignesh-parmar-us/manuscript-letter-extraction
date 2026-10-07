@@ -1,14 +1,15 @@
 // Loads samples 200 at a time ("Show more" loads the next 200), and again from the start
-// whenever `version` changes (after every action).
+// whenever `version` changes (after every action). `first`: how many to load at the start (at least
+// one page), to come back to a letter further down the list.
 import { useCallback, useEffect, useState } from "react";
 import { SamplePage, Sample } from "../api";
 
 export const PAGE = 200;
 
-export function usePagedSamples(load: (offset: number, limit: number) => Promise<SamplePage>, version: number) {
+export function usePagedSamples(load: (offset: number, limit: number) => Promise<SamplePage>, version: number, first = PAGE) {
   const [samples, setSamples] = useState<Sample[]>([]);
   const [total, setTotal] = useState(0);
-  const [shown, setShown] = useState(PAGE);
+  const [shown, setShown] = useState(() => Math.max(PAGE, Math.ceil(first / PAGE) * PAGE));
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 

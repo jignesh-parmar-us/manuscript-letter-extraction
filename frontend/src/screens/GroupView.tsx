@@ -6,11 +6,15 @@
 //       Ctrl/Cmd+A = select all, Esc = clear selection.
 // With OCR readings (C11, C12): the suggested label to accept, change or reject; what the samples
 // were read as; and a badge on each sample whose reading differs from the group's.
+// One selected letter shows its line (LineContext); double-click opens it on its page, and the
+// Pages tab's "Back" returns here, to that letter (returnSpot.ts).
 import { MouseEvent, useCallback, useEffect, useState } from "react";
-import { api, Group } from "../api";
+import { api, Group, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
+import LineContext from "../components/LineContext";
+import { openOnPage, useArrive, useComeBack } from "../components/returnSpot";
 import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
 import { usePagedSamples } from "../components/usePagedSamples";
@@ -22,7 +26,9 @@ import { expectedReading, ReadingsLine, SuggestionChip } from "./Suggestions";
 export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewContext }) {
   const { bookId, selection, setSelection, act } = ctx;
   const load = useCallback((offset: number, limit: number) => api.groupSamples(group.id, offset, limit), [group.id]);
-  const { samples, total, more, error } = usePagedSamples(load, ctx.version);
+  const back = useComeBack();
+  const { samples, total, more, error, loading } = usePagedSamples(load, ctx.version, back.first);
+  useArrive(back, samples, loading, (id) => setSelection({ ids: new Set([id]), anchor: id }));
   const [picking, setPicking] = useState(false); // the "Move to…" picker is open
   const [merging, setMerging] = useState(false); // the picker for "Merge another group into this one…"
   const [changeTo, setChangeTo] = useState<string | null>(null); // "Change…" on the suggestion fills the picker
@@ -31,8 +37,14 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const order = samples.map((s) => s.id);
   const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading).map((s) => s.id);
 
-  const onClick = (id: number, e: MouseEvent) =>
+  const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
+  const open = (s: Sample) =>
+    openOnPage(bookId, s, samples, group.label_guj ? `${group.label_guj} (${group.code})` : group.code);
+
+  const onClick = (id: number, e: MouseEvent) => {
+    back.clear();
     setSelection(select(selection, order, id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));
+  };
 
   const toUnsure = useCallback(() => {
     if (ids.length) act(() => api.move(bookId, ids, null)).then(() => setSelection(emptySelection()));
@@ -180,11 +192,13 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
             Remove readings{withReading.length ? ` (${withReading.length})` : ""}
           </button>
         </div>
+        <LineContext sample={single} version={ctx.version} onOpen={open} />
       </div>
+      {back.note && <p className="small muted">{back.note}</p>}
 
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expectedReading(group)}
         onRemoveReading={(s) => act(() => api.removeReadings(bookId, [s.id]))}
-        onOpen={(s) => go(`/books/${bookId}/pages/${s.page_id}/${s.id}`)}
+        onOpen={open} marked={back.marked}
       />
       {samples.length < total && (
         <button onClick={more}>

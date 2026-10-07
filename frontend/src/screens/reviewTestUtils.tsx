@@ -14,7 +14,8 @@ export const group = (over: Partial<Group> = {}): Group => ({
 
 export const sample = (id: number, over: Partial<Sample> = {}): Sample => ({
   id, page_id: 1, page_file: "p1.png", line: 1, pos: id, box: [0, 0, 10, 10], ink: "black", kind: "letter", source: "auto",
-  group_id: 5, distance: 0.1, deleted: false, rules: "", image: `/img/${id}.png`, ...over,
+  group_id: 5, distance: 0.1, deleted: false, rules: "", image: `/img/${id}.png`,
+  context: `/ctx/${id}.png?token=t`, ...over,
 });
 
 /** Renders a review view with a real selection state and a mocked `act`. */

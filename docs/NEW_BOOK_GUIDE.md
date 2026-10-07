@@ -42,6 +42,7 @@ Labels given by Tesseract or by other books are marked *not reviewed*. Check the
 | Where | What to do |
 |---|---|
 | Group list: **Show → Not reviewed**, **by size** | Open the big groups first. Look at the letter images: letters read differently carry a small coloured badge. If a badge is wrong (the letter is right where it is), click it to remove that reading, or select several letters and **Remove readings**. If all is right, tick **Reviewed**; if not, fix the label or move the wrong letters out. |
+| One letter selected | It is shown on its line with four letters on each side, to judge a doubtful label. **Open on its page** (or a double-click) opens it in the **Pages** tab to fix its cut; fix as many letters there as you need, then **← Back to …** returns to the same letter in the group. |
 | **Show → Mixed readings** | Groups whose letters were read as two letters. Click a reading under the group's name to select its letters, then **New group**. |
 | **Show → Suggested** | Accept, change or reject each suggestion. **Merge into gXXXX** appears when another group already has that label. |
 | **Unsure** | Select letters with a green reading and click **Accept readings**, or accept the suggested groups (→). |

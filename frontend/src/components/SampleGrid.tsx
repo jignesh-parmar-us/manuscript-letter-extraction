@@ -17,10 +17,11 @@ interface Props {
   expected?: string; // the group's reading (Devanagari): samples read otherwise get a badge
   onAcceptReading?: (sample: Sample) => void; // unsure samples: put the sample under its reading's label
   onRemoveReading?: (sample: Sample) => void; // the badge's reading is wrong: remove it
+  marked?: number | null; // the letter come back to from its page (a dashed outline)
 }
 
 export default function SampleGrid(props: Props) {
-  const { samples, selected, onClick, onAccept, onOpen, expected, onAcceptReading, onRemoveReading } = props;
+  const { samples, selected, onClick, onAccept, onOpen, expected, onAcceptReading, onRemoveReading, marked } = props;
   if (samples.length === 0) return <p className="muted">No samples.</p>;
   return (
     <div className="grid" role="listbox" aria-multiselectable="true" aria-label="Samples">
@@ -29,6 +30,7 @@ export default function SampleGrid(props: Props) {
           key={s.id}
           sample={s}
           selected={selected.has(s.id)}
+          marked={marked === s.id}
           onClick={onClick}
           onAccept={onAccept}
           onOpen={onOpen}
@@ -44,6 +46,7 @@ export default function SampleGrid(props: Props) {
 function Tile(props: {
   sample: Sample;
   selected: boolean;
+  marked: boolean;
   onClick: Props["onClick"];
   onAccept?: Props["onAccept"];
   onOpen?: Props["onOpen"];
@@ -62,7 +65,8 @@ function Tile(props: {
       {...listeners}
       role="option"
       aria-selected={selected}
-      className={`tile ink-${s.ink}${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
+      data-sample={s.id}
+      className={`tile ink-${s.ink}${selected ? " selected" : ""}${props.marked ? " marked" : ""}${isDragging ? " dragging" : ""}`}
       title={`${where}${s.distance !== null ? ` · distance ${s.distance}` : ""}${s.rules ? ` · ${s.rules}` : ""}${
         open ? "\nDouble-click to show it on its page" : ""
       }`}

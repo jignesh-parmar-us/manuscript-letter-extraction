@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
+import { backTo, goBack } from "../components/returnSpot";
 import GroupView from "./GroupView";
 import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 
@@ -38,6 +39,57 @@ describe("GroupView", () => {
     expect(tile.getAttribute("title")).toMatch(/^p1\.png · line 1, letter 2/);
     await userEvent.dblClick(tile);
     expect(window.location.hash).toBe("#/books/1/pages/1/2");
+  });
+
+  it("shows one selected letter on its line, and opens it from there", async () => {
+    renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
+    const tiles = await findTiles();
+    expect(screen.queryByLabelText("The letter on its line")).toBeNull();
+    await userEvent.click(tiles[1]);
+    const line = screen.getByLabelText("The letter on its line");
+    expect(within(line).getByRole("img").getAttribute("src")).toBe("/ctx/2.png?token=t&v=0");
+    expect(line).toHaveTextContent("p1.png · line 1");
+    const user = userEvent.setup();
+    await user.keyboard("{Control>}");
+    await user.click(tiles[2]);                                       // two selected: no line
+    await user.keyboard("{/Control}");
+    expect(screen.queryByLabelText("The letter on its line")).toBeNull();
+    await userEvent.click(tiles[1]);
+    await userEvent.click(screen.getByRole("button", { name: "Open on its page" }));
+    expect(window.location.hash).toBe("#/books/1/pages/1/2");
+  });
+
+  it("comes back to the letter from its page: selected and outlined, or its neighbour if it has left", async () => {
+    window.location.hash = "#/books/1/review/5";
+    const view = renderView((ctx) => <GroupView group={group({ label_guj: "ને", code: "g0005" })} ctx={ctx} />);
+    await userEvent.dblClick((await findTiles())[1]);
+    expect(window.location.hash).toBe("#/books/1/pages/1/2");
+    expect(backTo(1)?.label).toBe("ને (g0005)");
+    expect(backTo(2)).toBeNull();                                      // another book
+    view.unmount();
+    goBack();
+    expect(window.location.hash).toBe("#/books/1/review/5");
+    expect(backTo(1)).toBeNull();
+    renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
+    await waitFor(() => expect(screen.getByText("1 selected")).toBeInTheDocument());
+    const tiles = await findTiles();
+    expect(tiles[1]).toHaveClass("marked");
+    expect(tiles[1]).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(tiles[0]);
+    expect(tiles[1]).not.toHaveClass("marked");
+  });
+
+  it("marks the next letter when the one opened has left the group", async () => {
+    window.location.hash = "#/books/1/review/5";
+    const view = renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
+    await userEvent.dblClick((await findTiles())[1]);
+    view.unmount();
+    vi.mocked(api.groupSamples).mockResolvedValue({ total: 2, offset: 0, samples: [sample(1), sample(3)] });
+    goBack();
+    renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
+    expect(await screen.findByText(/no longer here .*marks the letter after it/)).toBeInTheDocument();
+    expect((await findTiles())[1]).toHaveClass("marked");             // sample 3
+    expect(screen.getByText("Click samples to select them")).toBeInTheDocument();
   });
 
   it("makes a new group with the N key and opens it", async () => {

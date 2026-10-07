@@ -12,6 +12,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { ActionResult, api, Book, Group } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { emptySelection, Selection } from "../components/selection";
+import { forgetSpot } from "../components/returnSpot";
 import { useFitHeight } from "../components/useFitHeight";
 import { go } from "../route";
 import GroupView from "./GroupView";
@@ -52,6 +53,7 @@ export default function Review({ book, view, onChanged }: Props) {
     api.groups(book.id).then(setGroups, setError);
   }, [book.id, version]);
   useEffect(() => setSelection(emptySelection()), [view]);
+  useEffect(() => forgetSpot(), []); // back in the Review tab: the Pages tab's "Back" is done with
 
   const act = useCallback(
     async (run: () => Promise<ActionResult>) => {

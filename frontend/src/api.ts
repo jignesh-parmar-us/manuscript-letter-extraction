@@ -230,6 +230,7 @@ export interface Sample {
   deleted: boolean;
   rules: string;
   image: string;
+  context?: string | null; // the sample on its line with its neighbours (null for uploaded samples)
   suggestion?: Suggestion | null;
   // its own OCR reading (C11): for unsure samples only confident ones on printed books; in groups all of them
   reading?: { label_dev: string; label_guj: string; confidence: number; engine: Engine } | null;

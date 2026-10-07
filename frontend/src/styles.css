@@ -974,3 +974,27 @@ button.reading-badge.removable:hover {
   border-color: var(--accent);
   background: var(--selected);
 }
+
+/* ---- Review: the selected letter on its line; the letter come back to from its page ---- */
+.line-context {
+  margin-top: 6px;
+  gap: 10px;
+}
+.line-context img {
+  height: 64px;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.tile.marked {
+  outline: 3px dashed var(--accent);
+  outline-offset: 2px;
+}
+.page-nav .back {
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+}

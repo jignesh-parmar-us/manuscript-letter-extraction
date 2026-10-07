@@ -4,6 +4,7 @@
 - `join_samples`  two or more samples of one page become one (source "joined")
 - `split_sample`  a sample is cut in two at a column (source "split")
 - `upload_sample` a letter image from a file (source "uploaded", no page position)
+- `line_context`  a picture of a sample on its line, with its neighbours, for the review screens
 
 New samples start unsure, with an image, an ink mask and a fingerprint, so the review screens show a
 suggested group for them. Every operation is an action of `actions.py`: replaced samples are marked
@@ -260,3 +261,47 @@ def upload_sample(lib: Library, book_id: int, filename: str, data_base64: str) -
         smp.rules = f"uploaded: {Path(filename).name}"
         a = ch.finish("upload", {"sample": smp.id, "file": Path(filename).name})
         return _result(a, sample=_sample_dict(smp))
+
+
+# ---- a sample on its line ---------------------------------------------------------------------------
+CONTEXT_COLOUR = (194, 65, 12)  # the app's accent
+
+
+def line_context(lib: Library, sample_id: int, around: int = 4, height: int = 96) -> bytes:
+    """PNG of the page around a sample: `around` samples before and after it on its line, with the
+    sample outlined, scaled to `height` pixels (never up). Uploaded samples have no page."""
+    with lib.session() as s:
+        smp = s.get(Sample, sample_id)
+        if smp is None or smp.page_id is None:
+            raise NotFound(f"No sample on a page with id {sample_id}.")
+        page = s.get(Page, smp.page_id)
+        book = s.get(Book, page.book_id)
+        line = s.scalars(select(Sample).where(Sample.page_id == smp.page_id, Sample.line_number == smp.line_number,
+                                              Sample.deleted.is_(False)).order_by(Sample.pos, Sample.x)).all()
+        ids = [m.id for m in line]
+        at = ids.index(smp.id) if smp.id in ids else None
+        near = line[max(0, at - around):at + around + 1] if at is not None else [smp]
+        boxes = [(m.x, m.y, m.w, m.h) for m in near] + [(smp.x, smp.y, smp.w, smp.h)]
+        target = Path(book.input_dir) / page.file
+        box = (smp.x, smp.y, smp.w, smp.h)
+    if not target.is_file():
+        raise NotFound(f"The input page {page.file} is missing.")
+    margin = max(6, box[3] // 4)
+    x0 = min(b[0] for b in boxes) - margin
+    y0 = min(b[1] for b in boxes) - margin
+    x1 = max(b[0] + b[2] for b in boxes) + margin
+    y1 = max(b[1] + b[3] for b in boxes) + margin
+    with Image.open(target) as im:
+        x0, y0 = max(0, x0), max(0, y0)
+        x1, y1 = min(im.width, x1), min(im.height, y1)
+        crop = im.convert("RGB").crop((x0, y0, x1, y1))
+    scale = min(1.0, height / max(1, crop.height))
+    if scale < 1:
+        crop = crop.resize((max(1, round(crop.width * scale)), max(1, round(crop.height * scale))), Image.LANCZOS)
+    rgb = np.array(crop)  # a writable copy to draw on
+    bx, by = round((box[0] - x0) * scale), round((box[1] - y0) * scale)
+    bw, bh = round(box[2] * scale), round(box[3] * scale)
+    cv2.rectangle(rgb, (bx - 2, by - 2), (bx + bw + 1, by + bh + 1), CONTEXT_COLOUR, 2)
+    out = io.BytesIO()
+    Image.fromarray(rgb).save(out, format="PNG")
+    return out.getvalue()

@@ -1,7 +1,8 @@
 // "Pages" tab: a page with a box around every sample, to fix wrong cuts quickly (FR-8).
 // Address: #/books/<id>/pages/<page id>[/<sample id>]; with a sample id, that sample is selected and
 // scrolled into view with a flashing ring around it (double-click on a letter in Review opens it here);
-// the ring goes when another box is clicked.
+// the ring goes when another box is clicked. Opened that way, "← Back to …" returns to that letter in
+// the Review tab, after any number of changes here (returnSpot.ts).
 //   Select   click a box (Shift or Ctrl/Cmd+click for more); Join, Delete, Open its group, and put the
 //            selection in a group (Label, Move to group, New group, To Unsure) without leaving the page
 //   Draw     drag a box around ink the cutting missed: it becomes a new (unsure) sample
@@ -16,6 +17,7 @@ import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Sample } from "..
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
+import { backTo, goBack } from "../components/returnSpot";
 import { useFitHeight } from "../components/useFitHeight";
 import { go } from "../route";
 import GroupPicker, { MoveTarget } from "./GroupPicker";
@@ -58,7 +60,8 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const area = useRef<HTMLDivElement>(null);
   // the page and the selection panel fill the rest of the window; fitted again once the page is there
   useFitHeight(area, 8, "height", page?.id ?? null);
-  const [choosing, setChoosing] = useState(false); // the page picker is open
+  const [choosing, setChoosing] = useState(false);
+  const back = backTo(book.id); // opened from a letter in the Review tab: the way back to it // the page picker is open
   const shown = useRef<string>(""); // the page/sample already scrolled to, so reloads do not scroll again
 
   useEffect(() => {
@@ -289,6 +292,11 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
       <div className="pane">
         <ErrorBox error={error} onClose={() => setError(null)} />
         <div className="row page-nav">
+          {back && (
+            <button className="back" onClick={goBack} title="Back to the letter you opened, where you were in the Review tab">
+              ← Back to {back.label}
+            </button>
+          )}
           <button disabled={!prev} onClick={() => prev && go(`/books/${book.id}/pages/${prev.id}`)} aria-label="Previous page" title="Previous page">
             ◀
           </button>
