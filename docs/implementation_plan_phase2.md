@@ -452,6 +452,7 @@ Rules that carry over from Phase 1:
   - **Train** button: available when the training extras are installed. Otherwise it shows the command to run (`python -m letter_extractor train --books 1,2`).
 - **Suggestions:** engine `classifier`. It classifies every sample of the book; the group vote uses the class probabilities, the same as C11. It is also used for **unsure** samples one by one.
 - **Retraining:** each new reviewed book is added and the model is trained again (FR-11: "training can be repeated"). Models are kept, not overwritten, so an older model can be chosen again.
+- **Labels to check before training** (seen by the user while reviewing, 2026-10-07): in words like કરિ, Tesseract often reads ક as કા: the ि bar of the next letter stands just where a ા bar would, and only its hook above tells them apart. Labels taken from such readings (at capture, or by accepting suggestions) can put ક letters into the કા group and teach the network that a ક shape is કા. Before training: a reading that ends in ा on a letter with no bar of its own (`bars.ends_with_bar`, C12e) is suspect, to be left out of the votes or shown for review; and the training report should list, per class, letters whose shape is far from their group (for કા: those without a bar).
 
 **Done when:**
 - a model trained on the reviewed sample books reaches at least 90% accuracy on its held-out pages for classes with 20 or more samples;

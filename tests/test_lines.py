@@ -17,6 +17,28 @@ from letter_extractor.prepare import prepare_page                   # noqa: E402
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 
 
+class SlantedPageTests(unittest.TestCase):
+    """A page scanned at a slant: each line drifts by more than half a line pitch across the page,
+    far beyond the search around its average row. Its headline is followed from window to window,
+    and the two profile peaks such a line can give end as one line."""
+
+    def test_every_line_is_followed_to_both_ends(self):
+        cfg = Config()
+        rgb, heads, marks = synthetic.make_lines_page(slope=0.05, wave=2.0)       # 60 px over the page
+        layout = detect_lines(prepare_page(rgb, cfg), cfg)
+        self.assertEqual(len(layout.lines), len(heads))
+        for line, truth in zip(layout.lines, heads):
+            x, _, w, _ = line.box
+            cols = np.arange(x + 10, x + w - 10)
+            err = np.abs(line.headline_y[cols] - truth[cols])
+            self.assertLessEqual(np.percentile(err, 95), 2.0, f"line {line.index}: max error {err.max():.1f}")
+        wrong = [(n, x, y) for n, x, y in marks
+                 if not any(ln.index == n and ln.box[0] <= x < ln.box[0] + ln.box[2]
+                            and ln.box[1] <= y < ln.box[1] + ln.box[3] and ln.mask[y - ln.box[1], x - ln.box[0]]
+                            for ln in layout.lines)]
+        self.assertEqual(wrong, [], "marks given to the wrong line")
+
+
 class SlopedWavyLinesTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

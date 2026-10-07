@@ -3,7 +3,9 @@
 1. Only horizontal runs of ink are used to find headlines (stems, dandas and matras drop out). Their
    row profile has one strong peak per line: the headline. Line spacing comes from the profile's
    autocorrelation (or the config), and peaks closer than ~0.6 spacing are merged.
-2. Each headline is traced in column windows near its peak, so slope and waves are followed.
+2. Each headline is traced in column windows, from its strongest window outward, each window
+   searched near the one before it, so slope (a page scanned at a slant) and waves are followed to
+   the line's ends. Two traces that end on the same headline are one line.
 3. Between two headlines the boundary runs along the emptiest rows below the main zone.
 4. Ink blobs are assigned whole: a blob touching one headline belongs to that line; a blob touching
    two headlines (touching matras of two lines) is split at the boundary; a detached blob (anusvara,
@@ -92,26 +94,54 @@ def find_headline_rows(profile: np.ndarray, spacing: float, cfg: Config) -> List
     return sorted(i for i in chosen if s[i] >= cfg.line_peak_frac * ref)
 
 
+def _window_row(runs: np.ndarray, x0: int, x1: int, centre: float, reach: int,
+                cfg: Config) -> Optional[Tuple[float, float]]:
+    """The headline row in columns x0..x1 within `reach` of `centre`, and its strength; None when the
+    window has no clear headline (a gap, dandas) or its strongest row is the edge of the search,
+    which means the headline lies beyond it."""
+    h = runs.shape[0]
+    c = int(round(centre))
+    y0, y1 = max(0, c - reach), min(h, c + reach + 1)
+    prof = _smooth(runs[y0:y1, x0:x1].sum(axis=1), 3)
+    if prof.size == 0 or prof.max() < cfg.headline_min_ink_frac * (x1 - x0):
+        return None
+    i = int(np.argmax(prof))
+    if (i == 0 and y0 > 0) or (i == prof.size - 1 and y1 < h):
+        return None
+    return y0 + float(i), float(prof[i])
+
+
 def trace_headline(runs: np.ndarray, row: int, spacing: float, cfg: Config) -> np.ndarray:
-    """Headline row for every column of `runs` (horizontal ink runs, block coordinates), searched
-    near `row`. Windows without a clear headline (gaps, dandas) are interpolated."""
+    """Headline row for every column of `runs` (horizontal ink runs, block coordinates). The search
+    starts at the window with the strongest headline near `row` and follows the headline from window
+    to window in both directions, so a sloping line (a page scanned at a slant) is followed to its
+    ends even where it is far from `row`. Windows without a clear headline (gaps, dandas) are
+    interpolated."""
     h, w = runs.shape
     win = max(10, cfg.headline_window_px)
     reach = int(cfg.headline_search_frac * spacing)
-    y0, y1 = max(0, row - reach), min(h, row + reach + 1)
-    centres, ys = [], []
+    windows = []
     for x0 in range(0, w, win // 2):                          # half-overlapping windows
         x1 = min(w, x0 + win)
-        prof = _smooth(runs[y0:y1, x0:x1].sum(axis=1), 3)
-        if prof.size == 0 or prof.max() < cfg.headline_min_ink_frac * (x1 - x0):
-            continue                                          # gap in the line: interpolate later
-        centres.append((x0 + x1) / 2)
-        ys.append(y0 + float(np.argmax(prof)))
+        windows.append((x0, x1))
         if x1 == w:
             break
-    if not ys:
+    near = [_window_row(runs, x0, x1, row, reach, cfg) for x0, x1 in windows]
+    if not any(near):
         return np.full(w, float(row), np.float32)
-    cx, ys = np.array(centres, np.float64), np.array(ys, np.float64)
+    start = max((i for i, r in enumerate(near) if r), key=lambda i: near[i][1])
+    found = {start: near[start][0]}
+    for step in (1, -1):                                      # right, then left of the start
+        last = found[start]
+        i = start + step
+        while 0 <= i < len(windows):
+            r = _window_row(runs, *windows[i], last, reach, cfg)
+            if r:
+                found[i] = last = r[0]
+            i += step
+    order = sorted(found)
+    centres = [(windows[i][0] + windows[i][1]) / 2 for i in order]
+    cx, ys = np.array(centres, np.float64), np.array([found[i] for i in order], np.float64)
     # A headline bends only gently, so a window far from a smooth curve through all windows has
     # locked onto something else (dandas, a run of big matras, a letter's bottom stroke).
     if ys.size >= 3:
@@ -250,6 +280,15 @@ def detect_lines(page: PreparedPage, cfg: Config) -> Optional[LineLayout]:
     if not rows:
         return None
     heads = [trace_headline(runs, r, spacing, cfg) for r in rows]
+    # on a slanted page one line can give two peaks in the row profile; followed along the line both
+    # traces end on the same headline: keep one
+    heads.sort(key=lambda hy: float(np.median(hy)))
+    unique: List[np.ndarray] = []
+    for hy in heads:
+        if unique and float(np.median(np.abs(hy - unique[-1]))) < cfg.line_min_gap_frac * spacing:
+            continue
+        unique.append(hy)
+    heads = unique
     main_zone = estimate_main_zone(ink, heads, spacing, cfg)
     bounds = [find_boundary(ink, heads[i], heads[i + 1], main_zone, cfg) for i in range(len(heads) - 1)]
     owner = assign_ink(ink, heads, bounds, main_zone, cfg)
