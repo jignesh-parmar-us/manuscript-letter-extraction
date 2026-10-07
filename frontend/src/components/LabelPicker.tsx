@@ -52,10 +52,11 @@ interface Props {
   canClear?: boolean; // offer "Clear label" when there is a label (default true)
   groupId?: number; // the group being labelled (not counted as "another group with this label")
   onMerge?: (target: LabelUser) => Promise<boolean | void>; // merge the group into the one that has the label
+  compact?: boolean; // one line, with the letters opening above it (the Pages tab's selection panel)
 }
 
 export default function LabelPicker(props: Props) {
-  const { bookId, current, disabled, onSave, saveText = "Save label", canClear = true, groupId, onMerge } = props;
+  const { bookId, current, disabled, onSave, saveText = "Save label", canClear = true, groupId, onMerge, compact } = props;
   const [text, setText] = useState(props.initialText ?? current.guj);
   const [script, setScript] = useState<Script>("gujarati");
   const [info, setInfo] = useState<LabelInfo | null>(null);
@@ -86,6 +87,14 @@ export default function LabelPicker(props: Props) {
     };
   }, [text, bookId, current.dev]); // also after a save: which groups have the label changed
 
+  // Esc hides the open letters
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   const add = (ch: string) => setText((t) => t + (script === "gujarati" ? toGujarati(ch) : ch));
   const backspace = () => setText((t) => Array.from(t).slice(0, -1).join(""));
 
@@ -106,7 +115,7 @@ export default function LabelPicker(props: Props) {
   const canSave = !disabled && !saving && info?.ok && !unchanged && !blocked;
 
   return (
-    <div className="label-picker">
+    <div className={compact ? "label-picker compact" : "label-picker"}>
       <div className="row">
         <input
           className="label-input"
@@ -184,7 +193,7 @@ export default function LabelPicker(props: Props) {
         </div>
       )}
       {open && (
-        <div className="palette">
+        <div className="palette" role="group" aria-label="Letters">
           <div className="row">
             <span className="muted small">Palette:</span>
             <button className={script === "gujarati" ? "tab active" : "tab"} onClick={() => setScript("gujarati")}>

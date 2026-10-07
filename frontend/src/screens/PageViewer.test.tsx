@@ -173,6 +173,19 @@ describe("PageViewer", () => {
     expect(await screen.findByText(/new group labelled ગ/)).toBeInTheDocument();
   });
 
+  it("opens the letters above the one-line label box, and Esc hides them", async () => {
+    vi.mocked(api.checkLabel).mockResolvedValue({ ok: true, devanagari: "क", gujarati: "ક", used_by: [] });
+    render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByTestId("box-2"));
+    expect(screen.getByLabelText("Label").closest(".label-picker")).toHaveClass("compact");
+    await userEvent.click(screen.getByRole("button", { name: "Letters…" }));
+    const letters = screen.getByRole("group", { name: "Letters" });
+    await userEvent.click(within(letters).getByRole("button", { name: "ક" }));
+    expect(screen.getByLabelText("Label")).toHaveValue("ક");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "Letters" })).toBeNull();
+  });
+
   it("joins the selected samples", async () => {
     vi.mocked(api.join).mockResolvedValue({ ...ok, sample: { id: 9, page_id: 3, box: [], source: "joined" } });
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);

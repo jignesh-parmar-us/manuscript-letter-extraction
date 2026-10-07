@@ -448,10 +448,10 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
             )}
             {sel.length > 0 && (
               <div className="card row" aria-label="Selected samples">
-                {sel.slice(0, 8).map((s) => (
+                {sel.slice(0, 5).map((s) => (
                   <img key={s.id} src={s.image} alt={`selected sample ${s.id}`} className="selected-sample" />
                 ))}
-                {sel.length > 8 && <span className="muted small">+{sel.length - 8}</span>}
+                {sel.length > 5 && <span className="muted small">+{sel.length - 5}</span>}
                 {single ? (
                   <span className="small">
                     {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line} ·{" "}
@@ -479,6 +479,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                     }}
                     saveText={`Label ${sel.length === 1 ? "it" : `these ${sel.length}`}`}
                     canClear={false}
+                    compact
                     onSave={labelSelected}
                   />
                 </div>

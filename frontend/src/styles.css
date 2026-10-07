@@ -424,10 +424,37 @@ pre.settings {
   margin: 10px 0;
 }
 .selected-label {
-  flex-basis: 100%; /* its own row in the Pages tab's selection card */
+  flex: 1 1 auto; /* on the same line as the selection card's buttons */
+  min-width: 0;
 }
-.selected-label .label-picker {
-  margin: 4px 0 0;
+/* the label box on one line; its letters open above it, over the page */
+.label-picker.compact {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+}
+.label-picker.compact .label-input {
+  min-width: 150px;
+  width: 170px;
+  font-size: 18px;
+}
+.label-picker.compact .label-check {
+  min-height: 0;
+  margin: 0;
+}
+.label-picker.compact .palette {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0; /* grows to the left from the end of the label box, which sits at the right of the panel */
+  z-index: 20;
+  width: min(760px, calc(100vw - 48px));
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
 }
 .label-input {
   font-size: 20px;
@@ -802,8 +829,8 @@ button.reading-badge.removable:hover {
 }
 .selection-dock {
   flex: none;
-  max-height: 45%;
-  overflow-y: auto;
+  position: relative;
+  z-index: 5; /* the label box's letters open above it, over the page */
   background: var(--bg);
   padding: 4px 0 0;
 }
