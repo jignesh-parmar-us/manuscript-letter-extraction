@@ -20,6 +20,7 @@ const JOB_NAMES: Record<Job["kind"], string> = {
   export: "Export",
   suggest: "Reading with Tesseract",
   fix_cuts: "Fixing cuts with Tesseract",
+  fix_bars: "Giving ા bars back to their letters",
 };
 
 export default function Capture({ book, onChanged }: Props) {

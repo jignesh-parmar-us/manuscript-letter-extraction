@@ -3,7 +3,8 @@
 //   labelled groups of other books (C13; the main reader of handwritten books), accept all
 //   suggestions above a share in one undoable step, and see how the suggestions compare with the
 //   labels given so far. On printed books, "Fix cuts with Tesseract" splits samples that hold several
-//   letters and joins letters cut in pieces (C12b), as one undoable step.
+//   letters and joins letters cut in pieces (C12b), as one undoable step; "Fix ા bars" gives aa bars
+//   cut onto the next letter (નાર as ન + ાર) back to their letter, by shape only (bars.py, barfix.py).
 // - SuggestionChip (on a group): accept, change or reject its suggestion; or merge into the group
 //   that already has the suggested label.
 // - ReadingsLine (on a group): what its samples were read as; select the samples of one reading to
@@ -51,7 +52,10 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     },
     [onRead],
   );
-  const [job, setJob] = useJob(book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" ? book.job : null, onEnd);
+  const [job, setJob] = useJob(
+    book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" || book.job?.kind === "fix_bars" ? book.job : null,
+    onEnd,
+  );
   const run = book.ocr_runs?.find((r) => r.engine === "tesseract");
   const booksRun = book.ocr_runs?.find((r) => r.engine === "books");
   const printed = book.writing === "printed";
@@ -108,6 +112,22 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     setError(null);
     try {
       setJob(await api.fixCuts(book.id));
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function fixBars() {
+    const ok = await confirm(
+      "Give ા bars back to their letter where the cutting joined them to the next one (નાર cut as ન + ાર " +
+        "becomes ના + ર)? Only plain bars move: a bar with a hook above it (the િ of રવિ) is never touched. " +
+        "The new letters go into the group their shape matches, the rest to Unsure. Undo takes all of it back in one step.",
+      "Fix ા bars",
+    );
+    if (!ok) return;
+    setError(null);
+    try {
+      setJob(await api.fixBars(book.id));
     } catch (e) {
       setError(e);
     }
@@ -183,6 +203,11 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
             Fix cuts with Tesseract
           </button>
         )}
+        {printed && (
+          <button disabled={running} onClick={fixBars} title="Give ા bars cut onto the next letter back to their letter (by shape)">
+            Fix ા bars
+          </button>
+        )}
         {anyRun && (
           <button
             disabled={running}
@@ -222,7 +247,8 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         {running && (
           <span className="row">
             <progress max={job!.total || 1} value={job!.done} />
-            {job!.kind === "fix_cuts" ? "Checking cuts" : "Reading"}: {job!.done} of {job!.total}
+            {job!.kind === "fix_cuts" ? "Checking cuts" : job!.kind === "fix_bars" ? "Checking pages" : "Reading"}:{" "}
+            {job!.done} of {job!.total}
           </span>
         )}
         {status && !status.ok && <span className="error-text">{status.error}</span>}
@@ -236,6 +262,13 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
               ? ` (${job.result.new_groups.length} new groups, not reviewed yet)`
               : ""}
             ; the rest are in Unsure. Undo takes it all back.
+          </span>
+        )}
+        {job?.kind === "fix_bars" && job.status === "done" && job.result && (
+          <span>
+            {Number(job.result.bars)
+              ? `${job.result.bars} ા bars given back to their letter: ${job.result.placed} new letters went into groups by shape, ${job.result.unsure} are in Unsure. Undo takes it all back.`
+              : "No ા bar on the wrong letter found."}
           </span>
         )}
         {splitNote && <span>{splitNote}</span>}

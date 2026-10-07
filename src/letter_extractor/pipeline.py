@@ -38,7 +38,8 @@ class PageData:
 
 def process_page(rgb, cfg: Config) -> PageData:
     """Every step for one page: ink masks (C1), lines (C2), stroke pieces (C3a), letters (C3b); with
-    `cut_method = "tesseract"` the letters are cut by Tesseract's reading of each line (C12c)."""
+    `cut_method = "tesseract"` the letters are cut by Tesseract's reading of each line (C12c); with
+    `bar_fix` (printed books) aa bars cut onto the next letter go back to theirs (bars.py)."""
     if cfg.cut_method not in ("shapes", "tesseract"):
         raise ValueError(f"Unknown cut_method '{cfg.cut_method}' (shapes or tesseract)")
     page = prepare_page(rgb, cfg)
@@ -50,6 +51,9 @@ def process_page(rgb, cfg: Config) -> PageData:
     if cfg.cut_method == "tesseract":
         from .ocr.cut import tesseract_letters
         letters = tesseract_letters(page, layout.lines, letters, cfg)
+    if cfg.bar_fix:                                   # printed books: aa bars cut onto the next letter
+        from .bars import move_bars
+        letters = move_bars(letters, cfg)
     return PageData(page, layout, pieces, specks, letters)
 
 

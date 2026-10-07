@@ -212,6 +212,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             raise HTTPException(400, "Fixing cuts with Tesseract is for printed books.")
         return jobs.fix_cuts(book_id).as_dict()
 
+    @app.post("/api/books/{book_id}/fix-bars", dependencies=auth, status_code=202)
+    def fix_bars(book_id: int) -> Dict:
+        book = library.get_book(book_id)
+        if book.writing != "printed":
+            raise HTTPException(400, "Fixing aa bars is for printed books.")
+        return jobs.fix_bars(book_id).as_dict()
+
     @app.get("/api/tesseract", dependencies=auth)
     def tesseract(book_id: Optional[int] = None) -> Dict:
         """Whether Tesseract can run, and with the book's languages (C11; the C12 button uses it)."""

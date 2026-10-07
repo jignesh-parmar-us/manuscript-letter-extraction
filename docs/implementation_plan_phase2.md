@@ -375,6 +375,32 @@ Rules that carry over from Phase 1:
 
 **Changes from the original plan:** a new chunk. Three shape-only approaches were tried and dropped (smaller grouping distance, splitting by shape, even strokes); see `TUNING_PHASE2.md`.
 
+### C12e. Giving aa bars back to their letter (printed books)
+
+**Status:** built (2026-10-07). Reported by the user while reviewing: most wrong letters are words with the aa sign (ા), like નાર: the cut falls between ન and its bar, and the bar is joined to ર (ન + ાર). Asked that words like રવિ are not harmed (never cut into રા + વ).
+
+**Goal:** the aa bar belongs to the letter before it, at capture and in books already captured, without touching the i sign (ि), the bar written before its letter.
+
+**Files:** `bars.py` (the rule), `pipeline.py` (at capture), `config.py`, `app/library.py` (`bar_fix` from the book's writing), `app/barfix.py` (the action for captured books), `app/jobs.py`, `app/api.py` (`POST /api/books/{id}/fix-bars`); `frontend/src/screens/Suggestions.tsx`, `Capture.tsx`, `api.ts` (+ test); `tests/test_bars.py`; `docs/TUNING_PHASE2.md`.
+
+**What it does:**
+- **The rule** (`bars.stray_bar`, by shape only, no reader needed): a letter starts with a stray aa bar when its first ink below the headline is a tall, narrow stroke, then a white gap, then a letter body; the letter before it ends close by on the same line and has no bar of its own (a bar standing apart from its body, as in ना; the stem of न or त does not count).
+- **The i sign stays:** a bar with a wide mark above the headline starting over it is never moved. That mark is the hook of ि (रवि, कारित), which in print often does not touch the bar. This also leaves alone some real aa bars whose next letter has an e sign starting over the bar (तारे): the safe side. Narrow marks (an anusvara dot) do not stop it.
+- **The cut:** the bar's columns go to the letter before; marks above the headline that start on the bar's side go with it, other marks go whole to the side their centre is on, so no mark is cut in two.
+- **At capture** (`pipeline.process_page`, both cutting methods, printed books only): letters are fixed before grouping, so they group as what they are. A Tesseract text read with the bar (ार) gives its aa to the letter before (न → ना).
+- **Captured books:** **"Fix ા bars"** in the Label suggestions bar (printed books, no reading needed) runs it as a background job and applies it as one undoable action (`fix_bars`). The new letters go where their shape says: the letter before into the group of its old label with aa (न → ना), the rest into the group of its old label (र), when within `group_distance` of that group's centre; otherwise the nearest labelled group within that distance; otherwise Unsure. Locked groups are left alone.
+- **Handwriting is left alone:** on the handwritten book the rule found 22 letters and about half were a letter's own left stroke. The button is not shown there and the API refuses it.
+
+**Settings:** `bar_fill` 0.75, `bar_max_width` 0.3, `bar_gap_fill` 0.05, `bar_min_rest` 0.4, `bar_max_gap` 0.4 (shares of the rows below the headline, or of the letter width).
+
+**Tests:** found on a drawn ार; the i hook (not touching the bar) stops it; a dot over the bar does not; a stem joined to its letter is not a bar; a letter's own bar is told from its stem; marks are never cut and no ink is lost; the bar moves to the letter before, not across a word gap, and not onto a letter with a bar of its own; at capture the aa of Tesseract's text moves along and रवि is untouched; handwritten books are refused; the button asks first and is not shown on handwritten books.
+
+**Measured** (`TUNING_PHASE2.md`): on a copy of book 6, 126 bars given back in 15 s (0.9% of 14,141 letters), about 38 of every 40 looked at right; 171 of the 252 new letters went into groups by shape, 81 to Unsure; running it again finds 1. Book 3: 61, book 2: 65.
+
+**Done when:** words like નાર come out as ના + ર, and રવિ stays as it is. *Met on a copy of book 6; to be checked by the user.*
+
+**Changes from the original plan:** a new chunk.
+
 ### Part B: suggestions for handwriting
 
 ### C13. Suggestions from other labelled books

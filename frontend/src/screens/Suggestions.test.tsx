@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), fixBars: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -102,6 +102,21 @@ describe("SuggestPanel", () => {
     unmount();
     renderView((ctx) => <SuggestPanel book={withRun({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
     expect(screen.queryByRole("button", { name: "Fix cuts with Tesseract" })).toBeNull();
+  });
+
+  it("gives aa bars back on printed books after asking, even before any reading", async () => {
+    vi.mocked(api.fixBars).mockResolvedValue({ id: "j4", book_id: 1, kind: "fix_bars", status: "running", done: 0,
+      total: 23, current: "", pages: [], result: null, error: "", seconds: 0 });
+    const { unmount } = renderView((ctx) => <SuggestPanel book={book()} ctx={ctx} onRead={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Fix ા bars" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("રવિ");                                // the i sign is never touched
+    await userEvent.click(within(dialog).getByRole("button", { name: "Fix ા bars" }));
+    expect(api.fixBars).toHaveBeenCalledWith(1);
+    expect(await screen.findByText("Checking pages: 0 of 23")).toBeInTheDocument();
+    unmount();
+    renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Fix ા bars" })).toBeNull();
   });
 
   it("shows how the suggestions compare with the labels", async () => {

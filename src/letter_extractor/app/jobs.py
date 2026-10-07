@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -181,6 +181,16 @@ class Jobs:
                              .where(Page.book_id == book_id)) or 0
         return self.start(book_id, "fix_cuts",
                           lambda progress, cancel: fix_cuts(self.lib, book_id, progress, cancel), total=total)
+
+    def fix_bars(self, book_id: int) -> Job:
+        """Give aa bars cut onto the next letter back to their letter, as one action (barfix.py)."""
+        from sqlalchemy import func, select
+        from .barfix import fix_bars
+        from .db import Page
+        with self.lib.session() as s:
+            total = s.scalar(select(func.count(Page.id)).where(Page.book_id == book_id)) or 0
+        return self.start(book_id, "fix_bars",
+                          lambda progress, cancel: fix_bars(self.lib, book_id, progress, cancel), total=total)
 
     def _images(self, book_id: int):
         from pathlib import Path

@@ -124,6 +124,26 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Conclusion:** on print, cutting by Tesseract is better (less than half as many multi-letter samples, fewer groups, more suggestions, every sample read), but not by a wide margin, and the number of mixed groups is the same. It stays an option per book; the default remains the shape cut, which is the only one that works on handwriting. Fix cuts (C12b) can still be run after either cut.
 
+## C12e. aa bars cut onto the next letter (2026-10-07)
+
+**Reported by the user:** most wrong letters are words with the aa sign: નાર cut as ન + ાર. Words like રવિ must not become રા + વ.
+
+**Seen on book 6** (a copy of the user's library, cut by Tesseract's reading): letters labelled र that hold ा + र (कार, खार, तार); the old bar check of Fix cuts (`recut.left_bar`) also flags plain र (its curve), so it could not be reused.
+
+**The i sign** (ि of रवि) is the danger: a bar before its letter. In this print its hook does not touch the bar: 2 to 3 white rows lie between the hook and the headline, so "ink rising from the bar" misses it. What tells it: a wide mark above the headline starting over the bar. The e sign of the next letter (तारे) looks the same there; telling the two apart by the height of the mark's left end recovered 45 more aa bars but also took the broken hook of बुद्धि, so it was dropped: any wide mark over the bar leaves the letter alone.
+
+| Rule (book 6, 14,141 letters) | Found | Right, of those looked at |
+|---|---|---|
+| Bar + gap + letter, no hook test | 248 | about half (the rest ि of रि, नि, वि) |
+| + hook = ink rising from the bar | 214 | still many ि |
+| + hook = a wide mark starting over the bar (kept) | 136 | about 38 of 40 |
+| + the letter before has no bar of its own (kept) | 126 | the 10 left out follow ग, ण, श (a stem standing apart) and one double bar |
+| e sign told from the i hook by its left end (dropped) | 181 | took the broken hook of बुद्धि |
+
+**Fixing book 6** (`fix_bars` on a copy): 126 bars, 15 s; 171 of the 252 new letters went into groups by shape (वा 16, र 15, या 11, ना 10, ता 8 ...), 81 to Unsure. Undo and redo restore exactly; running it again finds 1. Book 3: 61, book 2: 65 (planned only).
+
+**Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
+
 ## C13. Suggestions from other labelled books (2026-10-06)
 
 **No handwritten book is labelled yet**, so the plan's measurement (two handwritten pages, one suggesting the other) waits for the user's labels. Measured on print instead, on a copy of the user's library: book 3 "Vachnamrut Printed 1933" (cut by shapes, 82 labelled groups) suggests for book 4 "Vachnamrut Printed 1933 Tesseract Cuts" (the same 23 pages cut by Tesseract and grouped on their own; its labels reviewed by the user are the truth). Since the two books share pages, the reference centres are built only from book 3's samples on half of the pages, and only book 4's samples on the other half are judged (both ways round).

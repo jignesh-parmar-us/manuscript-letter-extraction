@@ -17,7 +17,7 @@ About 10 minutes of waiting for 20 to 25 pages, and a few clicks. Expect about a
 
 1. **Create the book.** **Books** → **New book**: a name, the folder with the page images, and Writing **Printed**.
 2. **Choose the cutting before the first capture.** **Pages & capture** → **Cutting into letters** → **By Tesseract's reading**. Each line is cut into the letters Tesseract reads: about half as many letters left joined as with the shape cut.
-3. **Capture.** **Capture letters**, then wait (about 4 to 5 minutes for 23 pages). At the end, every letter has Tesseract's reading, groups that mixed two letters are split, and the groups Tesseract is sure about are labelled, marked *not reviewed*.
+3. **Capture.** **Capture letters**, then wait (about 4 to 5 minutes for 23 pages). ા bars cut onto the next letter (નાર as ન + ાર) are given back to their letter. At the end, every letter has Tesseract's reading, groups that mixed two letters are split, and the groups Tesseract is sure about are labelled, marked *not reviewed*.
 4. **Learn from your other labelled books.** **Review groups** → **Details**: tick the labelled books of the same kind of print, then **Suggest from labelled books** (a few seconds). Each letter gets the label of the closest group you labelled there; where Tesseract and your books agree, the group's suggestion says so.
 5. **Split mixed groups**, once. Letters read as another letter *and* shaped differently move to a group of their own. A group of one letter is never split by its strokes.
 6. **Accept the sure suggestions.** **Accept N with ≥ 90 %**. One **Undo** takes it all back.
@@ -76,5 +76,6 @@ The letter reader (C14) is the next part of the app. This is how it is planned t
 | **Capture again** asks before it starts | The book has labels or changes made by hand, and capturing again would discard them. Labels given automatically do not count. To try other settings without losing work, make a new book from the same folder instead. |
 | "No other book with labels yet" | Suggestions from labelled books need another book of the same writing with labelled groups. Label the biggest groups of one book first. |
 | A group mixes two letters | Click one of its readings to select those letters, then **New group**; or run **Split mixed groups**. |
+| A ા bar on the next letter (નાર cut as ન + ાર) | On printed books: **Fix ા bars** in the Label suggestions bar (one undo). Bars with the hook of િ above them (રવિ) are never moved. Books captured since this was added get it at capture. |
 | Letters cut wrongly (two letters in one, a vowel bar on its own) | On printed books cut by shapes: **Fix cuts with Tesseract**. On any book: the **Pages** tab's **Join**, **Split** and **Draw a box**. |
 | Something went wrong after a click | **Undo**. Fixing cuts, accepting suggestions and splitting groups are each one undo step. |

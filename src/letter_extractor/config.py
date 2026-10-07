@@ -71,6 +71,13 @@ class Config:
     mark_min_px: int = 20                 # upper-mark ink touching a bar needed to call it an i-matra
     bar_head_extra_px: int = 6            # a bar's headline is at least this much wider than its stem
     bar_protect_px: int = 12              # no split cut within this distance before a joined vowel bar
+    # aa bars cut onto the next letter (bars.py; printed books only, set from the book's writing)
+    bar_fix: bool = False                 # give them back to the letter before, at capture
+    bar_fill: float = 0.75                # a bar has ink in this share of the rows below the headline...
+    bar_max_width: float = 0.3            # ...is at most this x the letter width, as is its gap...
+    bar_gap_fill: float = 0.05            # ...a gap column has ink in at most this share of those rows...
+    bar_min_rest: float = 0.4             # ...and a letter body of this x the letter width follows
+    bar_max_gap: float = 0.4              # the letter before ends at most this x the letter width away
     double_danda_gap_ratio: float = 0.5   # two dandas this close (x typical piece width) are one double danda
     split_width_ratio: float = 1.4        # letters wider than this x the page's typical letter may be split...
     split_gap_frac: float = 0.15          # ...where a column below the headline has at most this x the

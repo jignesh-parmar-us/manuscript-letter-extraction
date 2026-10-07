@@ -231,6 +231,7 @@ class Library:
         book's own files are untouched until `_install` moves the new ones in."""
         cfg = self.book_config(book)
         cfg.save_masks, cfg.write_groups = True, False
+        cfg.bar_fix = book.writing == "printed"          # bars.py: not on handwriting
         work = self.book_dir(book) / ".work"
         if work.exists():
             shutil.rmtree(work)
