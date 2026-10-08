@@ -142,6 +142,8 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Fixing book 6** (`fix_bars` on a copy): 126 bars, 15 s; 171 of the 252 new letters went into groups by shape (वा 16, र 15, या 11, ना 10, ता 8 ...), 81 to Unsure. Undo and redo restore exactly; running it again finds 1. Book 3: 61, book 2: 65 (planned only).
 
+**The e sign of the next letter** (2026-10-08, reported for ક્યારે): on a fresh copy of book 6 (already fixed once), 182 letters start with a bar but have a wide mark over it. By the height of the mark's left end above the headline: 37 high (read as रे 11, ने 6, ते 5, वे 4 ... but also वि, रि, द्दि), 145 low (नि 22, रि 21, वि 19, ति 11 ...: the i hook). Shape and reading together (left end high, read with े or ै and no ि): 32 letters, all right by eye, among them 5 ક્યારે. Book 3 (cut by shape, read by Tesseract): 228 plain bars + 20 under an e sign, 25 and 20 looked at, all right. (Book 3's earlier count of 61 was taken before the "letter before has a bar of its own" test was fixed.)
+
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
 ## C13. Suggestions from other labelled books (2026-10-06)

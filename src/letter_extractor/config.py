@@ -78,6 +78,7 @@ class Config:
     bar_gap_fill: float = 0.05            # ...a gap column has ink in at most this share of those rows...
     bar_min_rest: float = 0.4             # ...and a letter body of this x the letter width follows
     bar_max_gap: float = 0.4              # the letter before ends at most this x the letter width away
+    bar_e_drop: float = 0.35              # a mark over the bar whose left end stays this x the headline height above it: e sign
     double_danda_gap_ratio: float = 0.5   # two dandas this close (x typical piece width) are one double danda
     split_width_ratio: float = 1.4        # letters wider than this x the page's typical letter may be split...
     split_gap_frac: float = 0.15          # ...where a column below the headline has at most this x the

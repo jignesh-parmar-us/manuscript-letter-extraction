@@ -7,8 +7,11 @@ to the letter before it.
 
 What must stay where it is: the i sign (ि), a bar written BEFORE its letter (रवि is र + ि-bar + व).
 It has a hook above the headline that starts over the bar and arches over the letter, touching
-the bar or not. So a bar with a wide mark above the headline starting over it is never moved; that
-also leaves alone some real aa bars whose next letter has an e sign (तारे), which is the safe side.
+the bar or not. So a bar with a wide mark above the headline starting over it is not moved, with one exception:
+the e sign of the next letter (तारे, ક્યારે) sits there too. It is told from the i hook by its shape
+(its left end stays high, while the hook comes down to the bar) AND by Tesseract's reading of the
+letter (an e sign, no i sign); both must agree, so without a reading (a book cut by shape and never
+read) such a bar stays where it is.
 
 A stray aa bar, in the sample's mask:
 - the headline is the busiest row of the upper half (and the rows around it nearly as busy);
@@ -16,7 +19,7 @@ A stray aa bar, in the sample's mask:
   most `bar_max_width` x the book's letter width, with no letter body to its left;
 - then a gap (ink in at most `bar_gap_fill` of those rows) within `bar_max_width` letter widths,
   and a letter body after it (at least `bar_min_rest` letter widths of inked columns);
-- no wide mark above the headline starting over the bar (the i hook);
+- no wide mark above the headline starting over the bar (the i hook), unless it is an e sign as above;
 - the letter before it ends close by (`bar_max_gap` letter widths) on the same line, and does not
   end with a bar itself (two bars in a row are not one letter and its aa).
 Handwriting is left alone: its bars and the left strokes of letters look too much alike.
@@ -32,6 +35,8 @@ import numpy as np
 from .config import Config
 
 AA = "\u093E"   # ा
+E_SIGNS = ("\u0947", "\u0948")   # े ै
+I_SIGN = "\u093F"                 # ि
 
 
 def _headline(mask: np.ndarray) -> Tuple[int, int]:
@@ -60,8 +65,17 @@ def _bar_run(frac: np.ndarray, cols, fill: float) -> Optional[Tuple[int, int]]:
     return (start, end + 1) if step > 0 else (end, start + 1)
 
 
-def stray_bar(mask: np.ndarray, width: float, cfg: Config) -> Optional[int]:
-    """The column where a stray aa bar at the start of this letter ends (the gap after it), or None."""
+def _e_sign(lab: np.ndarray, k: int, x0: int, ww: int, top: int, cfg: Config) -> bool:
+    """The mark is shaped like the e sign of the letter after the bar (तारे): its left end stays high
+    above the headline. The i hook comes down at its left end to just above the bar."""
+    left = lab[:, x0:x0 + max(1, int(0.3 * ww))] == k
+    low = int(np.flatnonzero(left.any(axis=1))[-1])
+    return top - low > cfg.bar_e_drop * top
+
+
+def stray_bar(mask: np.ndarray, width: float, cfg: Config, reading: str = "") -> Optional[int]:
+    """The column where a stray aa bar at the start of this letter ends (the gap after it), or None.
+    `reading`: what Tesseract read this letter as, if known: with it, a bar under an e sign moves too."""
     h, w = mask.shape
     top, bot = _headline(mask)
     body = mask[bot + 1:]
@@ -80,13 +94,17 @@ def stray_bar(mask: np.ndarray, width: float, cfg: Config) -> Optional[int]:
     gap = next((c for c in range(end, min(w, end + reach)) if frac[c] <= cfg.bar_gap_fill), None)
     if gap is None or (body[:, gap:].sum(axis=0) > 0).sum() < cfg.bar_min_rest * width:
         return None
-    above = mask[:max(0, top - 1)].astype(np.uint8)            # the i hook: a wide mark starting over the bar
+    # the i hook: a wide mark starting over the bar. The e sign of the next letter (तारे, ક્યારે) looks
+    # alike there; it lets the bar move only when its shape says e AND Tesseract read an e sign and no i
+    read_e = any(e in reading for e in E_SIGNS) and I_SIGN not in reading
+    above = mask[:max(0, top - 1)].astype(np.uint8)
     if above.any():
-        n, _, stats, _ = cv2.connectedComponentsWithStats(above, connectivity=8)
+        n, lab, stats, _ = cv2.connectedComponentsWithStats(above, connectivity=8)
         for k in range(1, n):
             x0, _, ww, _, area = stats[k]
             if x0 <= end + 0.15 * width and ww >= 0.4 * width and area >= cfg.mark_min_px:
-                return None
+                if not (read_e and _e_sign(lab, k, x0, ww, top, cfg)):
+                    return None
     return gap
 
 
@@ -111,10 +129,11 @@ def ends_with_bar(mask: np.ndarray, width: float, cfg: Config) -> bool:
     return gap is not None and bool((frac[:gap] > 0).any())
 
 
-def split_bar(mask: np.ndarray, gap: int) -> Tuple[np.ndarray, np.ndarray]:
-    """The bar (columns before `gap`) and the rest. Marks above the headline that start on the bar's
-    side (the bar's own top) go with the bar, other marks above or below the main zone whole to the
-    side their centre is on, so a mark is never cut in two."""
+def split_bar(mask: np.ndarray, gap: int, width: float) -> Tuple[np.ndarray, np.ndarray]:
+    """The bar (columns before `gap`) and the rest. Small marks above the headline that start on the
+    bar's side (the bar's own top, an anusvara over it) go with the bar; wide ones (the e sign of the
+    next letter) and marks below the main zone go whole to the side their centre is on, so a mark is
+    never cut in two."""
     top, bot = _headline(mask)
     bar = np.zeros_like(mask)
     bar[:, :gap] = mask[:, :gap]
@@ -123,8 +142,10 @@ def split_bar(mask: np.ndarray, gap: int) -> Tuple[np.ndarray, np.ndarray]:
     n, lab, stats, cents = cv2.connectedComponentsWithStats(marks.astype(np.uint8), connectivity=8)
     for k in range(1, n):
         y0, hh = stats[k, 1], stats[k, 3]
-        if y0 + hh <= top:                                     # wholly above the headline
+        if y0 + hh <= top and stats[k, 2] < 0.4 * width:      # a small mark wholly above the headline
             bar[lab == k] = stats[k, 0] < gap
+        elif y0 + hh <= top:                                   # a wide one
+            bar[lab == k] = cents[k][0] < gap
         elif y0 > bot + 0.75 * (mask.shape[0] - bot):          # low below it
             bar[lab == k] = cents[k][0] < gap
     return bar, mask & ~bar
@@ -149,15 +170,16 @@ def joined(a_box, a_mask, b_box, b_mask):
     return _tight(m, x0, y0)
 
 
-def plan_pair(prev_box, prev_mask, box, mask, width: float, cfg: Config):
+def plan_pair(prev_box, prev_mask, box, mask, width: float, cfg: Config, reading: str = ""):
     """For a letter and the one before it on the line: the two new (box, mask) pairs when the letter
-    starts with the stray aa bar of the one before, else None."""
+    starts with the stray aa bar of the one before, else None. `reading`: Tesseract's reading of the
+    letter, if known."""
     if box[0] - (prev_box[0] + prev_box[2]) > cfg.bar_max_gap * width:
         return None
-    gap = stray_bar(mask, width, cfg)
+    gap = stray_bar(mask, width, cfg, reading)
     if gap is None or ends_with_bar(prev_mask, width, cfg):
         return None
-    bar, rest = split_bar(mask, gap)
+    bar, rest = split_bar(mask, gap, width)
     left = joined(prev_box, prev_mask, box, bar)
     right = _tight(rest, box[0], box[1])
     if left is None or right is None:
@@ -175,7 +197,7 @@ def move_bars(letters, cfg: Config):
     for x in sorted(letters, key=lambda x: (x.line, x.pos)):
         prev = out[-1] if out else None
         if prev is not None and prev.kind == x.kind == "letter" and prev.line == x.line:
-            found = plan_pair(prev.box, prev.mask, x.box, x.mask, width, cfg)
+            found = plan_pair(prev.box, prev.mask, x.box, x.mask, width, cfg, x.text)
             if found is not None:
                 (lbox, lmask), (rbox, rmask) = found
                 # Tesseract's texts (cut by its reading): the aa goes along if it was read with the bar

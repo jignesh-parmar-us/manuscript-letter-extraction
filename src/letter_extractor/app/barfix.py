@@ -2,7 +2,8 @@
 
 The same rule as at capture (`bars.py`), on the stored samples: a letter that starts with the aa bar
 of the letter before it (नार cut as न + ार) is cut after the bar, and the bar is joined to the letter
-before (ना + र). Letters in locked groups are left alone. All changes are one undoable action.
+before (ना + र). Tesseract's readings of the book, if it was read, let a bar under the e sign of the next
+letter move too (तारे, bars.py). Letters in locked groups are left alone. All changes are one undoable action.
 
 The new letters go where their shape says, not where the old ones were (the old letter before is
 now another letter, न became ना):
@@ -24,10 +25,10 @@ from sqlalchemy import select
 from ..bars import AA, plan_pair
 from ..mapping import LabelError, canonical_label, mapping_for
 from .actions import _Change, _result
-from .db import Book, LetterGroup, Page, Sample
+from .db import Book, LetterGroup, OcrReading, Page, Sample
 from .library import Cancelled, Library, LibraryError
 from .recut import _labelled_centres
-from .suggest import LineDone
+from .suggest import LineDone, _run_id
 from .samples import _new_sample, _sample_mask, page_ink
 
 Plan = Tuple[int, int, Tuple, Tuple]      # letter before, letter, (box, mask) of each new letter
@@ -53,6 +54,9 @@ def plan_book(lib: Library, book_id: int, progress=None, cancel: Optional[Callab
             return []
         width = float(median(x.w for x in letters))
         files = dict(s.execute(select(Page.id, Page.file).where(Page.book_id == book_id)).all())
+        run = _run_id(s, book_id)                                 # Tesseract's readings tell an e sign from an i hook
+        reading = dict(s.execute(select(OcrReading.sample_id, OcrReading.text_dev)
+                                 .where(OcrReading.run_id == run)).all()) if run else {}
         pages = sorted({x.page_id for x in smps})
         prev: Optional[Sample] = None
         prev_mask = None
@@ -78,7 +82,8 @@ def plan_book(lib: Library, book_id: int, progress=None, cancel: Optional[Callab
                 continue
             mask = _sample_mask(lib, book, x)
             if prev is not None and prev.page_id == x.page_id and prev.line_number == x.line_number:
-                found = plan_pair((prev.x, prev.y, prev.w, prev.h), prev_mask, (x.x, x.y, x.w, x.h), mask, width, cfg)
+                found = plan_pair((prev.x, prev.y, prev.w, prev.h), prev_mask, (x.x, x.y, x.w, x.h), mask, width, cfg,
+                                  reading.get(x.id, ""))
                 if found is not None:
                     plans.append((prev.id, x.id, found[0], found[1]))
                     prev = prev_mask = None              # this letter changes: not the one before the next

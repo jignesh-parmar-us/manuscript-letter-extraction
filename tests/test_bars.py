@@ -3,6 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -34,6 +35,14 @@ def headline(m, x0, x1):
     return m
 
 
+def e_sign(m):
+    """The e sign of the letter after the bar (रे): high at its left end, over the bar, coming down to
+    the headline at its right."""
+    img = m.astype(np.uint8)
+    cv2.line(img, (4, 2), (30, 8), 1, 3)
+    return img.astype(bool)
+
+
 def bar_then_letter(hook=False, dot=False, joined=False):
     """ार: a bar (columns 2-6), a gap, a letter; optionally the i hook (रवि), an anusvara over the bar,
     or the bar joined to the letter below the headline (a letter of its own, no gap)."""
@@ -61,6 +70,17 @@ class RuleTests(unittest.TestCase):
     def test_the_i_sign_stays(self):
         self.assertIsNone(stray_bar(bar_then_letter(hook=True), W, self.cfg))       # रवि is never cut
 
+    def test_under_an_e_sign_only_with_tesseracts_reading(self):
+        m = e_sign(bar_then_letter())
+        self.assertIsNone(stray_bar(m, W, self.cfg))                                # shape alone: left alone
+        self.assertIsNotNone(stray_bar(m, W, self.cfg, "रे"))                        # read with an e sign: moves
+        self.assertIsNone(stray_bar(m, W, self.cfg, "रि"))                           # read with an i sign: stays
+        hook = bar_then_letter(hook=True)
+        self.assertIsNone(stray_bar(hook, W, self.cfg, "रे"))                        # an i hook's shape: stays anyway
+        bar, rest = split_bar(m, stray_bar(m, W, self.cfg, "रे"), W)
+        self.assertFalse(bar[:9, 12:].any())                                         # the e sign stays with its letter
+        self.assertTrue(rest[:9].any())
+
     def test_a_dot_over_the_bar_does_not_stop_it(self):
         self.assertIsNotNone(stray_bar(bar_then_letter(dot=True), W, self.cfg))
 
@@ -77,7 +97,7 @@ class RuleTests(unittest.TestCase):
     def test_marks_are_not_cut(self):
         m = bar_then_letter(dot=True)
         m[2:7, 20:26] = True                                                        # a mark over the letter
-        bar, rest = split_bar(m, stray_bar(m, W, self.cfg))
+        bar, rest = split_bar(m, stray_bar(m, W, self.cfg), W)
         self.assertTrue(bar[2:7, 3:7].all() and not rest[2:7, 3:7].any())           # the bar's mark goes with it
         self.assertTrue(rest[2:7, 20:26].all() and not bar[2:7, 20:26].any())
         self.assertEqual(int(bar.sum() + rest.sum()), int(m.sum()))                  # nothing lost
