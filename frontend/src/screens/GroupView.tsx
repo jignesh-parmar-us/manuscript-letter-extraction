@@ -5,7 +5,8 @@
 // Keys: U = selected to Unsure, N = new group from selection, Delete = delete selection,
 //       Ctrl/Cmd+A = select all, Esc = clear selection.
 // With OCR readings (C11, C12): the suggested label to accept, change or reject; what the samples
-// were read as; and a badge on each sample whose reading differs from the group's.
+// were read as; and a badge on each sample whose reading differs from the group's: × removes the
+// reading (it is wrong), the green chip on the left moves the letter to that reading's group (it is right).
 // One selected letter shows its line (LineContext); double-click opens it on its page, and the
 // Pages tab's "Back" returns here, to that letter (returnSpot.ts).
 import { MouseEvent, useCallback, useEffect, useState } from "react";
@@ -36,6 +37,9 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
   const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading).map((s) => s.id);
+  const expected = expectedReading(group);
+  // selected letters read as another letter than the group's: they can go to that letter's group
+  const readOther = samples.filter((s) => selection.ids.has(s.id) && s.reading && s.reading.label_dev !== expected);
 
   const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
   const open = (s: Sample) =>
@@ -74,6 +78,14 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [order, toUnsure, toNewGroup, remove, setSelection, group.locked]);
+
+  /** Put letters under their readings' labels (the group with that label, or a new one): one action per label. */
+  async function moveToReadings(chosen: Sample[]) {
+    const byLabel = new Map<string, number[]>();
+    chosen.forEach((s) => s.reading && byLabel.set(s.reading.label_dev, [...(byLabel.get(s.reading.label_dev) ?? []), s.id]));
+    for (const [label, sids] of byLabel) await act(() => api.labelSamples(bookId, sids, label));
+    setSelection(emptySelection());
+  }
 
   async function moveTo(target: MoveTarget) {
     setPicking(false);
@@ -191,13 +203,21 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
           >
             Remove readings{withReading.length ? ` (${withReading.length})` : ""}
           </button>
+          <button
+            disabled={locked || !readOther.length}
+            onClick={() => moveToReadings(readOther)}
+            title="The selected letters' readings are right: move each to the group with its reading's label"
+          >
+            Move to their readings{readOther.length ? ` (${readOther.length})` : ""}
+          </button>
         </div>
         <LineContext sample={single} version={ctx.version} onOpen={open} />
       </div>
       {back.note && <p className="small muted">{back.note}</p>}
 
-      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expectedReading(group)}
+      <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expected}
         onRemoveReading={(s) => act(() => api.removeReadings(bookId, [s.id]))}
+        onMoveToReading={locked ? undefined : (s) => moveToReadings([s])}
         onOpen={open} marked={back.marked}
       />
       {samples.length < total && (

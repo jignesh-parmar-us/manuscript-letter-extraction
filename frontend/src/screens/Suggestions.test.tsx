@@ -185,7 +185,7 @@ describe("suggestions on a group", () => {
     await userEvent.click(within(chip).getByRole("button", { name: "Reject" }));
     expect(api.rejectSuggestion).toHaveBeenCalledWith(1, 5, "क");
     await findTiles();
-    expect(screen.getAllByTitle(/^Read as/).map((b) => b.textContent)).toEqual(["બ×"]);  // only the one read otherwise
+    expect(screen.getAllByTitle(/^Read as/).map((b) => b.textContent)).toEqual(["→ બ", "બ×"]);  // only the one read otherwise
   });
 
   it("removes a wrong reading from its badge, or from the selected letters", async () => {
@@ -205,6 +205,34 @@ describe("suggestions on a group", () => {
     expect(bulk).toHaveTextContent("Remove readings (2)");                        // letters 1 and 2 have readings
     await userEvent.click(bulk);
     expect(api.removeReadings).toHaveBeenLastCalledWith(1, [1, 2]);
+  });
+
+  it("moves a letter to its reading's group from the green chip, or the selected letters", async () => {
+    vi.mocked(api.labelSamples).mockResolvedValue(ok);
+    renderView((ctx) => <GroupView group={group({ suggestion: sug() })} ctx={ctx} />);
+    const tiles = await findTiles();
+    const chip = screen.getByRole("button", { name: "Move to બ" });
+    expect(within(tiles[1]).getByRole("button", { name: "Remove the reading બ" })).toBeInTheDocument();  // both on it
+    await userEvent.click(chip);
+    expect(api.labelSamples).toHaveBeenCalledWith(1, [2], "ब");
+    expect(screen.queryByText("1 selected")).toBeNull();                          // the click did not select
+    const bulk = screen.getByRole("button", { name: /^Move to their readings/ });
+    expect(bulk).toBeDisabled();
+    const user = userEvent.setup();
+    await user.click(tiles[0]);
+    await user.keyboard("{Shift>}");
+    await user.click(tiles[2]);
+    await user.keyboard("{/Shift}");
+    expect(bulk).toHaveTextContent("Move to their readings (1)");                // letter 1 is read as the group's letter
+    await userEvent.click(bulk);
+    expect(api.labelSamples).toHaveBeenLastCalledWith(1, [2], "ब");
+  });
+
+  it("offers no move on a locked group", async () => {
+    renderView((ctx) => <GroupView group={group({ suggestion: sug(), locked: true })} ctx={ctx} />);
+    await findTiles();
+    expect(screen.queryByRole("button", { name: "Move to બ" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Move to their readings/ })).toBeDisabled();
   });
 
   it("offers a merge when another group has the label, and fills the picker on Change", async () => {

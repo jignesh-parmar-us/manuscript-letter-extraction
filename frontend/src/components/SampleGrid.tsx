@@ -2,8 +2,9 @@
 // selected ones) onto a group or "Unsure" in the side list (see screens/Review.tsx). Hover shows
 // where a sample comes from; double-click opens it on its page (onOpen).
 // OCR readings (C12): in a group, a sample whose reading differs from `expected` shows it as a badge;
-// clicking the badge removes that reading when it is wrong (onRemoveReading). An unsure sample shows
-// its reading as a second suggestion (onAcceptReading).
+// clicking the badge removes that reading when it is wrong (onRemoveReading), and a green chip on the
+// left moves the sample to the group with that label when the reading is right (onMoveToReading). An
+// unsure sample shows its reading as a second suggestion (onAcceptReading).
 import { useDraggable } from "@dnd-kit/core";
 import { MouseEvent } from "react";
 import { Sample } from "../api";
@@ -17,11 +18,13 @@ interface Props {
   expected?: string; // the group's reading (Devanagari): samples read otherwise get a badge
   onAcceptReading?: (sample: Sample) => void; // unsure samples: put the sample under its reading's label
   onRemoveReading?: (sample: Sample) => void; // the badge's reading is wrong: remove it
+  onMoveToReading?: (sample: Sample) => void; // the badge's reading is right: move it to that label's group
   marked?: number | null; // the letter come back to from its page (a dashed outline)
 }
 
 export default function SampleGrid(props: Props) {
-  const { samples, selected, onClick, onAccept, onOpen, expected, onAcceptReading, onRemoveReading, marked } = props;
+  const { samples, selected, onClick, onAccept, onOpen, expected, onAcceptReading, onRemoveReading, onMoveToReading, marked } =
+    props;
   if (samples.length === 0) return <p className="muted">No samples.</p>;
   return (
     <div className="grid" role="listbox" aria-multiselectable="true" aria-label="Samples">
@@ -37,6 +40,7 @@ export default function SampleGrid(props: Props) {
           expected={expected}
           onAcceptReading={onAcceptReading}
           onRemoveReading={onRemoveReading}
+          onMoveToReading={onMoveToReading}
         />
       ))}
     </div>
@@ -53,6 +57,7 @@ function Tile(props: {
   expected?: string;
   onAcceptReading?: Props["onAcceptReading"];
   onRemoveReading?: Props["onRemoveReading"];
+  onMoveToReading?: Props["onMoveToReading"];
 }) {
   const { sample: s, selected } = props;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `sample-${s.id}` });
@@ -98,6 +103,20 @@ function Tile(props: {
           }}
         >
           {s.reading.label_guj}
+        </button>
+      )}
+      {s.reading && props.onMoveToReading && props.expected !== undefined && s.reading.label_dev !== props.expected && (
+        <button
+          className="reading-move"
+          title={`Read as ${s.reading.label_guj} (${s.reading.label_dev}). Right? Click to move this letter to the ${s.reading.label_guj} group (a new group with that label if there is none).`}
+          aria-label={`Move to ${s.reading.label_guj}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onMoveToReading?.(s);
+          }}
+        >
+          → {s.reading.label_guj}
         </button>
       )}
       {s.reading && !props.onAcceptReading && props.expected !== undefined && s.reading.label_dev !== props.expected &&
