@@ -86,6 +86,35 @@ class RuleTests(unittest.TestCase):
         m[52:58, 0:3] = True                                                         # the foot of ण's stem
         self.assertIsNotNone(stray_bar(m, W, self.cfg))
 
+    def test_a_soft_bar_edge(self):
+        m = bar_then_letter()
+        m[18:58, 1] = np.arange(40) % 3 == 0                                         # a faint column before the bar
+        self.assertIsNotNone(stray_bar(m, W, self.cfg))                              # (માટે cut as મ + ાટે)
+        ma = headline(np.zeros((H, 40), bool), 0, 40)                                # म: a loop, then its stem
+        ma[16:20, 0:10] = ma[30:34, 0:10] = True
+        ma[16:34, 0:3] = True
+        ma[10:58, 9:13] = True
+        ma[14:50, 30:34] = True
+        self.assertIsNone(stray_bar(ma, W, self.cfg))                                # a loop is not a soft edge
+
+    def test_a_lone_bar_before_a_letter_with_the_i_hook_is_that_i(self):
+        body = headline(np.zeros((H, 34), bool), 0, 34)
+        body[14:50, 2:6] = body[14:50, 20:24] = body[46:50, 2:24] = True
+        bar = headline(np.zeros((H, 14), bool), 0, 14)
+        bar[10:58, 4:9] = True
+        hooked = headline(np.zeros((H, 34), bool), 0, 34)                            # नि without its bar
+        hooked[14:58, 26:31] = True
+        hooked[2:8, 0:30] = True
+        plain = headline(np.zeros((H, 34), bool), 0, 34)
+        plain[14:58, 26:31] = True
+        args = ((100, 50, 34, H), body, (136, 50, 14, H), bar, W, self.cfg, "")
+        self.assertIsNone(plan_pair(*args, nxt=(hooked, "")))                        # the bar is the ि of the next
+        self.assertIsNone(plan_pair(*args, nxt=(plain, "नि")))                       # Tesseract read ि there
+        self.assertIsNotNone(plan_pair(*args, nxt=(plain, "न")))
+        own = hooked.copy()
+        own[10:58, 0:5] = True                                                       # the next letter has its own bar
+        self.assertIsNotNone(plan_pair(*args, nxt=(own, "नि")))
+
     def test_a_bar_on_its_own(self):
         stem = headline(np.zeros((H, 14), bool), 0, 14)                              # ण's stem with its headline
         stem[10:58, 4:9] = True

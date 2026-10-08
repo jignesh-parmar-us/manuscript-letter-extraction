@@ -146,6 +146,8 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **The stem of ण** (2026-10-08, reported by the user): book 6 has 278 letters labelled or read ण; 172 hold their stem, 106 do not. Their stem went to the next letter (51, refused because of the stem's foot curling left, or because nothing followed it) or stood alone (52, often labelled ण itself). Allowing the foot and joining lone bars with a piece of headline: 76 joins and 26 moves on the book (with ग stems, ा and ो bars cut off the same way); 30 joins and 30 moves looked at: 2 joins were the ि of हि and रि, removed by the lean of the mark above (right: ि; left: ो); after that, all right. Applied on a copy: 102 fixes in 26 s, 76 letters fewer, undo and redo exact.
 
+**A soft bar edge** (2026-10-08, the user's माटे samples 71215, 71071, 75571, 82356): each refused by "letter body left of the bar", which was the bar's own edge, one column with 14% to 64% ink. Letting any partly inked columns count as the edge found 499 more on book 6, many wrong (the loop of म, स, व taken as the edge); limited to two columns: 368, then 129 more at 10% ink. Of these, looked at with the cut drawn: nearly all right (ા bars, ો bars, the stems of ण, ग and श), and one wrong kind: a lone bar that is the ि of the next letter whose hook sits on that letter (ते|नि). Checking the next letter for an i hook without a bar of its own (shape, or Tesseract's ि) drops 18, mostly those ि and a few unclear ones. Book 6 now: 572 fixes, all 4 samples among them.
+
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
 ## C13. Suggestions from other labelled books (2026-10-06)

@@ -33,9 +33,10 @@ describe("GroupPicker", () => {
     const codes = () => within(list).getAllByRole("button").map((b) => b.textContent!.slice(0, 5));
     expect(codes().length).toBe(30);
     expect(codes()[0]).toBe("g0134");                                       // the newest
-    await userEvent.click(screen.getByRole("button", { name: "Show more (5 left)" }));
+    // by text: a role query computes the names of all the letter table's buttons, slow on a busy machine
+    await userEvent.click(screen.getByText("Show more (5 left)"));
     expect(codes().length).toBe(35);
-    expect(screen.queryByRole("button", { name: /Show more/ })).toBeNull();
+    expect(screen.queryByText(/Show more/)).toBeNull();
   });
 
   it("does not offer the current group, and closes with Escape", async () => {

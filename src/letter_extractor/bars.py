@@ -102,8 +102,13 @@ def stray_bar(mask: np.ndarray, width: float, cfg: Config, reading: str = "") ->
 
 
 def _body_left(body: np.ndarray, start: int) -> bool:
-    """Ink of a letter body left of a bar. The foot of a stem may curl left at the bottom (the stem of ण
-    in this print), so the lowest rows do not count."""
+    """Ink of a letter body left of a bar. The bar's own edge may be soft or slanted (one or two columns
+    next to it partly inked), and the foot of a stem may curl left at the bottom (the stem of ण in this print):
+    neither counts."""
+    frac = body.mean(axis=0)
+    for _ in range(2):                                         # the bar's edge: one or two columns, not a loop
+        if start > 0 and frac[start - 1] >= 0.1:
+            start -= 1
     upper = body[:max(1, int(0.7 * body.shape[0]))]
     return upper[:, :start].sum() > 0.1 * body.shape[0]
 
@@ -219,14 +224,45 @@ def joined(a_box, a_mask, b_box, b_mask):
     return _tight(m, x0, y0)
 
 
-def plan_pair(prev_box, prev_mask, box, mask, width: float, cfg: Config, reading: str = ""):
+def i_hook_starts(mask: np.ndarray, width: float, cfg: Config, reading: str = "") -> bool:
+    """The letter carries the hook of an i sign at its left whose bar was cut off before it: it does not
+    start with a bar of its own, and it has a wide mark above the headline starting at its left edge
+    that is not shaped like an e sign, or Tesseract read it with ि."""
+    top, bot = _headline(mask)
+    body = mask[bot + 1:]
+    if body.shape[0] >= 5:                                      # the letter starts with a bar of its own:
+        frac = body.mean(axis=0)                                # its i hook has its bar, the lone one is not it
+        if _bar_run(frac, range(min(mask.shape[1], max(2, int(0.15 * width)))), cfg.bar_fill) is not None:
+            return False
+    if I_SIGN in reading:
+        return True
+    if any(e in reading for e in E_SIGNS):
+        return False
+    above = mask[:max(0, top - 1)].astype(np.uint8)
+    if not above.any():
+        return False
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(above, connectivity=8)
+    for k in range(1, n):
+        x0, _, ww, _, area = stats[k]
+        if x0 <= 0.25 * width and ww >= 0.4 * width and area >= cfg.mark_min_px \
+                and not _e_sign(lab, k, x0, ww, top, cfg):
+            return True
+    return False
+
+
+def plan_pair(prev_box, prev_mask, box, mask, width: float, cfg: Config, reading: str = "",
+              nxt: Optional[Tuple[np.ndarray, str]] = None):
     """For a letter and the one before it on the line: the two new (box, mask) pairs when the letter
     starts with the stray aa bar of the one before; (the letter before with the bar, None) when the
-    letter is only that bar; else None. `reading`: Tesseract's reading of the letter, if known."""
+    letter is only that bar; else None. `reading`: Tesseract's reading of the letter, if known; `nxt`:
+    the mask and reading of the letter after it, if any (a lone bar whose next letter carries the hook
+    of ि is that ि: it stays)."""
     if box[0] - (prev_box[0] + prev_box[2]) > cfg.bar_max_gap * width:
         return None
     if lone_bar(mask, width, cfg):
-        if ends_with_bar(prev_mask, width, cfg):
+        if ends_with_bar(prev_mask, width, cfg) or I_SIGN in reading:
+            return None
+        if nxt is not None and i_hook_starts(nxt[0], width, cfg, nxt[1]):
             return None
         whole = joined(prev_box, prev_mask, box, mask)
         return (whole, None) if whole is not None else None
@@ -248,10 +284,13 @@ def move_bars(letters, cfg: Config):
         return letters
     width = float(np.median([x.box[2] for x in lets]))
     out: List = []
-    for x in sorted(letters, key=lambda x: (x.line, x.pos)):
+    order = sorted(letters, key=lambda x: (x.line, x.pos))
+    for i, x in enumerate(order):
         prev = out[-1] if out else None
         if prev is not None and prev.kind == x.kind == "letter" and prev.line == x.line:
-            found = plan_pair(prev.box, prev.mask, x.box, x.mask, width, cfg, x.text)
+            after = order[i + 1] if i + 1 < len(order) and order[i + 1].line == x.line else None
+            found = plan_pair(prev.box, prev.mask, x.box, x.mask, width, cfg, x.text,
+                              (after.mask, after.text) if after is not None else None)
             if found is not None and found[1] is None:        # a bar on its own: joined to the letter before
                 (lbox, lmask), _ = found
                 ptext = prev.text + x.text if x.text.startswith(AA) else prev.text

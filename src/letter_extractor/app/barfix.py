@@ -73,7 +73,15 @@ def plan_book(lib: Library, book_id: int, progress=None, cancel: Optional[Callab
                                                           time.time() - t))
             t = time.time()
 
-        for x in smps:
+        cache: Dict[int, np.ndarray] = {}
+
+        def mask_of(smp: Sample) -> np.ndarray:
+            if smp.id not in cache:
+                cache.clear() if len(cache) > 8 else None
+                cache[smp.id] = _sample_mask(lib, book, smp)
+            return cache[smp.id]
+
+        for i, x in enumerate(smps):
             if x.page_id != page_id:
                 page_done(page_id)
                 page_id = x.page_id
@@ -83,10 +91,15 @@ def plan_book(lib: Library, book_id: int, progress=None, cancel: Optional[Callab
             if not usable:
                 prev = prev_mask = None
                 continue
-            mask = _sample_mask(lib, book, x)
+            mask = mask_of(x)
             if prev is not None and prev.page_id == x.page_id and prev.line_number == x.line_number:
+                after = smps[i + 1] if i + 1 < len(smps) else None
+                if after is None or after.page_id != x.page_id or after.line_number != x.line_number \
+                        or not after.mask:
+                    after = None
                 found = plan_pair((prev.x, prev.y, prev.w, prev.h), prev_mask, (x.x, x.y, x.w, x.h), mask, width, cfg,
-                                  reading.get(x.id, ""))
+                                  reading.get(x.id, ""),
+                                  (mask_of(after), reading.get(after.id, "")) if after is not None else None)
                 if found is not None:
                     plans.append((prev.id, x.id, found[0], found[1]))
                     prev = prev_mask = None              # this letter changes: not the one before the next
