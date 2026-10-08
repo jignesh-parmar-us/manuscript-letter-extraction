@@ -202,9 +202,11 @@ describe("suggestions on a group", () => {
     await user.keyboard("{Shift>}");
     await user.click(tiles[2]);
     await user.keyboard("{/Shift}");
-    expect(bulk).toHaveTextContent("Remove readings (2)");                        // letters 1 and 2 have readings
+    expect(bulk).toHaveTextContent("Remove readings (1)");                        // only letter 2 has a badge
     await userEvent.click(bulk);
-    expect(api.removeReadings).toHaveBeenLastCalledWith(1, [1, 2]);
+    expect(api.removeReadings).toHaveBeenLastCalledWith(1, [2]);
+    await user.click(tiles[0]);                                                   // read as the group's letter
+    expect(bulk).toBeDisabled();
   });
 
   it("moves a letter to its reading's group from the green chip, or the selected letters", async () => {

@@ -36,10 +36,11 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const [dialog, confirm] = useConfirm();
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
-  const withReading = samples.filter((s) => selection.ids.has(s.id) && s.reading).map((s) => s.id);
   const expected = expectedReading(group);
-  // selected letters read as another letter than the group's: they can go to that letter's group
+  // selected letters read as another letter than the group's (the ones with a badge): their reading can
+  // be removed (wrong) or followed to that letter's group (right); readings of the group's letter stay
   const readOther = samples.filter((s) => selection.ids.has(s.id) && s.reading && s.reading.label_dev !== expected);
+  const withReading = readOther.map((s) => s.id);
 
   const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
   const open = (s: Sample) =>
@@ -199,7 +200,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
           <button
             disabled={!withReading.length}
             onClick={() => act(() => api.removeReadings(bookId, withReading)).then(() => setSelection(emptySelection()))}
-            title="The selected letters' readings are wrong: remove them (the letters stay in the group)"
+            title="The selected letters' readings (their badges) are wrong: remove them (the letters stay in the group)"
           >
             Remove readings{withReading.length ? ` (${withReading.length})` : ""}
           </button>
