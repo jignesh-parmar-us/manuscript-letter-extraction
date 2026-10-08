@@ -216,6 +216,45 @@ class BookTests(unittest.TestCase):
     def tearDown(self):
         appbook.cleanup(self.tmp, self.lib)
 
+    def test_the_new_letters_keep_tesseracts_readings(self):
+        from unittest import mock
+        from sqlalchemy import select
+        from letter_extractor.app import actions as A
+        from letter_extractor.app.barfix import carry_readings
+        from letter_extractor.app.db import OcrReading, OcrRun, Page, Sample
+        from letter_extractor.app.samples import _sample_mask
+        self.lib.set_book_writing(self.book, "printed")
+        with self.lib.session() as s:
+            page = s.scalar(select(Page.id).where(Page.book_id == self.book))
+            a, b = s.scalars(select(Sample).where(Sample.page_id == page, Sample.line_number == 1)
+                             .order_by(Sample.x)).all()[:2]
+            book = self.lib.get_book(self.book)
+            ma, mb = _sample_mask(self.lib, book, a), _sample_mask(self.lib, book, b)
+            plan = (a.id, b.id, ((a.x, a.y, a.w, a.h), ma), ((b.x, b.y, b.w, b.h), mb))
+            run = OcrRun(book_id=self.book, engine="tesseract", finished_at=a.created_at)
+            s.add(run)
+            s.flush()
+            s.add(OcrReading(run_id=run.id, sample_id=a.id, text_dev="न", confidence=90, overlap=1))
+            s.add(OcrReading(run_id=run.id, sample_id=b.id, text_dev="ार", confidence=80, overlap=1))
+            run_id = run.id
+        with mock.patch("letter_extractor.app.barfix.plan_book", return_value=[plan]):
+            r = fix_bars(self.lib, self.book)
+        self.assertEqual(r["readings"], 2)
+
+        def readings():
+            with self.lib.session() as s:
+                return dict(s.execute(select(Sample.x, OcrReading.text_dev).join(OcrReading, OcrReading.sample_id == Sample.id)
+                                      .where(OcrReading.run_id == run_id, Sample.deleted.is_(False),
+                                             Sample.source == "bar")).all())
+        got = readings()
+        self.assertEqual(sorted(got.values()), ["न", "र"])                     # the rest without its aa
+        with self.lib.session() as s:
+            right = s.scalar(select(Sample.id).where(Sample.source == "bar", Sample.deleted.is_(False),
+                                                     Sample.x == max(got)))
+        A.remove_readings(self.lib, self.book, [right], "tesseract")
+        self.assertEqual(carry_readings(self.lib, self.book), 0)                # a removed reading stays removed
+        self.assertEqual(sorted(readings().values()), ["न"])
+
     def test_handwritten_books_are_refused(self):
         self.lib.set_book_writing(self.book, "handwritten")
         with self.assertRaises(LibraryError):

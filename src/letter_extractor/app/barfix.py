@@ -17,6 +17,7 @@ now another letter, न became ना):
 """
 from __future__ import annotations
 
+import json
 import time
 from statistics import median
 from typing import Callable, Dict, List, Optional, Tuple
@@ -27,7 +28,7 @@ from sqlalchemy import select
 from ..bars import AA, plan_pair
 from ..mapping import LabelError, canonical_label, mapping_for
 from .actions import _Change, _result
-from .db import Book, LetterGroup, OcrReading, Page, Sample
+from .db import Action, Book, LetterGroup, OcrReading, Page, Sample
 from .library import Cancelled, Library, LibraryError
 from .recut import _labelled_centres
 from .suggest import LineDone, _run_id
@@ -125,12 +126,72 @@ def _nearest(fp: np.ndarray, targets: Dict[str, Tuple[int, np.ndarray]], cfg,
     return best
 
 
+def carry_readings(lib: Library, book_id: int) -> int:
+    """The letters made by Fix ा bars get the Tesseract reading of the letter they replaced (the one they
+    overlap most on their line), without a leading aa where the bar went to the letter before (ाटे -> टे).
+    Letters that have a reading, or had one removed by the user (Remove readings), are left alone.
+    Readings are not part of the undo history: they are what Tesseract read, kept for the new letters.
+    Returns the number of readings added."""
+    added = 0
+    with lib.session() as s:
+        run = _run_id(s, book_id)
+        if run is None:
+            return 0
+        reading = {r.sample_id: r for r in s.scalars(select(OcrReading).where(OcrReading.run_id == run))}
+        removed: set = set()
+        made_by: Dict[int, List[int]] = {}
+        for kind, payload in s.execute(select(Action.kind, Action.payload).where(
+                Action.book_id == book_id, Action.kind.in_(("fix_bars", "remove_readings"))).order_by(Action.id)):
+            data = json.loads(payload)
+            if kind == "remove_readings":
+                removed |= {int(r["sample_id"]) for r in data.get("readings_removed", [])}
+                continue
+            before, after = data.get("samples_before", {}), data.get("samples_after", {})
+            gone = [int(k) for k, v in before.items() if not v.get("deleted") and after.get(k, {}).get("deleted")]
+            made = [int(k) for k, v in before.items() if v.get("deleted") and k in after and not after[k].get("deleted")]
+            for m in made:
+                made_by[m] = gone
+        todo = [m for m in made_by if m not in reading and m not in removed]
+        if not todo:
+            return 0
+        olds = {g for m in todo for g in made_by[m] if g in reading}
+        boxes = {x.id: x for x in s.scalars(select(Sample).where(Sample.id.in_(olds | set(todo))))}
+        by_line: Dict[Tuple, List[Sample]] = {}
+        for g in olds:
+            o = boxes.get(g)
+            if o is not None:
+                by_line.setdefault((o.page_id, o.line_number), []).append(o)
+        for m in todo:
+            new = boxes.get(m)
+            if new is None or new.deleted:
+                continue
+            best, overlap = None, 0
+            for o in by_line.get((new.page_id, new.line_number), []):
+                ov = min(o.x + o.w, new.x + new.w) - max(o.x, new.x)
+                if ov > overlap:
+                    best, overlap = o, ov
+            if best is None:
+                continue
+            old = reading[best.id]
+            text = old.text_dev
+            if text.startswith(AA):                                  # no letter starts with the aa sign:
+                text = text[1:]                                      # its bar went to the letter before
+            if not text:
+                continue
+            s.add(OcrReading(run_id=run, sample_id=m, text_dev=text, confidence=old.confidence,
+                             alternatives=old.alternatives, overlap=old.overlap))
+            added += 1
+    return added
+
+
 def fix_bars(lib: Library, book_id: int, progress=None, cancel: Optional[Callable[[], bool]] = None) -> Dict:
-    """Plan and apply as one action; nothing changes when nothing is found."""
+    """Plan and apply as one action; nothing changes when nothing is found. Before and after, the letters
+    made by this and earlier runs get the readings of the letters they replaced (carry_readings)."""
     t0 = time.time()
+    carried = carry_readings(lib, book_id)
     plans = plan_book(lib, book_id, progress, cancel)
     if not plans:
-        return {"bars": 0, "placed": 0, "unsure": 0, "seconds": round(time.time() - t0, 1)}
+        return {"bars": 0, "placed": 0, "unsure": 0, "readings": carried, "seconds": round(time.time() - t0, 1)}
     with lib.session() as s:
         book = s.get(Book, book_id)
         cfg = lib.book_config(book)
@@ -172,5 +233,7 @@ def fix_bars(lib: Library, book_id: int, progress=None, cancel: Optional[Callabl
                     unsure += 1
         joined = sum(p[3] is None for p in plans)
         a = ch.finish("fix_bars", {"bars": len(plans), "joined": joined, "placed": placed, "unsure": unsure})
-        return {**_result(a), "bars": len(plans), "joined": joined, "placed": placed, "unsure": unsure,
-                "seconds": round(time.time() - t0, 1)}
+        result = {**_result(a), "bars": len(plans), "joined": joined, "placed": placed, "unsure": unsure}
+    result["readings"] = carried + carry_readings(lib, book_id)
+    result["seconds"] = round(time.time() - t0, 1)
+    return result

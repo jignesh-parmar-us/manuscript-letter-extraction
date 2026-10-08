@@ -270,6 +270,7 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
             {Number(job.result.bars)
               ? `${job.result.bars} bars given back to their letter (${Number(job.result.joined) || 0} of them standing alone, like the stem of ણ): ${job.result.placed} new letters went into groups by shape, ${job.result.unsure} are in Unsure. Undo takes it all back.`
               : "No ા bar on the wrong letter found."}
+            {Number(job.result.readings) > 0 && ` ${job.result.readings} letters made by the fix got back Tesseract's reading of the letters they replaced.`}
           </span>
         )}
         {splitNote && <span>{splitNote}</span>}
