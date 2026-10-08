@@ -148,6 +148,8 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **A soft bar edge** (2026-10-08, the user's माटे samples 71215, 71071, 75571, 82356): each refused by "letter body left of the bar", which was the bar's own edge, one column with 14% to 64% ink. Letting any partly inked columns count as the edge found 499 more on book 6, many wrong (the loop of म, स, व taken as the edge); limited to two columns: 368, then 129 more at 10% ink. Of these, looked at with the cut drawn: nearly all right (ા bars, ો bars, the stems of ण, ग and श), and one wrong kind: a lone bar that is the ि of the next letter whose hook sits on that letter (ते|नि). Checking the next letter for an i hook without a bar of its own (shape, or Tesseract's ि) drops 18, mostly those ि and a few unclear ones. Book 6 now: 572 fixes, all 4 samples among them.
 
+**The aa of a whole ण, ग, श** (2026-10-08): 17 letters on book 6 where the letter before is one of these with its stem, and the next starts with or is a bar. Read by Tesseract as णा/गा/शा: 15, all real; as ण/ग: 2, not (पण|काय, ग|ल्य). With the reading as the condition: 13 taken in one run, 2 more in a second run (their शा was itself changed by a fix next to it). Book 6: 583 fixes.
+
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
 ## C13. Suggestions from other labelled books (2026-10-06)

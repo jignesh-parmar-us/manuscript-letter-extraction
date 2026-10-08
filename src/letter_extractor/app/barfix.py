@@ -99,7 +99,8 @@ def plan_book(lib: Library, book_id: int, progress=None, cancel: Optional[Callab
                     after = None
                 found = plan_pair((prev.x, prev.y, prev.w, prev.h), prev_mask, (x.x, x.y, x.w, x.h), mask, width, cfg,
                                   reading.get(x.id, ""),
-                                  (mask_of(after), reading.get(after.id, "")) if after is not None else None)
+                                  (mask_of(after), reading.get(after.id, "")) if after is not None else None,
+                                  reading.get(prev.id, ""))
                 if found is not None:
                     plans.append((prev.id, x.id, found[0], found[1]))
                     prev = prev_mask = None              # this letter changes: not the one before the next

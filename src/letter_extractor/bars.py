@@ -37,6 +37,13 @@ from .config import Config
 AA = "\u093E"   # ा
 E_SIGNS = ("\u0947", "\u0948")   # े ै
 I_SIGN = "\u093F"                 # ि
+STEM_LETTERS = ("\u0923", "\u0917", "\u0936")   # ण ग श: a stem apart from the body, which looks like a bar
+
+
+def _stem_with_aa(prev_reading: str) -> bool:
+    """The letter before ends with the stem of ण, ग or श (which looks like a bar of its own), and
+    Tesseract read it with aa (णा): its aa bar is the one cut off after it."""
+    return prev_reading.endswith(AA) and prev_reading[-2:-1] in STEM_LETTERS
 
 
 def _headline(mask: np.ndarray) -> Tuple[int, int]:
@@ -251,23 +258,25 @@ def i_hook_starts(mask: np.ndarray, width: float, cfg: Config, reading: str = ""
 
 
 def plan_pair(prev_box, prev_mask, box, mask, width: float, cfg: Config, reading: str = "",
-              nxt: Optional[Tuple[np.ndarray, str]] = None):
+              nxt: Optional[Tuple[np.ndarray, str]] = None, prev_reading: str = ""):
     """For a letter and the one before it on the line: the two new (box, mask) pairs when the letter
     starts with the stray aa bar of the one before; (the letter before with the bar, None) when the
     letter is only that bar; else None. `reading`: Tesseract's reading of the letter, if known; `nxt`:
     the mask and reading of the letter after it, if any (a lone bar whose next letter carries the hook
-    of ि is that ि: it stays)."""
+    of ि is that ि: it stays); `prev_reading`: Tesseract's reading of the letter before (a whole ण read as
+    णा gets its aa bar although its stem looks like a bar of its own)."""
     if box[0] - (prev_box[0] + prev_box[2]) > cfg.bar_max_gap * width:
         return None
+    has_bar = ends_with_bar(prev_mask, width, cfg) and not _stem_with_aa(prev_reading)
     if lone_bar(mask, width, cfg):
-        if ends_with_bar(prev_mask, width, cfg) or I_SIGN in reading:
+        if has_bar or I_SIGN in reading:
             return None
         if nxt is not None and i_hook_starts(nxt[0], width, cfg, nxt[1]):
             return None
         whole = joined(prev_box, prev_mask, box, mask)
         return (whole, None) if whole is not None else None
     gap = stray_bar(mask, width, cfg, reading)
-    if gap is None or ends_with_bar(prev_mask, width, cfg):
+    if gap is None or has_bar:
         return None
     bar, rest = split_bar(mask, gap, width)
     left = joined(prev_box, prev_mask, box, bar)
@@ -290,7 +299,7 @@ def move_bars(letters, cfg: Config):
         if prev is not None and prev.kind == x.kind == "letter" and prev.line == x.line:
             after = order[i + 1] if i + 1 < len(order) and order[i + 1].line == x.line else None
             found = plan_pair(prev.box, prev.mask, x.box, x.mask, width, cfg, x.text,
-                              (after.mask, after.text) if after is not None else None)
+                              (after.mask, after.text) if after is not None else None, prev.text)
             if found is not None and found[1] is None:        # a bar on its own: joined to the letter before
                 (lbox, lmask), _ = found
                 ptext = prev.text + x.text if x.text.startswith(AA) else prev.text

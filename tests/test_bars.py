@@ -115,6 +115,17 @@ class RuleTests(unittest.TestCase):
         own[10:58, 0:5] = True                                                       # the next letter has its own bar
         self.assertIsNotNone(plan_pair(*args, nxt=(own, "नि")))
 
+    def test_a_whole_na_read_with_aa_gets_its_bar(self):
+        na = headline(np.zeros((H, 40), bool), 0, 40)                                # ण with its stem apart
+        na[14:50, 2:6] = na[14:50, 20:24] = na[46:50, 2:24] = True
+        na[10:58, 32:37] = True
+        self.assertTrue(ends_with_bar(na, W, self.cfg))                              # the stem looks like a bar
+        args = ((100, 50, 40, H), na, (141, 50, 46, H), bar_then_letter(), W, self.cfg)
+        self.assertIsNone(plan_pair(*args))                                          # no reading: left alone
+        self.assertIsNone(plan_pair(*args, prev_reading="ण"))                        # read without aa: left alone
+        self.assertIsNotNone(plan_pair(*args, prev_reading="णा"))                    # read णा: the bar is its aa
+        self.assertIsNone(plan_pair(*args, prev_reading="ना"))                       # न has no stem apart
+
     def test_a_bar_on_its_own(self):
         stem = headline(np.zeros((H, 14), bool), 0, 14)                              # ण's stem with its headline
         stem[10:58, 4:9] = True
