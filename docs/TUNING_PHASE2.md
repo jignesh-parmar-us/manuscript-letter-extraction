@@ -144,6 +144,8 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **The e sign of the next letter** (2026-10-08, reported for ક્યારે): on a fresh copy of book 6 (already fixed once), 182 letters start with a bar but have a wide mark over it. By the height of the mark's left end above the headline: 37 high (read as रे 11, ने 6, ते 5, वे 4 ... but also वि, रि, द्दि), 145 low (नि 22, रि 21, वि 19, ति 11 ...: the i hook). Shape and reading together (left end high, read with े or ै and no ि): 32 letters, all right by eye, among them 5 ક્યારે. Book 3 (cut by shape, read by Tesseract): 228 plain bars + 20 under an e sign, 25 and 20 looked at, all right. (Book 3's earlier count of 61 was taken before the "letter before has a bar of its own" test was fixed.)
 
+**The stem of ण** (2026-10-08, reported by the user): book 6 has 278 letters labelled or read ण; 172 hold their stem, 106 do not. Their stem went to the next letter (51, refused because of the stem's foot curling left, or because nothing followed it) or stood alone (52, often labelled ण itself). Allowing the foot and joining lone bars with a piece of headline: 76 joins and 26 moves on the book (with ग stems, ा and ो bars cut off the same way); 30 joins and 30 moves looked at: 2 joins were the ि of हि and रि, removed by the lean of the mark above (right: ि; left: ो); after that, all right. Applied on a copy: 102 fixes in 26 s, 76 letters fewer, undo and redo exact.
+
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
 ## C13. Suggestions from other labelled books (2026-10-06)

@@ -3,7 +3,9 @@
 The same rule as at capture (`bars.py`), on the stored samples: a letter that starts with the aa bar
 of the letter before it (नार cut as न + ार) is cut after the bar, and the bar is joined to the letter
 before (ना + र). Tesseract's readings of the book, if it was read, let a bar under the e sign of the next
-letter move too (तारे, bars.py). Letters in locked groups are left alone. All changes are one undoable action.
+letter move too (तारे, bars.py). A letter that is only a bar with a piece of headline (the stem of ण
+cut off on its own, or an aa bar) is joined to the letter before. Letters in locked groups are left
+alone. All changes are one undoable action.
 
 The new letters go where their shape says, not where the old ones were (the old letter before is
 now another letter, न became ना):
@@ -31,7 +33,8 @@ from .recut import _labelled_centres
 from .suggest import LineDone, _run_id
 from .samples import _new_sample, _sample_mask, page_ink
 
-Plan = Tuple[int, int, Tuple, Tuple]      # letter before, letter, (box, mask) of each new letter
+Plan = Tuple[int, int, Tuple, Optional[Tuple]]   # letter before, letter, (box, mask) of each new letter (one when
+                                                 # the letter was only a bar: the stem of ण, an aa bar on its own)
 
 # signs that end an akshara: no aa after them
 _ENDS = set("ािीुूृॄेैोौंःँ")
@@ -138,9 +141,14 @@ def fix_bars(lib: Library, book_id: int, progress=None, cancel: Optional[Callabl
                 except LabelError:
                     want_left = None
             want_right = ll[1:] if ll.startswith(AA) else ll
+            if right is None:                                   # a bar on its own, joined to the letter before:
+                # an aa bar makes न ना; the stem of ण makes it whole, and may have carried its label
+                want_left = want_left if ll.startswith(AA) else (ll or lb or None)
             for sid in (before_id, letter_id):
                 old[sid].deleted, old[sid].group_id = True, None
-            for (box, mask), want in ((left, want_left), (right, want_right or None)):
+            for (box, mask), want in ((left, want_left), (right or (None, None), want_right or None)):
+                if box is None:
+                    continue
                 smp = _new_sample(s, ch, lib, book, page, prepared[page.id], box, mask, "bar", kind="letter")
                 gid = _nearest(np.frombuffer(smp.fingerprint, np.float32), targets, cfg, want)
                 if gid is not None:
@@ -148,6 +156,7 @@ def fix_bars(lib: Library, book_id: int, progress=None, cancel: Optional[Callabl
                     placed += 1
                 else:
                     unsure += 1
-        a = ch.finish("fix_bars", {"bars": len(plans), "placed": placed, "unsure": unsure})
-        return {**_result(a), "bars": len(plans), "placed": placed, "unsure": unsure,
+        joined = sum(p[3] is None for p in plans)
+        a = ch.finish("fix_bars", {"bars": len(plans), "joined": joined, "placed": placed, "unsure": unsure})
+        return {**_result(a), "bars": len(plans), "joined": joined, "placed": placed, "unsure": unsure,
                 "seconds": round(time.time() - t0, 1)}

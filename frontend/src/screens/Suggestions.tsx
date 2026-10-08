@@ -120,7 +120,8 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
   async function fixBars() {
     const ok = await confirm(
       "Give ા bars back to their letter where the cutting joined them to the next one (નાર cut as ન + ાર " +
-        "becomes ના + ર)? Only plain bars move: a bar with a hook above it (the િ of રવિ) is never touched. " +
+        "becomes ના + ર), and join bars cut off on their own (the stem of ણ) to the letter before? A bar with " +
+        "the hook of િ above it (રવિ) is never touched. " +
         "The new letters go into the group their shape matches, the rest to Unsure. Undo takes all of it back in one step.",
       "Fix ા bars",
     );
@@ -267,7 +268,7 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         {job?.kind === "fix_bars" && job.status === "done" && job.result && (
           <span>
             {Number(job.result.bars)
-              ? `${job.result.bars} ા bars given back to their letter: ${job.result.placed} new letters went into groups by shape, ${job.result.unsure} are in Unsure. Undo takes it all back.`
+              ? `${job.result.bars} bars given back to their letter (${Number(job.result.joined) || 0} of them standing alone, like the stem of ણ): ${job.result.placed} new letters went into groups by shape, ${job.result.unsure} are in Unsure. Undo takes it all back.`
               : "No ા bar on the wrong letter found."}
           </span>
         )}

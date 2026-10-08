@@ -89,23 +89,72 @@ def stray_bar(mask: np.ndarray, width: float, cfg: Config, reading: str = "") ->
     start, end = run
     if end - start > cfg.bar_max_width * width:
         return None
-    if body[:, :start].sum() > 0.1 * body.shape[0]:           # a letter body left of the bar
+    if _body_left(body, start):
         return None
     gap = next((c for c in range(end, min(w, end + reach)) if frac[c] <= cfg.bar_gap_fill), None)
     if gap is None or (body[:, gap:].sum(axis=0) > 0).sum() < cfg.bar_min_rest * width:
         return None
     # the i hook: a wide mark starting over the bar. The e sign of the next letter (तारे, ક્યારે) looks
     # alike there; it lets the bar move only when its shape says e AND Tesseract read an e sign and no i
+    if _hook_over(mask, top, end, width, cfg, reading):
+        return None
+    return gap
+
+
+def _body_left(body: np.ndarray, start: int) -> bool:
+    """Ink of a letter body left of a bar. The foot of a stem may curl left at the bottom (the stem of ण
+    in this print), so the lowest rows do not count."""
+    upper = body[:max(1, int(0.7 * body.shape[0]))]
+    return upper[:, :start].sum() > 0.1 * body.shape[0]
+
+
+def _hook_over(mask: np.ndarray, top: int, end: int, width: float, cfg: Config, reading: str) -> bool:
+    """A wide mark above the headline starting over the bar (the i hook), unless it is the e sign of the
+    next letter by shape AND by Tesseract's reading."""
     read_e = any(e in reading for e in E_SIGNS) and I_SIGN not in reading
     above = mask[:max(0, top - 1)].astype(np.uint8)
+    if not above.any():
+        return False
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(above, connectivity=8)
+    for k in range(1, n):
+        x0, _, ww, _, area = stats[k]
+        if x0 <= end + 0.15 * width and ww >= 0.4 * width and area >= cfg.mark_min_px:
+            if not (read_e and _e_sign(lab, k, x0, ww, top, cfg)):
+                return True
+    return False
+
+
+def lone_bar(mask: np.ndarray, width: float, cfg: Config) -> bool:
+    """The letter is a bar and nothing else, with a piece of headline: the stem of ण or an aa bar cut off
+    on its own. A danda has no headline; the i sign (ि) has its hook and stays."""
+    h, w = mask.shape
+    top, bot = _headline(mask)
+    body = mask[bot + 1:]
+    if body.shape[0] < 5 or w < 2:
+        return False
+    frac = body.mean(axis=0)
+    run = _bar_run(frac, range(min(w, max(3, int(cfg.bar_max_width * width)))), cfg.bar_fill)
+    if run is None or run[1] - run[0] > cfg.bar_max_width * width or _body_left(body, run[0]):
+        return False
+    if (body[:, run[1]:].sum(axis=0) > 0).sum() >= cfg.bar_min_rest * width:
+        return False                                           # a letter body follows: not alone
+    head = int(mask[top:bot + 1].sum(axis=1).max())
+    if head < (run[1] - run[0]) + cfg.bar_head_extra_px:
+        return False                                           # no headline wider than the stem: a danda
+    if _hook_over(mask, top, run[1], width, cfg, ""):
+        return False
+    # a mark above the bar that leans right is the hook of ि (its next letter): stays; one leaning
+    # left (the sign of ो over the letter before) goes with the bar
+    above = mask[:max(0, top - 1)].astype(np.uint8)
     if above.any():
-        n, lab, stats, _ = cv2.connectedComponentsWithStats(above, connectivity=8)
+        centre = (run[0] + run[1]) / 2
+        n, _, stats, cents = cv2.connectedComponentsWithStats(above, connectivity=8)
         for k in range(1, n):
-            x0, _, ww, _, area = stats[k]
-            if x0 <= end + 0.15 * width and ww >= 0.4 * width and area >= cfg.mark_min_px:
-                if not (read_e and _e_sign(lab, k, x0, ww, top, cfg)):
-                    return None
-    return gap
+            x0, ww, area = stats[k, 0], stats[k, 2], stats[k, 4]
+            if area >= cfg.mark_min_px and x0 <= run[1] + 2 and x0 + ww >= run[0] - 2 \
+                    and cents[k][0] > centre + 0.1 * width:
+                return False
+    return True
 
 
 def ends_with_bar(mask: np.ndarray, width: float, cfg: Config) -> bool:
@@ -172,10 +221,15 @@ def joined(a_box, a_mask, b_box, b_mask):
 
 def plan_pair(prev_box, prev_mask, box, mask, width: float, cfg: Config, reading: str = ""):
     """For a letter and the one before it on the line: the two new (box, mask) pairs when the letter
-    starts with the stray aa bar of the one before, else None. `reading`: Tesseract's reading of the
-    letter, if known."""
+    starts with the stray aa bar of the one before; (the letter before with the bar, None) when the
+    letter is only that bar; else None. `reading`: Tesseract's reading of the letter, if known."""
     if box[0] - (prev_box[0] + prev_box[2]) > cfg.bar_max_gap * width:
         return None
+    if lone_bar(mask, width, cfg):
+        if ends_with_bar(prev_mask, width, cfg):
+            return None
+        whole = joined(prev_box, prev_mask, box, mask)
+        return (whole, None) if whole is not None else None
     gap = stray_bar(mask, width, cfg, reading)
     if gap is None or ends_with_bar(prev_mask, width, cfg):
         return None
@@ -198,6 +252,11 @@ def move_bars(letters, cfg: Config):
         prev = out[-1] if out else None
         if prev is not None and prev.kind == x.kind == "letter" and prev.line == x.line:
             found = plan_pair(prev.box, prev.mask, x.box, x.mask, width, cfg, x.text)
+            if found is not None and found[1] is None:        # a bar on its own: joined to the letter before
+                (lbox, lmask), _ = found
+                ptext = prev.text + x.text if x.text.startswith(AA) else prev.text
+                out[-1] = replace(prev, box=lbox, mask=lmask, rules=prev.rules + ["lone-bar-back"], text=ptext)
+                continue
             if found is not None:
                 (lbox, lmask), (rbox, rmask) = found
                 # Tesseract's texts (cut by its reading): the aa goes along if it was read with the bar
@@ -205,4 +264,10 @@ def move_bars(letters, cfg: Config):
                 out[-1] = replace(prev, box=lbox, mask=lmask, rules=prev.rules + ["aa-bar-back"], text=ptext)
                 x = replace(x, box=rbox, mask=rmask, rules=x.rules + ["aa-bar-given"], text=text)
         out.append(x)
+    for i, x in enumerate(out):                               # positions in the line again, after joins
+        if i == 0 or out[i - 1].line != x.line:
+            n = 0
+        n += 1
+        if x.pos != n:
+            out[i] = replace(x, pos=n)
     return out

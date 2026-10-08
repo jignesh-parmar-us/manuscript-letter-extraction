@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient                           # noqa: E402
 from letter_extractor.app.api import create_app                    # noqa: E402
 from letter_extractor.app.barfix import fix_bars                    # noqa: E402
 from letter_extractor.app.library import LibraryError              # noqa: E402
-from letter_extractor.bars import ends_with_bar, move_bars, plan_pair, split_bar, stray_bar   # noqa: E402
+from letter_extractor.bars import ends_with_bar, lone_bar, move_bars, plan_pair, split_bar, stray_bar   # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.letters import Letter                         # noqa: E402
 
@@ -80,6 +80,46 @@ class RuleTests(unittest.TestCase):
         bar, rest = split_bar(m, stray_bar(m, W, self.cfg, "रे"), W)
         self.assertFalse(bar[:9, 12:].any())                                         # the e sign stays with its letter
         self.assertTrue(rest[:9].any())
+
+    def test_a_stem_with_a_foot_curling_left(self):
+        m = bar_then_letter()
+        m[52:58, 0:3] = True                                                         # the foot of ण's stem
+        self.assertIsNotNone(stray_bar(m, W, self.cfg))
+
+    def test_a_bar_on_its_own(self):
+        stem = headline(np.zeros((H, 14), bool), 0, 14)                              # ण's stem with its headline
+        stem[10:58, 4:9] = True
+        self.assertTrue(lone_bar(stem, W, self.cfg))
+        danda = np.zeros((H, 9), bool)                                               # no headline: a danda
+        danda[10:58, 2:7] = True
+        self.assertFalse(lone_bar(danda, W, self.cfg))
+        i_sign = headline(np.zeros((H, 24), bool), 0, 24)
+        i_sign[10:58, 4:9] = True
+        i_sign[2:8, 6:24] = True                                                     # a hook leaning right: ि
+        self.assertFalse(lone_bar(i_sign, W, self.cfg))
+        o_sign = stem.copy()
+        o_sign[2:8, 0:7] = True                                                      # a mark leaning left: ो
+        self.assertTrue(lone_bar(o_sign, W, self.cfg))
+        self.assertFalse(lone_bar(bar_then_letter(), W, self.cfg))                   # a letter follows the bar
+        body = headline(body_only := np.zeros((H, 34), bool), 0, 34)                 # ण without its stem
+        body[14:50, 2:6] = body[14:50, 20:24] = body[46:50, 2:24] = True
+        (whole, none) = plan_pair((100, 50, 34, H), body, (136, 50, 14, H), stem, W, self.cfg)
+        self.assertIsNone(none)
+        self.assertEqual((whole[0][0], whole[0][0] + whole[0][2]), (100, 150))       # one letter again
+
+    def test_capture_joins_a_lone_bar_and_numbers_the_line_again(self):
+        body = headline(np.zeros((H, 34), bool), 0, 34)
+        body[14:50, 2:6] = body[14:50, 20:24] = body[46:50, 2:24] = True
+        stem = headline(np.zeros((H, 14), bool), 0, 14)
+        stem[10:58, 4:9] = True
+        nxt = headline(body_only := np.zeros((H, 34), bool), 0, 34)
+        nxt[14:58, 26:31] = True
+        letters = [Letter(1, 1, (100, 50, 34, H), body, "black", "letter", 1, text="ण"),
+                   Letter(1, 2, (136, 50, 14, H), stem, "black", "letter", 1, text=""),
+                   Letter(1, 3, (200, 50, 34, H), nxt, "black", "letter", 1, text="त")]
+        out = move_bars(letters, Config())
+        self.assertEqual([(x.pos, x.text) for x in out], [(1, "ण"), (2, "त")])
+        self.assertIn("lone-bar-back", out[0].rules)
 
     def test_a_dot_over_the_bar_does_not_stop_it(self):
         self.assertIsNotNone(stray_bar(bar_then_letter(dot=True), W, self.cfg))
