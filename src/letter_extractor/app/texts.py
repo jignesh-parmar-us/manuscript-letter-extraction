@@ -110,13 +110,16 @@ def live_lines(s, page_id: int, stored: List[List[Dict]], mapping, proofread: Op
     group shows its label (source "label", sure; the reading it replaced stays in `read_dev`), letters of
     samples that are gone (split, joined, deleted) give way to the samples made since, and the letters
     of proofread lines are sure."""
-    rows = s.execute(select(Sample, LetterGroup.label_dev).outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
+    # only the columns needed (not the fingerprints): a whole book's pages are listed this way
+    rows = s.execute(select(Sample.id, Sample.x, Sample.y, Sample.w, Sample.h, Sample.line_number, Sample.image,
+                            Sample.part, LetterGroup.label_dev)
+                     .outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
                      .where(Sample.page_id == page_id, Sample.deleted.is_(False))).all()
-    live = {x.id: (x, label or "") for x, label in rows}
+    live = {x.id: (x, x.label_dev or "") for x in rows}
     numbers = _line_numbers(s, page_id)
     index = {n: i for i, n in enumerate(numbers)} if len(numbers) == len(stored) else {}
     known = {x["sample_id"] for line in stored for x in line}
-    new: Dict[int, List[Sample]] = {}
+    new: Dict[int, List] = {}
     for x, _ in live.values():
         if x.id not in known and x.line_number in index:
             new.setdefault(index[x.line_number], []).append(x)

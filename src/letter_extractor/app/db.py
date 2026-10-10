@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import (Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text,
+from sqlalchemy import (Boolean, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, Text,
                         TypeDecorator, UniqueConstraint, event)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -127,6 +127,8 @@ class LetterGroup(Base):
 class Sample(Base):
     """One cut-out letter. `group_id` empty means the sample is unsure."""
     __tablename__ = "sample"
+    # the letter counts read only this index, not the rows (about 6 KB each, the fingerprint): migration 0008
+    __table_args__ = (Index("ix_sample_counts", "book_id", "part", "deleted", "group_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("book.id", ondelete="CASCADE"), index=True)
     page_id: Mapped[Optional[int]] = mapped_column(ForeignKey("page.id", ondelete="CASCADE"), index=True,
