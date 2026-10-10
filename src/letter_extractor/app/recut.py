@@ -269,7 +269,7 @@ def fix_cuts(lib: Library, book_id: int, progress=None, cancel: Optional[Callabl
         shapes = _Shapes(s, book, cfg, cfg.recut_min_group)
         locked = set(s.scalars(select(LetterGroup.id).where(LetterGroup.book_id == book_id, LetterGroup.locked)))
         lines = s.execute(select(Line, Page.line_spacing).join(Page, Line.page_id == Page.id)
-                          .where(Page.book_id == book_id).order_by(Page.id, Line.number)).all()
+                          .where(Page.book_id == book_id, Page.part == "training").order_by(Page.id, Line.number)).all()
         mask_cache: Dict[int, np.ndarray] = {}
 
         def masks(smp: Sample) -> np.ndarray:

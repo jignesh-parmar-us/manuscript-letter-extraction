@@ -1015,3 +1015,16 @@ button.reading-move:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
+
+/* ---- Read Book (C16a) ---- */
+.read-source {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.read-source input {
+  flex: 1;
+}
+.page-nav .page-part {
+  margin-left: auto;
+}

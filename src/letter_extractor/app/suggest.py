@@ -75,9 +75,9 @@ def run_tesseract(lib: Library, book_id: int, progress=None, cancel: Optional[Ca
 
     with lib.session() as s:
         lines = s.execute(select(Line.id, Line.x, Line.image).join(Page, Line.page_id == Page.id)
-                          .where(Page.book_id == book_id).order_by(Page.id, Line.number)).all()
+                          .where(Page.book_id == book_id, Page.part == "training").order_by(Page.id, Line.number)).all()
         samples = s.execute(select(Sample.id, Sample.line_id, Sample.x, Sample.w)
-                            .where(Sample.book_id == book_id, Sample.deleted.is_(False),
+                            .where(Sample.book_id == book_id, Sample.part == "training", Sample.deleted.is_(False),
                                    Sample.line_id.is_not(None))
                             .order_by(Sample.x, Sample.pos)).all()
     by_line: Dict[int, List] = defaultdict(list)
@@ -208,7 +208,8 @@ def run_books(lib: Library, book_id: int, reference: Optional[Sequence[int]] = N
                 rows.append(C)
         C = np.concatenate(rows) if rows else np.zeros((0, 0), np.float32)
         samples = s.execute(select(Sample.id, Sample.fingerprint).where(
-            Sample.book_id == book_id, Sample.deleted.is_(False), Sample.fingerprint.is_not(None))).all()
+            Sample.book_id == book_id, Sample.part == "training", Sample.deleted.is_(False),
+            Sample.fingerprint.is_not(None))).all()
     if C.size == 0:
         raise LibraryError("The chosen books have no labelled groups with samples.")
     k = max(1, min(cfg.books_k, len(labels)))
@@ -595,7 +596,7 @@ def auto_label(s, book: Book, cfg: Config) -> Dict:
     if run_id is not None and centre:
         rows = s.execute(select(Sample, OcrReading.text_dev).join(OcrReading, OcrReading.sample_id == Sample.id)
                          .where(OcrReading.run_id == run_id, Sample.book_id == book.id, Sample.deleted.is_(False),
-                                Sample.group_id.is_(None))).all()
+                                Sample.part == "training", Sample.group_id.is_(None))).all()
         for smp, text in rows:
             hit = centre.get(text)
             if hit is None or smp.fingerprint is None:

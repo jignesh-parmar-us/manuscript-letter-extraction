@@ -73,12 +73,18 @@ export type Writing = "handwritten" | "printed";
 
 export const WRITING_LABEL: Record<Writing, string> = { handwritten: "Handwritten", printed: "Printed" };
 
+export type Part = "training" | "read"; // the two parts of a book (C16a): Training Data, Read Book
+
 export interface BookSummary {
   id: number;
   name: string;
   input_dir: string;
   writing: Writing;
-  pages: number;
+  read_dir: string; // Read Book: a folder of images, or...
+  read_pdf: string; // ...the name of the uploaded PDF (its pages are images in the book folder)
+  read_pages: number; // Read Book pages cut
+  reviewed: number; // letters in reviewed groups
+  pages: number; // Training Data pages
   samples: number;
   groups: number;
   labelled: number;
@@ -106,7 +112,7 @@ export interface JobPage {
 export interface Job {
   id: string;
   book_id: number;
-  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars";
+  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -132,6 +138,8 @@ export interface PageInfo {
   lines: number;
   samples: number;
   image: string;
+  part?: Part;
+  number?: number; // its place in the book
 }
 
 export interface Group {
@@ -297,6 +305,7 @@ export interface PageDetail {
   message: string;
   line_spacing: number;
   image: string;
+  part?: Part;
   lines: LineInfo[];
   samples: Sample[];
 }
@@ -333,8 +342,13 @@ export const api = {
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),
   setSettings: (id: number, settings: Record<string, unknown> | null) =>
     patch<Book>(`/api/books/${id}/settings`, { settings }),
-  pageProblems: (id: number) => get<PageProblem[]>(`/api/books/${id}/page-problems`),
-  pages: (id: number) => get<PageInfo[]>(`/api/books/${id}/pages`),
+  pageProblems: (id: number, part: Part = "training") => get<PageProblem[]>(`/api/books/${id}/page-problems?part=${part}`),
+  pages: (id: number, part: Part = "training") => get<PageInfo[]>(`/api/books/${id}/pages?part=${part}`),
+  readFolder: (id: number, path: string, force = false) => post<Book>(`/api/books/${id}/read/folder`, { path, force }),
+  readPdf: (id: number, path: string, force = false) => post<Job>(`/api/books/${id}/read/pdf`, { path, force }),
+  readCapture: (id: number) => post<Job>(`/api/books/${id}/read/capture`),
+  pagePart: (pageId: number, part: Part, force = false) =>
+    post<{ page: number; part: Part; samples: number }>(`/api/pages/${pageId}/part`, { part, force }),
 
   capture: (id: number, force = false) => post<Job>(`/api/books/${id}/capture`, { force }),
   addPages: (id: number) => post<Job>(`/api/books/${id}/add-pages`),

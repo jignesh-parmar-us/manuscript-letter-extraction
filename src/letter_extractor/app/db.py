@@ -51,6 +51,9 @@ class Book(Base):
     input_dir: Mapped[str] = mapped_column(Text)
     settings: Mapped[str] = mapped_column(Text, default="{}")         # Config as JSON
     writing: Mapped[str] = mapped_column(String(12), default="handwritten")   # handwritten | printed (C10)
+    # Read Book (C16a): a folder of images, or the name of an uploaded PDF whose pages are in read/pages/
+    read_dir: Mapped[str] = mapped_column(Text, default="")
+    read_pdf: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now, onupdate=now)
     captured_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
@@ -63,10 +66,13 @@ class Book(Base):
 
 class Page(Base):
     __tablename__ = "page"
-    __table_args__ = (UniqueConstraint("book_id", "file"),)
+    __table_args__ = (UniqueConstraint("book_id", "folder", "file", name="uq_page_book_folder_file"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("book.id", ondelete="CASCADE"), index=True)
-    file: Mapped[str] = mapped_column(String(500))                   # file name in the input folder
+    file: Mapped[str] = mapped_column(String(500))                   # file name in its folder
+    part: Mapped[str] = mapped_column(String(10), default="training")    # training | read: how it is used (C16a)
+    folder: Mapped[str] = mapped_column(String(10), default="training")  # training | read: where its file is
+    number: Mapped[int] = mapped_column(Integer, default=0)              # its place in the book
     sha256: Mapped[str] = mapped_column(String(64), default="")
     width: Mapped[int] = mapped_column(Integer, default=0)
     height: Mapped[int] = mapped_column(Integer, default=0)
@@ -124,6 +130,7 @@ class Sample(Base):
     book_id: Mapped[int] = mapped_column(ForeignKey("book.id", ondelete="CASCADE"), index=True)
     page_id: Mapped[Optional[int]] = mapped_column(ForeignKey("page.id", ondelete="CASCADE"), index=True,
                                                    nullable=True)        # empty for uploaded samples
+    part: Mapped[str] = mapped_column(String(10), default="training", index=True)   # its page's part (C16a)
     line_id: Mapped[Optional[int]] = mapped_column(ForeignKey("line.id", ondelete="CASCADE"), nullable=True)
     line_number: Mapped[int] = mapped_column(Integer, default=0)
     pos: Mapped[int] = mapped_column(Integer, default=0)                  # reading order within the line

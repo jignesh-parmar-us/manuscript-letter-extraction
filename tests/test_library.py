@@ -90,6 +90,40 @@ class SchemaTests(LibraryTestCase):
         with self.lib.session() as s:
             self.assertEqual(s.scalars(select(OcrRun)).all(), [])
 
+    def test_upgrade_to_the_two_parts_keeps_every_page_line_and_sample(self):
+        """Schema 0004 (C16a) rebuilds the page table: with foreign keys on, SQLite would delete every
+        line and sample with it. Upgrading a captured book from 0003 keeps them all, as training ones."""
+        from alembic import command
+        from alembic.config import Config as AlembicConfig
+        from letter_extractor.app.db import Line, Page, Sample
+        from letter_extractor.app.library import MIGRATIONS
+        self._add_page("p1.png")
+        self._add_page("p2.png")
+        book = self.lib.create_book("Old", self.inp)
+        self.lib.capture(book.id)
+
+        def counts():
+            with self.lib.session() as s:
+                return [s.scalar(select(func.count()).select_from(t)) for t in (Page, Line, Sample)]
+        before = counts()
+        self.assertTrue(all(before))
+        cfg = AlembicConfig()
+        cfg.set_main_option("script_location", str(MIGRATIONS))
+        with self.lib.engine.connect() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+            with connection.begin():
+                cfg.attributes["connection"] = connection
+                command.downgrade(cfg, "0003")
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
+        self.lib.close()
+        self.lib = Library(self.tmp / "My Library")
+        self.assertEqual(counts(), before)
+        with self.lib.session() as s:
+            self.assertEqual(set(s.scalars(select(Page.part))), {"training"})
+            self.assertEqual(set(s.scalars(select(Sample.part))), {"training"})
+
     def test_times_are_utc(self):
         book = self.lib.create_book("A", self.inp)
         self.assertEqual(self.lib.get_book(book.id).created_at.tzinfo, timezone.utc)

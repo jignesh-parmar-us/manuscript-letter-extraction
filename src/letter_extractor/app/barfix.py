@@ -51,7 +51,7 @@ def plan_book(lib: Library, book_id: int, progress=None, cancel: Optional[Callab
     with lib.session() as s:
         locked = set(s.scalars(select(LetterGroup.id).where(LetterGroup.book_id == book_id, LetterGroup.locked)))
         smps = s.scalars(select(Sample).where(Sample.book_id == book_id, Sample.deleted.is_(False),
-                                              Sample.page_id.is_not(None))
+                                              Sample.part == "training", Sample.page_id.is_not(None))
                          .order_by(Sample.page_id, Sample.line_number, Sample.x, Sample.pos)).all()
         letters = [x for x in smps if x.kind == "letter"]
         if len(letters) < 2:

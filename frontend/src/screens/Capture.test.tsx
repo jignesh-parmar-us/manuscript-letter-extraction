@@ -11,7 +11,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: Book = {
-  id: 1, name: "B", input_dir: "/pages", writing: "handwritten",
+  id: 1, name: "B", input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0,
   pages: 0, samples: 0, groups: 0, labelled: 0, unsure: 0,
   created_at: null, updated_at: null, captured_at: null, settings: { group_distance: 0.55 }, undo: 0, redo: 0, job: null,
 };

@@ -111,3 +111,14 @@ class HelpPage(BaseModel):
 
 class FolderPath(BaseModel):
     path: str
+
+
+class ReadSource(BaseModel):
+    """Read Book pages (C16a): a folder of images or a PDF file, replacing earlier ones if `force`."""
+    path: str
+    force: bool = False
+
+
+class PagePart(BaseModel):
+    part: Literal["training", "read"]
+    force: bool = False

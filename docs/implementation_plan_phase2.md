@@ -6,7 +6,7 @@ Since 2026-10-10 every book has **two parts** (Section 0): **Training Data**, wh
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a (next), C16b, C17, C14, C15.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. **C16b is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -533,7 +533,7 @@ Rules that carry over from Phase 1:
 
 ### C16a. The two parts of a book: Training Data and Read Book
 
-**Status:** next (planned 2026-10-05 as "training pages and pages to convert"; rearranged around the two parts and PDF upload on 2026-10-10).
+**Status:** built (2026-10-10; planned 2026-10-05 as "training pages and pages to convert", rearranged around the two parts and PDF upload on 2026-10-10). Checked on a copy of the user's library: a 3-page PDF of the printed book became page images in 1.3 s and was cut in 53 s (13 lines and about 610 letters a page, by Tesseract's reading); the Training Data numbers did not change and no Read Book letter got a group.
 
 **Goal:** a book has two parts with their own pages: **Training Data**, everything built so far, and **Read Book**, the whole book uploaded as a PDF or images, cut into lines and letters, never grouped or reviewed. The section menu shows the two parts.
 
@@ -563,13 +563,23 @@ Rules that carry over from Phase 1:
 - Moving a page both ways, with undo; moving a training page with labelled letters needs confirmation.
 - Screens: the grouped section menu, the upload, the capture progress, both counts in the header.
 
-**Output:** the printed book with its 23 sample pages in Training Data and the whole book uploaded as a PDF in Read Book, cut, visible in its Pages section.
+**Changes from the original plan:**
+- **`Sample.part` as well as `Page.part`:** every query of the review screens (Unsure, counts, suggestions, export, Fix cuts, Fix ા bars, the readers) filters on the letter's own part, which is simpler and faster than joining its page each time. Moving a page moves its letters' part with it.
+- **Migrations run with foreign keys off** (`library.migrate`). Schema 0004 rebuilds the page table; on SQLite, with foreign keys on, dropping the old table deleted every line, sample and reading of the library (found on a copy before release). Every link is checked after a migration. A test upgrades a captured book and checks every page, line and sample is kept.
+- **A PDF is chosen by its path**, typed like the folders, not uploaded through the browser (that would need another package for large files, and the app reads local files anyway). A file chooser in the app window can follow.
+- **Moving a page is not undoable** but asks first: undo does not track a page's part. "Use for reading" on a page with reviewed work asks again.
+- **Read Book is cut in batches of 4 pages**, each stored before the next; a cancel keeps the pages finished so far (also in the batch it stopped in). A page that fails to cut is listed as failed with **Cut again**.
+- **Read Book letters get no Tesseract readings at capture** (books cut by Tesseract's reading store them for Training Data only): conversion (C16b) reads them.
+- **The Pages section of Read Book is "Book pages"** in the section menu, so the two Pages sections can be told apart when the menu is closed. Its letters can be cut, joined, split and deleted; the group actions are hidden.
+- Fix cuts, Fix ા bars and the readers work on Training Data only; Read Book pages get the capture-time fixes (C12e).
+
+**Output:** the printed book with its 23 sample pages in Training Data and the whole book uploaded as a PDF in Read Book, cut, visible in its Book pages section.
 **Done when:** both parts can be captured, viewed and fixed independently; review and export are unchanged for Training Data; a PDF upload works; a page can be moved across and back.
-**C7 addition:** bundle `pypdfium2` (about 5 MB with its PDFium library). **C8:** the new tests run as before.
+**C7 addition:** bundle `pypdfium2` (about 5 MB with its PDFium library; added to `requirements.txt`). **C8:** the new tests run as before.
 
 ### C16b. Converting Read Book pages into text (FR-12)
 
-**Status:** planned; after C16a (order of 2026-10-10).
+**Status:** next (order of 2026-10-10).
 
 **Goal:** every Read Book page becomes Gujarati Unicode text, keeping the manuscript's line breaks, shown **in the app beside its page image**, with the uncertain letters marked; the text of a page or of the whole book can be downloaded as .txt, Word, PDF or a picture of the text.
 
@@ -653,8 +663,8 @@ Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C1
 | C12d | Splitting groups that mix two letters | built | mixed groups split by reading where shapes agree; never by stroke | FR-7 |
 | C12e | Giving aa bars back to their letter (printed books) | built | bars, stems, lone bars to their letter; lines on slanted pages | FR-5, FR-8 |
 | C13 | Suggestions from other labelled books | built (handwriting measurement open) | handwriting suggestions, no training | FR-7 |
-| C16a | The two parts of a book: Training Data and Read Book | **next** | PDF or images uploaded, cut, never grouped; grouped section menu | FR-12 |
-| C16b | Converting Read Book pages into text | planned | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
+| C16a | The two parts of a book: Training Data and Read Book | built | PDF or images uploaded, cut, never grouped; grouped section menu | FR-12 |
+| C16b | Converting Read Book pages into text | **next** | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
 | C17 | Proofreading view | planned | proofread lines; corrections become labels | FR-12 (side-by-side view) |
 | C14 | Letter reader | planned | readers trained in the app any number of times; per-letter accuracy; "Check these" | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |

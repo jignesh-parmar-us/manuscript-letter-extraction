@@ -51,6 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+                      PagePart, ReadSource,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -176,8 +177,26 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         library.delete_book(book_id)
 
     @app.get("/api/books/{book_id}/page-problems", dependencies=auth)
-    def page_problems(book_id: int) -> List[Dict]:
-        return library.check_pages(book_id)
+    def page_problems(book_id: int, part: str = Query("training", pattern="^(training|read)$")) -> List[Dict]:
+        return library.check_pages(book_id, part)
+
+    # ---- Read Book (C16a) -----------------------------------------------------------------------------
+    @app.post("/api/books/{book_id}/read/folder", dependencies=auth)
+    def read_folder(book_id: int, body: ReadSource) -> Dict:
+        library.set_read_folder(book_id, Path(body.path), force=body.force)
+        return get_book(book_id)
+
+    @app.post("/api/books/{book_id}/read/pdf", dependencies=auth, status_code=202)
+    def read_pdf(book_id: int, body: ReadSource) -> Dict:
+        return jobs.import_pdf(book_id, body.path, force=body.force).as_dict()
+
+    @app.post("/api/books/{book_id}/read/capture", dependencies=auth, status_code=202)
+    def read_capture(book_id: int) -> Dict:
+        return jobs.capture_read(book_id).as_dict()
+
+    @app.post("/api/pages/{page_id}/part", dependencies=auth)
+    def page_part(page_id: int, body: PagePart) -> Dict:
+        return library.set_page_part(page_id, body.part, force=body.force)
 
     # ---- jobs --------------------------------------------------------------------------------------
     @app.post("/api/books/{book_id}/capture", dependencies=auth, status_code=202)
@@ -252,14 +271,16 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     # ---- reading -----------------------------------------------------------------------------------
     @app.get("/api/books/{book_id}/pages", dependencies=auth)
-    def pages(book_id: int) -> List[Dict]:
+    def pages(book_id: int, part: str = Query("training", pattern="^(training|read)$")) -> List[Dict]:
         with library.session() as s:
             book_or_404(s, book_id)
             out = []
-            for p in s.scalars(select(Page).where(Page.book_id == book_id).order_by(Page.id)):
+            for p in s.scalars(select(Page).where(Page.book_id == book_id, Page.part == part)
+                               .order_by(Page.number, Page.id)):
                 n = s.scalar(select(func.count(Sample.id)).where(Sample.page_id == p.id, Sample.deleted.is_(False)))
                 out.append({"id": p.id, "file": p.file, "width": p.width, "height": p.height, "status": p.status,
-                            "message": p.message, "lines": len(p.lines), "samples": n,
+                            "message": p.message, "lines": len(p.lines), "samples": n, "part": p.part,
+                            "number": p.number,
                             "image": f"/files/pages/{p.id}?token={token}"})
             return out
 
@@ -272,7 +293,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             samples = s.scalars(select(Sample).where(Sample.page_id == page_id, Sample.deleted.is_(False))
                                 .order_by(Sample.line_number, Sample.pos)).all()
             return {"id": p.id, "book_id": p.book_id, "file": p.file, "width": p.width, "height": p.height,
-                    "status": p.status, "message": p.message, "line_spacing": p.line_spacing,
+                    "status": p.status, "message": p.message, "line_spacing": p.line_spacing, "part": p.part,
                     "image": f"/files/pages/{p.id}?token={token}",
                     "lines": [{"id": ln.id, "number": ln.number, "box": [ln.x, ln.y, ln.w, ln.h], "ink": ln.ink,
                                "image": f"/files/books/{p.book_id}/{ln.image}?token={token}"} for ln in p.lines],
@@ -324,7 +345,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                suggest: bool = True, deleted: bool = False) -> Dict:
         with library.session() as s:
             book = book_or_404(s, book_id)
-            q = select(Sample).where(Sample.book_id == book_id, Sample.deleted.is_(deleted))
+            q = select(Sample).where(Sample.book_id == book_id, Sample.part == "training", Sample.deleted.is_(deleted))
             if not deleted:
                 q = q.where(Sample.group_id.is_(None))
             total = s.scalar(select(func.count()).select_from(q.subquery()))
@@ -463,9 +484,9 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             if p is None:
                 raise HTTPException(404, f"No page with id {page_id}.")
             book = s.get(Book, p.book_id)
-            target = Path(book.input_dir) / p.file
+            target = library.page_path(book, p)
         if not target.is_file():
-            raise HTTPException(404, f"The input page {p.file} is missing.")
+            raise HTTPException(404, f"The page image {p.file} is missing.")
         return FileResponse(target)
 
     @app.get("/files/samples/{sample_id}/context", dependencies=auth)

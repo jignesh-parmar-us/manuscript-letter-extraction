@@ -13,7 +13,7 @@
 // page scrolls by itself to its very bottom, and the panel never covers it; after a change (delete, join, split, move, label, new box) a dashed
 // marker stays on that spot until the next click, so the place is easy to find again.
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Sample } from "../api";
+import { api, ApiError, Book, fileToBase64, Group, PageDetail, PageInfo, Part, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
@@ -30,6 +30,7 @@ interface Props {
   book: Book;
   pageId: number | null;
   sampleId?: number | null; // select this sample and scroll to it
+  part?: Part; // which part of the book's pages: Training Data (default) or Read Book (C16a)
   onChanged: () => void;
 }
 
@@ -39,7 +40,9 @@ export function groupColour(groupId: number | null): string {
   return `hsl(${(groupId * 137.508) % 360} 70% 42%)`;
 }
 
-export default function PageViewer({ book, pageId, sampleId = null, onChanged }: Props) {
+export default function PageViewer({ book, pageId, sampleId = null, part = "training", onChanged }: Props) {
+  const base = part === "read" ? "readpages" : "pages"; // the section's address
+  const reading = part === "read"; // Read Book letters are never grouped: only their cuts are fixed
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [page, setPage] = useState<PageDetail | null>(null);
   const [groups, setGroups] = useState<Map<number, Group>>(new Map());
@@ -65,8 +68,8 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
   const shown = useRef<string>(""); // the page/sample already scrolled to, so reloads do not scroll again
 
   useEffect(() => {
-    api.pages(book.id).then(setPages, setError);
-  }, [book.id, version]);
+    api.pages(book.id, part).then(setPages, setError);
+  }, [book.id, part, version]);
   useEffect(() => {
     api.groups(book.id).then((gs) => setGroups(new Map(gs.map((g) => [g.id, g]))), setError);
   }, [book.id, version]);
@@ -201,6 +204,29 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
     if (r) setMessage(`${file.name} was added as an unsure sample (see Review groups → Unsure).`);
   }
 
+  /** Move the page to the other part of the book, asking first when it holds reviewed work. */
+  async function movePage() {
+    if (!page) return;
+    const to: Part = reading ? "training" : "read";
+    const ask = reading
+      ? `Use ${page.file} for training? Its letters go to Unsure in Review groups, each with a suggested group.`
+      : `Use ${page.file} for reading? Its letters leave their groups.`;
+    if (!(await confirm(ask, reading ? "Use for training" : "Use for reading"))) return;
+    try {
+      try {
+        await api.pagePart(page.id, to);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.needsConfirmation)) throw e;
+        if (!(await confirm(`${e.message} Use it for reading anyway?`, "Use for reading"))) return;
+        await api.pagePart(page.id, to, true);
+      }
+      onChanged();
+      go(`/books/${book.id}/${to === "read" ? "readpages" : "pages"}/${page.id}`);
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   async function removeSelected() {
     if (await confirm(`Delete ${selected.size} sample(s)? Deleted samples can be restored.`, "Delete")) {
       setLastSpot(around(selected));
@@ -281,7 +307,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
           currentId={pageId}
           onPick={(p) => {
             setChoosing(false);
-            go(`/books/${book.id}/pages/${p.id}`);
+            go(`/books/${book.id}/${base}/${p.id}`);
           }}
           onClose={() => setChoosing(false)}
         />
@@ -297,7 +323,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
               ← Back to {back.label}
             </button>
           )}
-          <button disabled={!prev} onClick={() => prev && go(`/books/${book.id}/pages/${prev.id}`)} aria-label="Previous page" title="Previous page">
+          <button disabled={!prev} onClick={() => prev && go(`/books/${book.id}/${base}/${prev.id}`)} aria-label="Previous page" title="Previous page">
             ◀
           </button>
           <button className="page-choose" onClick={() => setChoosing(true)} title="Choose a page">
@@ -306,13 +332,28 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
               {current ? `${pages.indexOf(current) + 1} of ${pages.length}` : `${pages.length} pages`} ▾
             </span>
           </button>
-          <button disabled={!next} onClick={() => next && go(`/books/${book.id}/pages/${next.id}`)} aria-label="Next page" title="Next page">
+          <button disabled={!next} onClick={() => next && go(`/books/${book.id}/${base}/${next.id}`)} aria-label="Next page" title="Next page">
             ▶
           </button>
-          <label className="button upload">
-            Upload letter image…
-            <input type="file" accept="image/*" onChange={upload} hidden />
-          </label>
+          {page && (
+            <button
+              className="page-part"
+              onClick={movePage}
+              title={
+                reading
+                  ? "This page reads badly: use it for training. Its letters go to Unsure in Review groups, to be labelled."
+                  : "Use this page for reading instead: its letters leave their groups."
+              }
+            >
+              {reading ? "Use for training" : "Use for reading"}
+            </button>
+          )}
+          {!reading && (
+            <label className="button upload">
+              Upload letter image…
+              <input type="file" accept="image/*" onChange={upload} hidden />
+            </label>
+          )}
         </div>
         {!page ? (
           <p className="muted">Choose a page: the button above lists all pages, with a search box.</p>
@@ -462,15 +503,17 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                 {sel.length > 5 && <span className="muted small">+{sel.length - 5}</span>}
                 {single ? (
                   <span className="small">
-                    {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line} ·{" "}
-                    {singleGroup ? `group ${singleGroup.label_guj || singleGroup.code}` : "unsure"}
+                    {single.source !== "auto" && <span className="badge ok">{single.source}</span>} line {single.line}
+                    {!reading && <> · {singleGroup ? `group ${singleGroup.label_guj || singleGroup.code}` : "unsure"}</>}
                   </span>
                 ) : (
                   <span className="small">{sel.length} selected</span>
                 )}
-                {singleGroup && (
+                {reading && <span className="small muted">Read Book letters are not grouped: fix their cuts here.</span>}
+                {!reading && singleGroup && (
                   <button onClick={() => go(`/books/${book.id}/review/${singleGroup.id}`)}>Open group</button>
                 )}
+                {!reading && (<>
                 <button onClick={() => setPicking(true)} title="Move to a letter's group or another group">
                   Move to…
                 </button>
@@ -491,6 +534,7 @@ export default function PageViewer({ book, pageId, sampleId = null, onChanged }:
                     onSave={labelSelected}
                   />
                 </div>
+                </>)}
               </div>
             )}
               </div>

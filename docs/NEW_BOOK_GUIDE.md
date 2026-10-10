@@ -68,7 +68,18 @@ The letter reader (C14) is the next part of the app. This is how it is planned t
 
 > **Tip:** keep at least one labelled book of each kind (one printed, one handwritten): new books of the same kind learn from it.
 
-## 7. If something goes wrong
+## 7. Reading the whole book (Read Book)
+
+Every book has two parts in the section menu: **Training Data** (everything above) and **Read Book**, the whole book to turn into text.
+
+1. **Read Book → Upload & capture.** Type the path of the book's **PDF** and click **Use this PDF** (its pages become images in the book folder), or choose a **folder of page images**.
+2. **Cut the pages.** The pages are cut into lines and letters in the background, a few at a time. Stopping keeps the pages already cut; the next **Cut the remaining pages** continues.
+3. **Book pages** shows each page with its letters, to fix cuts (draw a box, join, split, delete). Read Book letters are never grouped and never appear in Review groups.
+4. **A page that reads badly:** **Use for training** moves it to Training Data, where its letters go to Unsure to be labelled.
+
+Turning the pages into text, shown beside each page, comes next.
+
+## 8. If something goes wrong
 
 | What you see | What to do |
 |---|---|

@@ -40,11 +40,12 @@ Box = Tuple[int, int, int, int]
 # ---- the ink of a page ----------------------------------------------------------------------------
 def page_ink(lib: Library, book: Book, page: Page) -> PreparedPage:
     """The page with its black and red ink masks (C1), cached in the book folder."""
-    src = Path(book.input_dir) / page.file
+    src = lib.page_path(book, page)
     if not src.is_file():
-        raise ActionError(f"The page image {page.file} is missing from the input folder.")
+        raise ActionError(f"The page image {page.file} is missing from its folder.")
     rgb, _ = io_utils.load_image(src)
-    cache = lib.book_dir(book) / "cache" / f"{Path(page.file).stem}_ink.npz"
+    prefix = "" if page.folder == "training" else "read-"   # same-named pages of the two parts (C16a)
+    cache = lib.book_dir(book) / "cache" / f"{prefix}{Path(page.file).stem}_ink.npz"
     if cache.is_file():
         data = np.load(cache)
         if str(data["sha256"]) == page.sha256 and tuple(data["shape"]) == rgb.shape[:2]:
@@ -103,7 +104,8 @@ def _new_sample(s, ch: _Change, lib: Library, book: Book, page: Optional[Page], 
     cfg = lib.book_config(book)
     stem = Path(page.file).stem if page is not None else "_uploaded"
     name = f"manual_{uuid.uuid4().hex[:10]}"
-    folder = lib.book_dir(book) / "letters" / stem
+    root = lib.part_root(page.folder) if page is not None else ""
+    folder = lib.book_dir(book) / root / "letters" / stem
     folder.mkdir(parents=True, exist_ok=True)
     if rgb_crop is None:
         rgb_crop = letter_image(prepared, Letter(line=0, pos=0, box=box, mask=mask, ink="black", kind=kind, pieces=1),
@@ -116,8 +118,9 @@ def _new_sample(s, ch: _Change, lib: Library, book: Book, page: Optional[Page], 
                  line_id=line.id if line else None, line_number=line.number if line else 0, pos=0,
                  x=box[0], y=box[1], w=box[2], h=box[3],
                  ink=_ink_colour(prepared, box, mask) if prepared is not None else "black", kind=kind, pieces=1,
-                 rules=source, image=f"letters/{stem}/{name}.png", mask=f"letters/{stem}/{name}_mask.png",
-                 fingerprint=fingerprint(mask, float(sp), cfg).tobytes(), source=source, deleted=True)
+                 rules=source, image=f"{root}letters/{stem}/{name}.png", mask=f"{root}letters/{stem}/{name}_mask.png",
+                 fingerprint=fingerprint(mask, float(sp), cfg).tobytes(), source=source, deleted=True,
+                 part=page.part if page is not None else "training")
     s.add(smp)
     s.flush()
     ch.created(smp)
@@ -282,7 +285,7 @@ def line_context(lib: Library, sample_id: int, around: int = 4, height: int = 96
         at = ids.index(smp.id) if smp.id in ids else None
         near = line[max(0, at - around):at + around + 1] if at is not None else [smp]
         boxes = [(m.x, m.y, m.w, m.h) for m in near] + [(smp.x, smp.y, smp.w, smp.h)]
-        target = Path(book.input_dir) / page.file
+        target = lib.page_path(book, page)
         box = (smp.x, smp.y, smp.w, smp.h)
     if not target.is_file():
         raise NotFound(f"The input page {page.file} is missing.")

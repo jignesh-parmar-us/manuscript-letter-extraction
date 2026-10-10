@@ -1,5 +1,6 @@
-// One book: the top bar holds a menu of its sections (Pages & capture, Review groups, Pages, Export)
-// and its name and numbers on one line; each section is its own screen file.
+// One book: the top bar holds a menu of its sections, grouped into the book's two parts (C16a):
+// Training Data (Pages & capture, Review groups, Pages, Export dataset) and Read Book (Upload & capture, Book pages);
+// and its name and the numbers of both parts on one line. Each section is its own screen file.
 // The address is #/books/<id>/<section>.
 import { useCallback, useEffect, useState } from "react";
 import { api, AppInfo, Book, WRITING_LABEL } from "../api";
@@ -9,14 +10,18 @@ import { go } from "../route";
 import Capture from "./Capture";
 import Export from "./Export";
 import PageViewer from "./PageViewer";
+import ReadBook from "./ReadBook";
 import Review from "./Review";
 
-export const TABS: { id: string; label: string }[] = [
-  { id: "capture", label: "Pages & capture" },
-  { id: "review", label: "Review groups" },
-  { id: "pages", label: "Pages" },
-  { id: "export", label: "Export" },
+export const TABS: { id: string; label: string; part: "Training Data" | "Read Book" }[] = [
+  { id: "capture", label: "Pages & capture", part: "Training Data" },
+  { id: "review", label: "Review groups", part: "Training Data" },
+  { id: "pages", label: "Pages", part: "Training Data" },
+  { id: "export", label: "Export dataset", part: "Training Data" },
+  { id: "read", label: "Upload & capture", part: "Read Book" },
+  { id: "readpages", label: "Book pages", part: "Read Book" },
 ];
+const PARTS = ["Training Data", "Read Book"] as const;
 
 interface Props {
   bookId: number;
@@ -42,10 +47,14 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
       value={tab}
       onChange={(e) => go(`/books/${bookId}/${e.target.value}`)}
     >
-      {TABS.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.label}
-        </option>
+      {PARTS.map((part) => (
+        <optgroup key={part} label={part}>
+          {TABS.filter((t) => t.part === part).map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </optgroup>
       ))}
     </select>
   );
@@ -71,8 +80,11 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
             <strong>{book.name}</strong>
             <span className="muted small">
               {" "}
-              · {WRITING_LABEL[book.writing]} · {book.pages} pages · {book.samples} letters · {book.groups} groups ·{" "}
-              {book.labelled} labelled · {book.unsure} unsure
+              · {WRITING_LABEL[book.writing]} ·{" "}
+              <span title={`${book.samples} letters · ${book.groups} groups · ${book.labelled} labelled · ${book.unsure} unsure`}>
+                Training: {book.pages} pages · {book.reviewed} reviewed letters · {book.unsure} unsure
+              </span>{" "}
+              | Book: {book.read_pages} pages
             </span>
           </span>
         }
@@ -82,14 +94,17 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
         {tab === "capture" && <Capture book={book} info={info} onChanged={reload} />}
         {tab === "review" && <Review book={book} view={sub} onChanged={reload} />}
         {tab === "export" && <Export book={book} info={info} />}
-        {tab === "pages" && (
+        {(tab === "pages" || tab === "readpages") && (
           <PageViewer
+            key={tab}
             book={book}
+            part={tab === "readpages" ? "read" : "training"}
             pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null}
             sampleId={item && /^\d+$/.test(item) ? Number(item) : null}
             onChanged={reload}
           />
         )}
+        {tab === "read" && <ReadBook book={book} info={info} onChanged={reload} />}
       </main>
     </>
   );

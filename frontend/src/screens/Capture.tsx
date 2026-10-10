@@ -13,7 +13,7 @@ interface Props {
   onChanged: () => void;
 }
 
-const JOB_NAMES: Record<Job["kind"], string> = {
+export const JOB_NAMES: Record<Job["kind"], string> = {
   capture: "Capture",
   add_pages: "Adding new pages",
   recut_page: "Cutting a page again",
@@ -21,6 +21,8 @@ const JOB_NAMES: Record<Job["kind"], string> = {
   suggest: "Reading with Tesseract",
   fix_cuts: "Fixing cuts with Tesseract",
   fix_bars: "Giving ા bars back to their letters",
+  capture_read: "Cutting the Read Book pages",
+  import_pdf: "Turning the PDF into page images",
 };
 
 export default function Capture({ book, onChanged }: Props) {
@@ -176,7 +178,7 @@ export default function Capture({ book, onChanged }: Props) {
   );
 }
 
-function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
+export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
   const pct = job.total > 0 ? Math.round((100 * job.done) / job.total) : 0;
   const result = job.result as Record<string, number> | null;
   return (

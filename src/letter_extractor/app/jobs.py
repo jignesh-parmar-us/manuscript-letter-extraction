@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -135,6 +135,39 @@ class Jobs:
         return self.start(book_id, "recut_page", lambda progress, cancel:
                           self.lib.recut_page(book_id, page_id, progress, cancel, force=force), total=1)
 
+    def capture_read(self, book_id: int) -> Job:
+        """Cut the Read Book pages not cut yet (C16a); a cancel keeps the pages already done."""
+        book = self.lib.get_book(book_id)
+        self._check_cutter(book_id)
+        folder = self.lib.part_folder(book, "read")
+        with self.lib.session() as s:
+            from sqlalchemy import select
+            from .db import Page
+            known = set(s.scalars(select(Page.file).where(Page.book_id == book_id, Page.folder == "read")))
+        from .. import io_utils
+        todo = [p for p in (io_utils.scan_folder(folder)[0] if folder.is_dir() else []) if p.name not in known]
+        if not todo:
+            raise LibraryError("Every Read Book page is cut already.")
+        return self.start(book_id, "capture_read",
+                          lambda progress, cancel: self.lib.capture_read(book_id, progress, cancel), total=len(todo))
+
+    def import_pdf(self, book_id: int, pdf: str, force: bool = False) -> Job:
+        """Read Book from a PDF (C16a): its pages become images in the book folder."""
+        from pathlib import Path
+        self.lib.get_book(book_id)
+        path = Path(pdf).expanduser()
+        if not path.is_file() or path.suffix.lower() != ".pdf":
+            raise LibraryError(f"Not a PDF file: {path}")
+        if not force:
+            with self.lib.session() as s:
+                from sqlalchemy import func, select
+                from .db import Page
+                n = s.scalar(select(func.count(Page.id)).where(Page.book_id == book_id, Page.folder == "read")) or 0
+            if n:
+                raise BookHasReviewError(f"The book already has {n} Read Book pages; new pages replace them.")
+        return self.start(book_id, "import_pdf",
+                          lambda progress, cancel: self.lib.import_pdf(book_id, path, progress, cancel, force=force))
+
     def export(self, book_id: int, folder=None, image=None) -> Job:
         """Export the book's dataset (C5g); copying many images can take a while."""
         from .export import export_book
@@ -157,6 +190,7 @@ class Jobs:
                                    "another book of the same writing first.")
             with self.lib.session() as s:
                 total = s.scalar(select(func.count(Sample.id)).where(Sample.book_id == book_id,
+                                                                     Sample.part == "training",
                                                                      Sample.deleted.is_(False))) or 0
             return self.start(book_id, "suggest", lambda progress, cancel:
                               run_books(self.lib, book_id, books, progress, cancel), total=total)

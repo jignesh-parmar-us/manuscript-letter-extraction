@@ -97,7 +97,10 @@ export default function Books({ info, onLibraryChanged }: Props) {
                   )}
                   <div className="muted small">{b.input_dir}</div>
                 </td>
-                <td className="num">{b.pages}</td>
+                <td className="num" title="Training Data pages; below: Read Book pages">
+                  {b.pages}
+                  {b.read_pages > 0 && <div className="muted small">{b.read_pages} to read</div>}
+                </td>
                 <td className="num">{b.samples}</td>
                 <td className="num">{b.groups}</td>
                 <td className="num">
