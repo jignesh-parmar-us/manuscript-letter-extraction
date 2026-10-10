@@ -2,9 +2,11 @@
 
 Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts every letter out of the pages, groups identical letters, and lets a person label each group and export a dataset. **Phase 2 takes the app from labelled letters to text.** It suggests labels automatically, so that review becomes mostly confirming. It learns this scribe's hand from the labelled books, uses a dictionary to correct unlikely letters, and converts whole pages into Gujarati Unicode text.
 
+Since 2026-10-10 every book has **two parts** (Section 0): **Training Data**, where a few sample pages are cut, grouped, reviewed, labelled and trained on (everything built so far), and **Read Book**, where the whole book (a PDF or images) is converted into text page by page, shown beside the page, with the uncertain letters marked for correction.
+
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. **C14 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a (next), C16b, C17, C14, C15.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -15,17 +17,34 @@ The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's c
 | Part of this plan | Chunks | Requirement |
 |---|---|---|
 | **A. Label suggestions with Tesseract** (first step, for printed books) | C10, C11, C12 | FR-7 "suggested label", Phase 1's C9 |
-| **B. Suggestions for handwriting** from the labelled books | C13, C14 | FR-7, FR-11 |
+| **B. Suggestions for handwriting** from the labelled books | C13, C14 (the letter reader) | FR-7, FR-11 |
 | **C. Dictionary and language model** | C15 | new (not in the requirements) |
-| **D. Whole page to Unicode text** | C16a (training pages and pages to convert), C16b, C17 | FR-12 |
+| **D. Whole page to Unicode text** (the Read Book part) | C16a (the two parts of a book), C16b, C17 | FR-12 |
 | **E. Line recognizer** (optional, later) | C18 | Section 8.3 of the requirements |
+
+### The two parts of a book (decided 2026-10-10)
+
+| | **Training Data** | **Read Book** |
+|---|---|---|
+| Pages | a few sample pages of the manuscript (a folder of images) | the whole book: a **PDF** or a folder of images |
+| Work | capture, review groups, label, clean (fix cuts, bars), train the letter reader, build the dictionary, export the dataset | convert each page into Gujarati text; show it **beside the page** (side by side, or one above the other); correct the marked letters |
+| Sections (the section menu) | Pages & capture, Review groups, Pages, Readers, Dictionary, Export dataset | Upload, Pages, Text (convert, proofread, download) |
+| Grouped and reviewed | yes | never: its letters are only read |
+| Output | labelled letters, trained readers, word lists | the text of each page and of the whole book, to download as **.txt, Word (.docx), PDF, or a picture (.png) of the text** |
+
+- **One book, both parts:** they are usually the same manuscript and hand, so they share the book's settings, writing, labelled groups and readers.
+- **Readers and word lists belong to the library, not to one book:** a reader trained on two printed books can read a third. Each book chooses which reader and lists it uses.
+- **Corrections flow back:** a letter corrected in Read Book labels that letter (it becomes training data); a page that reads badly can be moved to Training Data; proofread pages feed the dictionary. Reading books keeps improving the training without extra work.
+- **Printed books can be read before any training:** Tesseract reads print, and the book's labelled groups confirm or correct it. Handwritten books need Training Data first (the letter reader, C14).
+- **Readers can be trained any number of times:** each training makes a new reader from the labels as they are then; older readers are kept and can be chosen again (C14).
+- **No accounts:** the app is a local program; whoever opens it sees its library.
 
 **Why this order:**
 - **Tesseract comes first.** It needs no training, it reads printed Devanagari well, and it pays off at once: the printed book (`samples/blackandwhite/`, 4,604 samples in 253 groups) can be labelled mostly by confirming. Each confirmed label also becomes training data for parts B to D.
 - **Tesseract cannot read handwriting reliably.** Handwritten books need part B, which learns from the books already labelled, whether printed or handwritten. The handwritten and printed forms of a letter differ, so handwritten books need some labelled handwritten pages of their own. C10 measured about 30 to 35% wrong code points on a line of the sample hand (5% on print), so Tesseract on handwriting is something to **try and measure** (C12), not the default.
-- **Each book says how it is written** (handwritten or printed, chosen when the book is created; added in C10). This decides which reader suggests labels by default: Tesseract for printed books, other books (C13) and the classifier (C14) for handwritten books. Tesseract can still be run on a handwritten book on request.
-- **Conversion (D) comes last.** It needs a reader for every sample, so it uses group labels, Tesseract and the classifier together, plus the dictionary for correction.
-- **Training pages and pages to convert are kept apart** (decided 2026-10-05). A book has two page sets, each with its own folder: the few **training pages** that are cut, grouped and labelled (Phase 1), and the many **pages to convert** into text, which are cut but not reviewed. They stay in one book because they are usually the same manuscript and hand, and share its settings, writing, labelled groups and model. Built in C16a, just before conversion; C11 to C15 only use training pages.
+- **Each book says how it is written** (handwritten or printed, chosen when the book is created; added in C10). This decides which reader suggests labels by default: Tesseract for printed books, other books (C13) and the letter reader (C14) for handwritten books. Tesseract can still be run on a handwritten book on request.
+- **Reading the book (D) comes before the letter reader** (decided 2026-10-10): printed books can be converted with Tesseract and the labelled groups alone, so the whole route from page to text can be seen and used early. The letter reader (C14) then lowers the number of uncertain letters and opens Read Book to handwriting; the dictionary (C15) comes after proofreading (C17), whose text it learns from and is measured on. Order: **C16a, C16b, C17, C14, C15**, then C18 only if needed.
+- **Training pages and the pages to read are kept apart** (decided 2026-10-05; named **Training Data** and **Read Book** on 2026-10-10). A book has the few training pages that are cut, grouped and labelled (Phase 1), and the whole book to read into text, which is cut but never reviewed. They stay in one book because they are usually the same manuscript and hand, and share its settings, writing, labelled groups and readers. Built in C16a (above); the review screens only ever use Training Data.
 
 **Phase 1 chunks still open:** C7 (packaging) and C8 (GitHub Actions) are not done yet. Phase 2 can start before them, but each Phase 2 chunk lists what it adds to C7 and C8 (new files to bundle, new CI steps), so that packaging stays a known amount of work. C9 of Phase 1 (label suggestions) **is replaced by C10 to C14 here**; `IMPLEMENTATION_PLAN.md` will point to this file.
 
@@ -40,11 +59,13 @@ The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's c
 | hOCR parsing | Python's own `html.parser` | hOCR is HTML. No new dependency. |
 | Akshara splitting | Our own rules (`ocr/aksharas.py`) | A Devanagari "letter" in our sense (consonant cluster + matras + marks) is a sequence of code points. The rules are short and must match how Phase 1 cuts. A general Unicode grapheme library splits conjuncts differently. This splits Tesseract's **text**; the cutting of the page images is still Phase 1's, for printed and handwritten books alike. |
 | Cross-book suggestions (C13) | **NumPy**, the existing fingerprints (C4) | No new dependency; works on day one with the labelled groups. |
-| Letter classifier (C14) | Train with **PyTorch** (CPU); run with **ONNX Runtime** | PyTorch is the standard for small CNNs, but it is large (200+ MB). Running a trained model needs only ONNX Runtime (about 15 to 20 MB), which the app bundles. Training runs in a separate "training" install (see decision 3 in Section 9). |
+| Letter reader (C14) | **Shape features + a classic learning method, in NumPy** (decided 2026-10-10) | The plan was PyTorch to train and ONNX Runtime to run. Neither installs on the development computer (an Intel Mac with Python 3.14: PyTorch stopped making Intel Mac builds in 2024, ONNX Runtime has none for it). Shape features (HOG and ink layout, as the C4 fingerprints but finer) with a linear model or a small multilayer network trained in NumPy need no new package, train in seconds to minutes, and can run inside the app, so training is a button, not a separate install. If it is not accurate enough, a neural network can be trained elsewhere and run with OpenCV's `dnn` module, which is already installed. |
+| PDF import (C16a) | **pypdfium2** | Turns each PDF page into an image once, at upload. It installs on all three platforms (checked on the development computer); its licence (Apache / BSD) suits bundling, unlike PyMuPDF's AGPL. |
+| Text downloads (C16b) | .txt and Word from Python; **PDF and picture from the browser** | Gujarati letters join (conjuncts, vowel signs) only when a text engine shapes them. Word and browsers do; Python PDF libraries without a shaping engine garble conjuncts. So the Text view's own rendering is printed to PDF or drawn to a PNG. The Word file is a small `.docx` (zipped XML) with a Gujarati font, written without a new package. |
 | Language model (C15) | Akshara n-grams + word list in a trie, **pure Python / NumPy** | Small, explainable, offline. The text has no spaces, so word lookup is a word-break search, not a spell checker. |
 | Line recognizer (C18) | **Kraken** or Tesseract fine-tuning (`tesstrain`): to be decided after C17 | Both train from `lines/*.png` + `.txt`, which Phase 1 already exports. |
 | Database | Same SQLite / SQLAlchemy / Alembic; **migration `0002`** onwards | New tables and columns only. Existing books open unchanged. |
-| Screen | Same React / TypeScript / Vitest | New parts in the Review tab, two page sets in the Pages & capture tab (C16a), and a new **Text** tab (C16b, C17). |
+| Screen | Same React / TypeScript / Vitest | New parts in the Review tab; the section menu grouped into **Training Data** and **Read Book** (C16a); a **Text** section (C16b, C17); a **Readers** section (C14). |
 
 **Offline:** everything above runs on the computer. Cloud AI suggestions are still possible only as an opt-in (requirement Section 7); they are not part of this plan.
 
@@ -61,26 +82,28 @@ src/letter_extractor/
 │   ├── aksharas.py       # split Devanagari text into aksharas (our letter units)             (C10)
 │   ├── cut.py            # cut a line into the aksharas Tesseract reads (printed books)       (C12c)
 │   ├── align.py          # match OCR aksharas to cut samples in a line                        (C11)
-│   ├── classifier.py     # load an ONNX model, classify sample images                         (C14)
-│   ├── train.py          # build the training set, train, evaluate, export to ONNX            (C14)
+│   ├── features.py       # shape features of a letter image for the reader                    (C14)
+│   ├── reader.py         # train, evaluate, save and load a letter reader (NumPy)             (C14)
+│   ├── pdf.py            # PDF pages to images (pypdfium2)                                    (C16a)
 │   ├── language.py       # word lists, akshara n-grams, correction search                     (C15)
-│   └── convert.py        # page → Devanagari text → Gujarati text, confidences                (C16b)
+│   ├── convert.py        # page → Devanagari text → Gujarati text, confidences                (C16b)
+│   └── docx.py           # a small Word file writer (zipped XML)                              (C16b)
 ├── app/
-│   ├── suggest.py        # label-suggestion jobs: Tesseract, other books, classifier          (C11, C13, C14)
+│   ├── suggest.py        # label-suggestion jobs: Tesseract, other books, the letter reader   (C11, C13, C14)
 │   ├── recut.py          # split and join samples where Tesseract's readings show a wrong cut  (C12b)
 │   ├── texts.py          # converted text, proofreading edits                                  (C16b, C17)
-│   └── migrations/versions/0002_book_writing.py (C10), 0003_ocr_readings.py (C11), 0004_models_dictionary.py,
-│                           0005_page_sets.py (C16a), 0006_texts.py
+│   └── migrations/versions/0002_book_writing.py (C10), 0003_ocr_readings.py (C11), 0004_book_parts.py (C16a),
+│                           0005_texts.py (C16b), 0006_readers.py (C14), 0007_dictionary.py (C15)
 
 frontend/src/components/
 └── WritingChoice.tsx     # handwritten / printed, in the new-book form and the Capture tab       (C10)
 
 frontend/src/screens/
 ├── Suggestions.tsx       # suggestion chips, accept / reject, "accept all above x%"             (C12)
-├── Models.tsx            # trained models and their per-class accuracy                          (C14)
-├── Dictionary.tsx        # word lists: import, enable per book, statistics                     (C15)
-├── Capture.tsx           # + a second section, "Pages to convert", with its own folder         (C16a)
-└── TextView.tsx          # page image next to its text, proofreading                           (C16b, C17)
+├── ReadBook.tsx          # Read Book: upload a PDF or images, capture, pages                    (C16a)
+├── TextView.tsx          # page image next to its text, downloads, proofreading                (C16b, C17)
+├── Readers.tsx           # trained letter readers, their reports, train, the active one        (C14)
+└── Dictionary.tsx        # word lists: import, enable per book, statistics                     (C15)
 
 docs/
 ├── INSTALL_TESSERACT.md
@@ -96,10 +119,11 @@ tests/data/ocr/           # a printed line image and saved hOCR (printed and han
 **Library folder additions:**
 ```
 <library>/
-  models/<id>-<date>/model.onnx, classes.json, report.html   (C14)
+  readers/<id>-<date>/reader.npz, classes.json, report.html  (C14)
   dictionaries/<name>.txt                                    (C15, imported word lists, a copy)
   books/<id>-<name>/
     ocr/<page>_L01.hocr     raw Tesseract output, kept for checking and re-alignment  (C10, C11)
+    read/                   the Read Book pages: page images made from an uploaded PDF (C16a)
     text/<page>.txt         converted Gujarati text, one file per page                (C16b)
 ```
 
@@ -109,21 +133,24 @@ tests/data/ocr/           # a printed line image and saved hOCR (printed and han
 
 ```
 Book            + writing (handwritten | printed), migration 0002 (C10); existing books become handwritten
-Book            + convert_dir (the folder of the pages to convert; empty = none), migration 0005 (C16a)
-Page            + folder (training | convert): which of the book's folders the file is in
-                + role (training | convert): how the page is used; it changes when a page is moved across
+Book            + read_dir (the Read Book folder: chosen images, or the book's read/ folder for a PDF), read_pdf
+                  (the uploaded PDF's name, if any), migration 0004 (C16a)
+Page            + part (training | read): which part of the book the page belongs to; it changes when a page is
+                  moved across; + folder (training | read): which folder the file is in (they differ only for a
+                  moved page); + number (page order in the book)
                 unique (book_id, folder, file) instead of (book_id, file); existing pages are training / training
-OcrRun          id, book_id, engine (tesseract | books | classifier), settings JSON, result JSON (counts),
+OcrRun          id, book_id, engine (tesseract | books | reader), settings JSON, result JSON (counts),
                 started_at, finished_at; only the newest run per book and engine is kept (C11).
                 C14 adds model_id.
 OcrReading      id, run_id, sample_id, text_dev (a valid label, NFC), confidence, alternatives JSON, overlap
                 one row per sample the run read; samples it could not match get no row
 LetterGroup     + rejected_dev: the suggested label the user rejected (C11). Suggestions themselves are
                   not stored: they are voted from the readings of the group's current samples when asked for
-Model           id, kind (letter-cnn), path, classes JSON, trained_on JSON (books, sample counts), accuracy, created_at
+Reader          id, name, kind (features-mlp ...), path, classes JSON, trained_on JSON (books, sample counts, label
+                status), accuracy JSON (overall, per class), created_at; Book + reader_id (the active reader) (C14)
 WordList        id, name, source, words (count), enabled_books JSON
 PageText        id, page_id, version, text_dev, text_guj, letters JSON (sample id, text, confidence, source per letter),
-                proofread (bool), edited_at
+                lines JSON (proofread per line), edited_at (C16b, C17)
 ```
 
 Rules that carry over from Phase 1:
@@ -436,44 +463,48 @@ Rules that carry over from Phase 1:
 - **Agreement is shown, not added to the share:** "agreement raises the share shown" would mix two different votes; the chip says both readers agree instead.
 - **Measured on print** for now: there are no handwritten labels yet.
 
-### C14. Letter classifier: training and suggestions (FR-11)
+### C14. Letter reader: training and suggestions (FR-11)
 
-**Goal:** a small neural network that learns the letters of the labelled books. It gives better suggestions than C13, a confidence per sample, and it is the reader for C16b.
+**Status:** planned; built after C17 (order of 2026-10-10). Method changed on 2026-10-10: shape features and a classic learning method in NumPy instead of PyTorch and ONNX Runtime, which do not install on the development computer (Section 1).
 
-**Files:** `ocr/train.py`, `ocr/classifier.py`, `app/migrations/versions/0004_models_dictionary.py` (`Model`), `app/suggest.py` (engine `classifier`), `frontend/src/screens/Models.tsx`, a `train` command in `cli.py`, `requirements-train.txt`, `tests/test_classifier.py`.
+**Goal:** a reader that learns the letters of the labelled books: better suggestions than C13, a confidence for every letter, letters that are probably in the wrong group, and the reader for converting handwritten books (C16b).
+
+**Files:** `ocr/features.py`, `ocr/reader.py`, `app/migrations/versions/0006_readers.py` (`Reader`, `Book.reader_id`), `app/suggest.py` (engine `reader`), `app/jobs.py` (a `train` job), `app/api.py`, `frontend/src/screens/Readers.tsx` (+ test), a `train` command in `cli.py`, `tests/test_reader.py`.
 
 **What it does:**
-- **Word labels** (category `words`, a sample that is a whole word) are left out of the letter classifier; conversion (C16b) still uses them through their group's label.
-- **Training set:** every labelled, non-deleted sample of the chosen books (by default the books with the same writing as the book it is for), as 64 × 64 normalised ink images. This is the same image as the C5g export's `fixed64` mode. Classes with fewer than `min_class_samples` (5) samples are left out and listed.
-- **Held-out test set** (FR-11): 15% of each class, chosen by page, so test letters come from pages the network has not seen. It is never used for training.
-- **Network:** a small CNN (3 convolution blocks + 1 dense layer, about 300k weights). Small random shifts, rotations (±5°), thickness changes and noise are added during training, because one hand varies and the dataset is small. Training stops early when the test loss stops improving. On a laptop CPU it takes minutes, not hours, for a few thousand samples.
-- **Report** (`models/<id>/report.html`): overall accuracy, **accuracy per class** sorted worst first with the sample count, and the most confused pairs (व/ब, घ/ध). This shows which letters need more samples (FR-11).
-- **Export:** `model.onnx` + `classes.json` (labels in Devanagari NFC). The app loads models with **ONNX Runtime** only.
-- **In the app:**
-  - **Models tab:**
-    - list the trained models with their date, books and accuracy;
-    - open a model's report;
-    - set the active model.
-  - **Train** button: available when the training extras are installed. Otherwise it shows the command to run (`python -m letter_extractor train --books 1,2`).
-- **Suggestions:** engine `classifier`. It classifies every sample of the book; the group vote uses the class probabilities, the same as C11. It is also used for **unsure** samples one by one.
-- **Retraining:** each new reviewed book is added and the model is trained again (FR-11: "training can be repeated"). Models are kept, not overwritten, so an older model can be chosen again.
-- **Labels to check before training** (seen by the user while reviewing, 2026-10-07): in words like કરિ, Tesseract often reads ક as કા: the ि bar of the next letter stands just where a ા bar would, and only its hook above tells them apart. Labels taken from such readings (at capture, or by accepting suggestions) can put ક letters into the કા group and teach the network that a ક shape is કા. Before training: a reading that ends in ा on a letter with no bar of its own (`bars.ends_with_bar`, C12e) is suspect, to be left out of the votes or shown for review; and the training report should list, per class, letters whose shape is far from their group (for કા: those without a bar).
+- **Training data:**
+  - every letter in a group the user ticked **Reviewed**, of the chosen books (by default every book with the same writing). Groups labelled automatically and not reviewed can be included as an option, off by default: a wrong label teaches a wrong letter;
+  - **the least number of letters a label needs is a choice in the Train form** (`min_class_samples`, 5 by default, down to 1; asked for by the user on 2026-10-10, so that rare letters with one or two samples can still be learned). Labels below it are left out and listed;
+  - a label with too few letters to spare some for the test pages is trained on all of them; its accuracy is shown as "not measured (N letters)" rather than a number, and the report says so. Extra varied copies (shifts, slants, stroke changes) give such labels more to learn from, but one or two samples still make a weak letter: the per-letter report shows which ones need more;
+  - word labels (રહે, કેટ) are left out by default; including them is a choice in the Train form too, with the same least number;
+  - each letter as a 64 × 64 normalised ink image (the C5g `fixed64` image).
+- **Test pages:** about 15% of the pages are never trained on; accuracy is measured on their letters, so the numbers say how the reader does on pages it has not seen (FR-11).
+- **The reader:** shape features of each letter image (HOG at two scales, ink density in a grid, the outline profile, size), then a learning method chosen by measurement in this chunk: a linear model and a small multilayer network, both trained in NumPy. Small shifts, slants and stroke changes are added to the training letters, because one hand varies. Training takes seconds to minutes; it runs as a job inside the app.
+- **Report** (`readers/<id>/report.html`, and in the app):
+  - overall accuracy on the test pages;
+  - **accuracy per letter**, worst first, with its number of samples: which letters need more;
+  - the **most confused pairs** (ने/ते, प/व);
+  - **"Check these" letters:** letters the reader is sure belong to another label than their group's (cross-checked, so each letter is read by a reader that did not learn from it). These are mostly mistakes in reviewed groups, such as a क in the का group (the user's observation of 2026-10-07: Tesseract reads क before a ि-letter as का). The list opens in Review groups, where each letter can be moved with one click.
+- **Suggestions:** engine `reader`, next to Tesseract and the labelled books. It reads every letter of the book's Training Data with a confidence; groups vote with its readings as with the others (badges, green chips, "Accept N with ≥"); Unsure letters get its suggestion one by one.
+- **Training again, any number of times** (confirmed with the user on 2026-10-10): each training makes a new reader from the labels as they are then, so labels fixed since are included. Readers are kept, not overwritten; the Readers section lists them (date, books, accuracy, how they compare with the previous reader letter by letter); one is the book's active reader; old ones can be deleted. After training, the new reader reads Training Data again. Read Book pages keep their text until converted again; proofread lines never change.
+- **Readers belong to the library** (`<library>/readers/`): a reader trained on two books can be the active reader of a third.
 
 **Done when:**
-- a model trained on the reviewed sample books reaches at least 90% accuracy on its held-out pages for classes with 20 or more samples;
-- per-class accuracy is reported;
-- its suggestions on a new book are measured as in C12.
+- a reader trained on the reviewed letters of the printed book reaches at least 90% on its test pages for labels with 20 or more samples (if it does not, the measurement decides between more features, a larger network, or a neural network trained elsewhere and run with OpenCV's `dnn`);
+- accuracy per letter and the "Check these" list are shown;
+- its suggestions are measured against the user's labels, as Tesseract's were (C12).
 
-**C7 addition:** bundle `onnxruntime` (about 20 MB). PyTorch is **not** bundled (decision 3).
-**C8 addition:** a small training run on the synthetic book in CI (in a separate job with `requirements-train.txt`).
+**C7 addition:** none (NumPy only). **C8 addition:** a short training run on the synthetic book (three easy classes).
 
 ### Part C: dictionary
 
 ### C15. Dictionary and language model
 
+**Status:** planned; built after C14 (order of 2026-10-10): it learns from proofread text (C17) and is measured on it.
+
 **Goal:** use known words and known letter sequences to correct unlikely letters in a line, and to decide between close readings (व or ब), without ever silently changing confident letters.
 
-**Files:** `ocr/language.py`, additions to migration `0004` (`WordList`), `app/api.py` (import, list, enable), `frontend/src/screens/Dictionary.tsx`, `tests/test_language.py`.
+**Files:** `ocr/language.py`, migration `0007_dictionary.py` (`WordList`), `app/api.py` (import, list, enable), `frontend/src/screens/Dictionary.tsx`, `tests/test_language.py`.
 
 **What it does:**
 - **Word lists:**
@@ -485,12 +516,12 @@ Rules that carry over from Phase 1:
   - a **trie of words**.
 
   Both are rebuilt when a list changes and kept in memory per book.
-- **Correction search** (`correct_line(candidates)`): each letter position has its candidate readings with probabilities, from the classifier's top 5 or Tesseract's alternatives. A beam search (width 20) finds the line text with the best combined score: letter probability × n-gram probability, plus a bonus when a stretch of the line splits into known words (a word-break search over the trie, since the manuscript has no spaces).
+- **Correction search** (`correct_line(candidates)`): each letter position has its candidate readings with probabilities, from the letter reader's top 5 or Tesseract's alternatives. A beam search (width 20) finds the line text with the best combined score: letter probability × n-gram probability, plus a bonus when a stretch of the line splits into known words (a word-break search over the trie, since the manuscript has no spaces).
 - **Safe by design:**
   - a letter is changed only when the change gains at least `lm_min_gain` in score;
   - a letter whose reader confidence is at least `lm_protect_confidence` (0.95) is never changed;
   - every changed letter is marked, so the user can see what the dictionary did.
-- **Uses:** in C16b (conversion), and in the C11 / C14 group votes as a tie-breaker between close readings.
+- **Uses:** in C16b (conversion, once built), and in the C11 / C14 group votes as a tie-breaker between close readings.
 - **Measured:** character error rate (CER) on proofread lines, with and without the language model, in `TUNING_PHASE2.md`. If it does not help, it stays off by default.
 
 **Done when:**
@@ -500,94 +531,87 @@ Rules that carry over from Phase 1:
 
 ### Part D: whole page to Unicode text
 
-### C16a. Training pages and pages to convert
+### C16a. The two parts of a book: Training Data and Read Book
 
-**Status:** planned (asked for and decided on 2026-10-05).
+**Status:** next (planned 2026-10-05 as "training pages and pages to convert"; rearranged around the two parts and PDF upload on 2026-10-10).
 
-**Goal:** a book holds two page sets with separate folders: **training pages**, which are cut, grouped, reviewed and labelled as in Phase 1, and **pages to convert**, which are cut and later read into text (C16b) without being reviewed. The database records which set each page belongs to.
+**Goal:** a book has two parts with their own pages: **Training Data**, everything built so far, and **Read Book**, the whole book uploaded as a PDF or images, cut into lines and letters, never grouped or reviewed. The section menu shows the two parts.
 
-**Files:** `app/migrations/versions/0005_page_sets.py`, additions to `app/db.py`, `app/library.py`, `app/jobs.py`, `app/samples.py`, `app/export.py`, `app/api.py`, `app/schemas.py`; additions to `frontend/src/api.ts`, `Books.tsx`, `BookView.tsx`, `Capture.tsx`, `PageViewer.tsx`, `Review.tsx` (+ tests); `tests/test_page_sets.py`, additions to `tests/test_library.py`, `tests/test_api.py`.
+**Files:** `ocr/pdf.py`, `app/migrations/versions/0004_book_parts.py`, additions to `app/db.py`, `app/library.py`, `app/jobs.py`, `app/samples.py`, `app/export.py`, `app/api.py`, `app/schemas.py`; additions to `frontend/src/api.ts`, `Books.tsx`, `BookView.tsx`, `AppBar.tsx`, `Capture.tsx`, `PageViewer.tsx`, `PagePicker.tsx`, `Review.tsx`, new `ReadBook.tsx` (+ tests); `requirements.txt` (`pypdfium2`); `tests/test_book_parts.py`, `tests/test_pdf.py`, additions to `tests/test_library.py`, `tests/test_api.py`.
 
 **What it does:**
-- **One book, two page sets** (decision of 2026-10-05). A manuscript's training pages and pages to convert are usually the same hand, so they share the book's cutting settings, writing (C10), labelled groups and model. Two separate books would have to be linked by hand.
-- **Folders:** the training pages stay in the book's input folder (`Book.input_dir`). The pages to convert have their own folder (`Book.convert_dir`), chosen in the New book form (optional) or later in the Pages & capture tab. Both folders are only read, never changed, as in Phase 1. The two folders may hold files with the same name.
-- **Database** (migration `0005`): `Book.convert_dir`; `Page.folder` (which folder the file is in) and `Page.role` (how the page is used). The two differ only for a page that was moved across. Page files are unique per book and folder. Existing books keep all their pages as training pages.
-- **Capturing pages to convert:** the same cutting as Phase 1 (C0 to C3b): lines, samples with their images, masks and fingerprints. **No grouping:** their samples get no group and do not appear in Unsure. "Capture", "Add new pages" and "Cut a page again" work per set. Capturing the pages to convert never touches the training pages, their groups or labels, so it needs no confirmation. The same applies the other way round.
-- **Kept apart everywhere else:**
-  - Review groups, Unsure, group counts, suggestions (C11 to C14) and Export use **training pages only**;
-  - the **Pages** tab shows both sets (a switch above the page list). Fixing cuts there (draw a box, join, split; C5f) works on pages to convert too, because a better cut gives better text;
-  - the Books list and the book header show both counts ("12 training pages · 340 to convert").
-- **Moving a page across:**
-  - **"Use for training"** on a page to convert: the page becomes a training page. Its samples go to Unsure, each with a suggested group, as "Add new pages" does, and are then reviewed as usual. This is for pages with letters the readers keep getting wrong. One undoable action.
-  - **"Use for conversion"** on a training page: its samples leave their groups. As with capturing again, this is refused when the page has manual work (labelled or hand-moved samples, fixed cuts) unless confirmed.
-- **API:** `POST /api/books` and `PATCH /api/books/{id}` take `convert_dir`; capture, add-pages and page-problems take `"pages": "training" | "convert"` (default `training`, so the current screens keep working); `GET /api/books/{id}/pages?set=…`; `POST /api/pages/{id}/role`.
+- **One book, two parts** (Section 0). Training Data is the book's input folder as now (`Book.input_dir`); existing books keep all their pages there, and nothing about them changes.
+- **Read Book pages:**
+  - **upload a PDF:** each page becomes an image in the book's `read/` folder, once, at upload (`pypdfium2`, at `pdf_dpi`, 300 by default); the PDF itself is not changed or kept elsewhere;
+  - **or choose a folder of images**, as for Training Data (only read, never changed);
+  - pages keep the book's page order (`Page.number`: PDF order, or file names in natural order).
+- **Capture:** the same cutting as Training Data (lines, letters, images, masks, fingerprints, the bar and slant fixes of C12e) as a background job with progress per page, cancellable and resumable (pages already cut are kept). **No grouping:** Read Book letters get no group and never appear in Review groups or Unsure. Capturing one part never touches the other's pages, letters or labels, so it needs no confirmation.
+- **Kept apart everywhere else:** Review groups, Unsure, the Letter overview, group counts, suggestions and Export dataset use Training Data only. The **Pages** section shows the part it is opened from, so cuts can be fixed on Read Book pages too (a better cut gives better text).
+- **Moving a page across:** "Use for training" on a Read Book page moves it to Training Data: its letters go to Unsure with suggested groups, as "Add new pages" does (one undoable action). "Use for reading" on a training page: its letters leave their groups; refused when the page has manual work, unless confirmed.
 - **Screens:**
-  - **New book:** an optional second folder, "Pages to convert".
-  - **Pages & capture:** two sections, **Training pages** (as now) and **Pages to convert**, each with its folder, Capture / Add new pages buttons and page list. The settings card stays shared.
-  - **Pages tab:** the set switch and "Use for training" / "Use for conversion".
+  - the **section menu** groups the sections under **Training Data** (Pages & capture, Review groups, Pages, and later Readers, Dictionary, Export dataset) and **Read Book** (Upload & capture, Pages, and from C16b Text);
+  - **Read Book's first section:** upload a PDF or choose a folder, Capture with progress, the page list with each page's state (not cut, cut, converted, proofread);
+  - the **book header** shows both parts, for example "Training: 23 pages · 2,823 reviewed letters | Book: 312 pages · 0 converted";
+  - **Books** list: both page counts.
+- **API:** `POST /api/books/{id}/read/pdf` (upload), `PATCH /api/books/{id}` takes `read_dir`; capture, add-pages and page-problems take `"part": "training" | "read"` (default `training`, so the current screens keep working); `GET /api/books/{id}/pages?part=…`; `POST /api/pages/{id}/part`.
 
 **Tests:**
-- The migration upgrades a library at schema `0004`: all pages become training pages, and nothing else changes.
-- Capturing pages to convert creates samples without groups; Review, Unsure, counts and Export do not see them; same-named files in both folders.
-- Capturing one set leaves the other set's pages, samples and labels unchanged.
-- Moving a page both ways, with undo; moving a training page with labelled samples needs confirmation.
-- API: the `pages` parameter, `convert_dir`, and its default of `training`.
-- Screens: the second folder in the New book form, both sections in Pages & capture, the set switch in Pages.
+- The migration upgrades a library at schema `0003`: all pages become training pages, nothing else changes.
+- A PDF of a few generated pages becomes page images in order; a broken PDF is refused with a clear message.
+- Capturing Read Book makes letters without groups; Review, Unsure, counts and Export do not see them; files with the same name in both parts.
+- Capturing one part leaves the other part's pages, letters and labels unchanged; a cancelled capture resumes.
+- Moving a page both ways, with undo; moving a training page with labelled letters needs confirmation.
+- Screens: the grouped section menu, the upload, the capture progress, both counts in the header.
 
-**Output:** a book with, for example, the 2 handwritten sample pages as training pages and further pages of the same manuscript as pages to convert, both cut and visible in the Pages tab.
-**Done when:** both sets can be captured, viewed and fixed independently; review and export are unchanged for training pages; a page can be moved across and back.
-**C7 addition:** none. **C8:** the new tests run as before.
+**Output:** the printed book with its 23 sample pages in Training Data and the whole book uploaded as a PDF in Read Book, cut, visible in its Pages section.
+**Done when:** both parts can be captured, viewed and fixed independently; review and export are unchanged for Training Data; a PDF upload works; a page can be moved across and back.
+**C7 addition:** bundle `pypdfium2` (about 5 MB with its PDFium library). **C8:** the new tests run as before.
 
-### C16b. Page conversion (FR-12)
+### C16b. Converting Read Book pages into text (FR-12)
 
-**Goal:** convert the pages of a book into **one UTF-8 Gujarati text file per page**, keeping the manuscript's line breaks, with uncertain letters marked. The pages to convert (C16a) are the main target; training pages can be converted too, which is how the CER is measured against their labels.
+**Status:** planned; after C16a (order of 2026-10-10).
 
-**Files:** `ocr/convert.py`, `app/texts.py`, `app/migrations/versions/0006_texts.py` (`PageText`), a `convert` job in `app/jobs.py`, a `convert` command in `cli.py`, the first version of `frontend/src/screens/TextView.tsx`, `tests/test_convert.py`.
+**Goal:** every Read Book page becomes Gujarati Unicode text, keeping the manuscript's line breaks, shown **in the app beside its page image**, with the uncertain letters marked; the text of a page or of the whole book can be downloaded as .txt, Word, PDF or a picture of the text.
+
+**Files:** `ocr/convert.py`, `ocr/docx.py`, `app/texts.py`, `app/migrations/versions/0005_texts.py` (`PageText`), a `convert` job in `app/jobs.py`, `app/api.py`, a `convert` command in `cli.py`, `frontend/src/screens/TextView.tsx` (+ test), `tests/test_convert.py`.
 
 **What it does:**
-- **Reading each letter**, in reading order per line, using the first source that applies:
-  1. the label of its **reviewed group** (the user's decision is always used first). Samples on pages to convert have no group; they get the label of the **nearest labelled group** of the book instead, if it is within `group_distance` (the C13 method, with the book's own centres);
-  2. the **classifier** (C14), if a model is active;
-  3. **Tesseract's** reading (C11), for printed books, and for handwritten books only if C12 showed it helps there;
-  4. otherwise **unknown**.
-
-  Where 2 and 3 disagree, the higher confidence wins, and the letter is marked uncertain.
-- **Correction:** each line is corrected with the language model (C15), if it is enabled for the book.
-- **Text:**
-  - letters are joined in Devanagari, then mapped to Gujarati with C5b's `mapping.py` (Gujarati or Western digits per book setting);
-  - dandas and verse numbers are kept as written;
-  - no spaces are added (FR-12);
-  - letters below `text_min_confidence` are written as the marker setting: `[?]`, `[?क]` (the best guess inside the marker), or the plain guess.
-- **Output:**
-  - `books/<book>/text/<page>.txt`;
-  - `text/<page>.json`: per letter, sample id, text, confidence, source, and whether it was corrected. This makes every converted letter traceable to the page (requirement Section 7);
-  - a `PageText` row per page.
-
-  It is also included in the C5g export as `text/`.
-- **In the app:** a "Convert" button in the Text tab converts the pages to convert (or a chosen page) as a cancellable job with progress per page.
-- **Without the app** (Phase 3 use): the CLI `python -m letter_extractor convert --input pages/ --output text/ --model <id>` cuts the pages (C0 to C3b) and converts them in one step, without a book or database. In the app, the same work is done through a book's pages to convert (C16a).
+- **Reading each line**, with the readers the book has (C14's letter reader joins when it exists):
+  - **printed books:** Tesseract reads the whole line (C10), with a confidence for every letter. The line's cut letters are matched to its reading (C11's alignment) and each letter is compared with the book's **labelled groups** (the nearest labelled group within `group_distance`, the C13 method on the book's own groups). Where both agree the letter is sure; where they disagree, or Tesseract is unsure, the letter is **uncertain** and the more likely reading is kept;
+  - **handwritten books:** the nearest labelled group for each letter (rough until the letter reader of C14);
+  - **from C14:** the active letter reader for every letter; agreeing readers make a letter sure.
+- **Text:** letters joined in Devanagari and mapped to Gujarati with C5b's mapping (Gujarati or Western digits per book setting); dandas and verse numbers kept as written; no spaces added (FR-12); the manuscript's line breaks kept.
+- **Uncertain letters:** below `text_min_confidence`, or where readers disagree. In the app they are highlighted; in the downloads they are written as `uncertain_marker` (`[?]` by default; `[?ક]` with the best guess; or the plain guess).
+- **In the app, the Text section:**
+  - the page image and its text **side by side or one above the other** (a switch), line by line, in Gujarati (a switch to Devanagari);
+  - clicking an uncertain letter shows it on the page, and the other way round;
+  - **Convert** for one page or all pages, as a cancellable job with progress per page; each page shows its state (converted, with N uncertain letters);
+  - **Download**, for the page or the whole book: **.txt** (UTF-8), **Word** (.docx with a Gujarati font, one page per manuscript page), **PDF** and a **picture** (.png) of the text, both made by the browser from the Text view, since the browser joins Gujarati letters correctly.
+- **Stored:** `books/<book>/text/<page>.txt`, `text/<page>.json` (per letter: sample id, text, confidence, source, uncertain: every letter traceable to the page, requirement Section 7), and a `PageText` row per page.
+- **Without the app** (Phase 3 use): `python -m letter_extractor convert --input pages/ --output text/` cuts and converts a folder of pages in one step, without a book.
 
 **Done when:**
-- every page to convert of the printed book and of the handwritten sample book has a text file;
-- the CER of each is measured against proofread lines and recorded;
-- the `[?]` markers match the low-confidence letters.
+- every page of the printed book's Read Book has text, shown beside its page;
+- the four downloads work for a page and for the whole book, with conjuncts joined correctly in Word, PDF and the picture;
+- the CER of the printed book is measured against labelled Training Data pages (converted the same way) and recorded; the highlighted letters match the low-confidence ones.
 
-**C8 addition:** a smoke test converts the synthetic book.
+**C7 addition:** none. **C8 addition:** a smoke test converts the synthetic book.
 
 ### C17. Proofreading view and feedback
+
+**Status:** planned; after C16b (order of 2026-10-10).
 
 **Goal:** a person checks the converted text side by side with the page. Every correction improves the data: it labels samples, adds to the dictionary and becomes training data.
 
 **Files:** `frontend/src/screens/TextView.tsx` (+ test), `app/texts.py`, additions to `app/actions.py`, `app/api.py`.
 
 **What it does:**
-- **Text tab:**
-  - the page image on the left, with the line boxes from Phase 1;
-  - its text on the right, one row per manuscript line, in Gujarati (switch to Devanagari);
-  - uncertain and dictionary-corrected letters are highlighted.
+- **Text section** (C16b's view, made editable):
+  - the page image and its text side by side or one above the other, with the line boxes;
+  - uncertain and (from C15) dictionary-corrected letters highlighted.
 - **Linked selection:** clicking a letter in the text highlights its sample on the page, and the other way round.
 - **Editing:** a letter can be changed by typing (Devanagari or Gujarati, with the label picker), or "this is two letters" / "these are one letter", which opens the existing join and split from C5f.
-  - A changed letter **labels its sample**: the sample moves to a group with that label, or to a new group if none exists. This is an undoable action. On a page to convert (C16a), this puts that one sample into the book's training data without moving the whole page.
+  - A changed letter **labels its sample**: the sample moves to a group with that label, or to a new group if none exists. This is an undoable action. On a Read Book page (C16a), this puts that one letter into the book's Training Data without moving the whole page; the next training of the reader (C14) learns from it.
   - A line can be marked **proofread**. Proofread lines are:
     - the ground truth for the CER measurements;
     - the source of the library's own word list (C15);
@@ -609,7 +633,7 @@ Rules that carry over from Phase 1:
 - **Compare two routes** on the same proofread lines:
   - **(a) Kraken:** train a model from `lines/*.png` + `.txt` (the standard tool for handwritten manuscripts);
   - **(b) Tesseract fine-tuning:** fine-tune `san` / `hin` from the same lines with `tesstrain`. This needs Tesseract's training tools, which are easier to install on Linux and macOS than on Windows.
-- **The best route by CER** becomes another reader in C16b, used before or instead of the letter classifier.
+- **The best route by CER** becomes another reader in C16b, used before or instead of the letter reader (C14).
 
 **Done when:** a decision has been recorded with the measured CER of each route.
 
@@ -617,20 +641,23 @@ Rules that carry over from Phase 1:
 
 ### Chunk summary
 
+Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C16a, C16b, C17, C14, C15**, and C18 only if needed.
+
 | # | Chunk | Status | Main output | Requirements |
 |---|---|---|---|---|
 | C10 | Tesseract engine, akshara splitting, book writing | done | OCR of a line as aksharas with boxes; handwritten / printed per book | FR-7 |
 | C11 | Matching OCR to samples, group suggestions | done | suggestions on groups and unsure samples | FR-7 |
-| C12 | Reviewing suggestions, measuring | built (measurement after a full review) |
+| C12 | Reviewing suggestions, measuring | built (measurement after a full review) | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
 | C12b | Fixing cuts with Tesseract's readings (printed books) | built | split samples holding several letters, join cut pieces; one undo | FR-8 |
 | C12c | Cutting by Tesseract's reading (printed books) | built | per-book choice of cutting; readings stored at capture | FR-5, FR-7 |
-| C12d | Splitting groups that mix two letters | built | mixed groups split by reading where shapes agree; never by stroke | FR-7 | accept / reject / bulk accept; measured accuracy | FR-7, FR-8 |
+| C12d | Splitting groups that mix two letters | built | mixed groups split by reading where shapes agree; never by stroke | FR-7 |
+| C12e | Giving aa bars back to their letter (printed books) | built | bars, stems, lone bars to their letter; lines on slanted pages | FR-5, FR-8 |
 | C13 | Suggestions from other labelled books | built (handwriting measurement open) | handwriting suggestions, no training | FR-7 |
-| C14 | Letter classifier | **next** | `model.onnx`, per-class accuracy report | FR-11 |
+| C16a | The two parts of a book: Training Data and Read Book | **next** | PDF or images uploaded, cut, never grouped; grouped section menu | FR-12 |
+| C16b | Converting Read Book pages into text | planned | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
+| C17 | Proofreading view | planned | proofread lines; corrections become labels | FR-12 (side-by-side view) |
+| C14 | Letter reader | planned | readers trained in the app any number of times; per-letter accuracy; "Check these" | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
-| C16a | Training pages and pages to convert | planned | two page sets per book, separate folders, `Page.role` | FR-12 (pages to convert) |
-| C16b | Page conversion | planned | `text/<page>.txt` in Gujarati, `[?]` marks | FR-12 |
-| C17 | Proofreading view | planned | proofread lines, feedback into labels | FR-12 (side-by-side view) |
 | C18 | Line recognizer | optional | Kraken or Tesseract model; decision by CER | Section 8.3 |
 
 ---
@@ -662,11 +689,14 @@ All in the same `Config` dataclass, per book, except where noted.
 | `split_distance`, `split_min_samples`, `split_min_share` | C12d | 0.25, 5, 0.1 (measured in C12d) |
 | `books_k` | C13 | 5 |
 | `books_distance` | C13 | 0.5 (measured in C13) |
-| `min_class_samples` | C14 | 5 |
-| `active_model` (app setting) | C14 | none |
+| `min_class_samples` (chosen in the Train form) | C14 | 5 (1 or more) |
+| `reader_words` (train on word labels too) | C14 | off |
+| `reader_id` (a column of the book: its active reader) | C14 | none |
+| `reader_unreviewed` (train on automatic labels too) | C14 | off |
 | `word_lists` | C15 | none |
 | `lm_min_gain`, `lm_protect_confidence` | C15 | set in C15, 0.95 |
-| `convert_dir` (a column of the book, not in `Config`) | C16a | empty = no pages to convert |
+| `read_dir`, `read_pdf` (columns of the book, not in `Config`) | C16a | empty = no Read Book pages yet |
+| `pdf_dpi` | C16a | 300 |
 | `text_min_confidence` | C16b | 0.6 |
 | `uncertain_marker` | C16b | `[?]` (or `[?x]`, or none) |
 
@@ -678,9 +708,10 @@ All in the same `Config` dataclass, per book, except where noted.
 - **Akshara rules** have their own test table: one row per tricky word, from Phase 1's known cutting cases.
 - **Alignment tests use made-up sequences** with known answers: equal, split, merged, missing.
 - **Measurements, not only tests:** every chunk that suggests or converts records its measured accuracy or CER on the sample books in `TUNING_PHASE2.md`, like `TUNING.md` in Phase 1. Defaults are set from these numbers.
-- **The classifier** is tested on the synthetic book for the code path, a short run that checks it learns 3 easy classes. Its real accuracy is a measurement, not a unit test.
+- **The letter reader** is tested on the synthetic book for the code path, a short run that checks it learns 3 easy classes. Its real accuracy is a measurement, not a unit test.
+- **PDF import** is tested with a PDF of a few generated pages; the downloads with a page whose text has conjuncts.
 - **Migrations:** each new migration is tested by upgrading a library made with the previous version.
-- **Screen tests** (Vitest) for the suggestion chips, bulk accept, the Models and Dictionary screens, and the Text view's linked selection.
+- **Screen tests** (Vitest) for the suggestion chips, bulk accept, the grouped section menu, Read Book's upload and capture, the Readers and Dictionary screens, and the Text view's layout switch and linked selection.
 
 ---
 
@@ -689,11 +720,11 @@ All in the same `Config` dataclass, per book, except where noted.
 | Requirement | Chunk | Module |
 |---|---|---|
 | FR-7 Suggested label for each group, confirmed by the user | C10 to C14 | `ocr/tesseract.py`, `ocr/align.py`, `app/suggest.py`, `Suggestions.tsx` |
-| FR-11 Train a recognizer, held-out test set, per-class accuracy, repeatable | C14 (C18) | `ocr/train.py`, `ocr/classifier.py`, `Models.tsx` |
-| FR-12 Pages to convert kept apart from training pages (decided 2026-10-05) | C16a | `app/library.py`, `Page.role`, `Capture.tsx` |
-| FR-12 One UTF-8 Gujarati text file per page, line breaks, `[?]`, dandas, no spaces | C16b | `ocr/convert.py`, `mapping.py` |
+| FR-11 Train a recognizer, held-out test set, per-class accuracy, repeatable | C14 (C18) | `ocr/features.py`, `ocr/reader.py`, `Readers.tsx` |
+| FR-12 Read Book kept apart from Training Data (decided 2026-10-05, 2026-10-10) | C16a | `app/library.py`, `Page.part`, `ReadBook.tsx` |
+| FR-12 One UTF-8 Gujarati text file per page, line breaks, `[?]`, dandas, no spaces; shown beside the page; downloads | C16b | `ocr/convert.py`, `mapping.py`, `TextView.tsx` |
 | FR-12 Side-by-side proofreading view (optional) | C17 | `TextView.tsx`, `app/texts.py` |
-| Section 7 Offline | all | Tesseract and ONNX Runtime run locally |
+| Section 7 Offline | all | Tesseract, the letter reader (NumPy) and PDF import run locally |
 | Section 7 Traceable | C11, C16b | `OcrReading`, `text/<page>.json` |
 | Section 8.3 Letter classifier first, line recognizer later | C14, C18 | |
 
@@ -711,12 +742,14 @@ All in the same `Config` dataclass, per book, except where noted.
 | Tesseract is run on handwriting and its suggestions look sure but are wrong (its confidence is about 95% even there, C10) | Books say whether they are handwritten; Tesseract is the default only for printed books. On handwritten books it is a "Try" that C12 measures, and its share threshold comes from that measurement. |
 | Bulk accept labels many groups wrongly | The threshold comes from measured accuracy (C12); bulk accept is one undoable action; disagreeing samples are shown. |
 | Tesseract is not installed on a user's computer | Only the suggestion button needs it; the app explains what to install. Bundling it is decision 1. |
-| Too little handwritten data for a good classifier | Suggestions from other books (C13) work with no training; augmentation; per-class report shows where to add samples; models improve with every reviewed book. |
-| PyTorch makes the installer very large | Only ONNX Runtime is bundled; training is a separate install (decision 3). |
+| Too little handwritten data for a good letter reader | Suggestions from other books (C13) work with no training; augmentation; per-class report shows where to add samples; models improve with every reviewed book. |
+| PyTorch and ONNX Runtime do not install on the development computer (Intel Mac, Python 3.14) | The letter reader uses shape features and a classic method in NumPy (C14, decided 2026-10-10); a neural network trained elsewhere can still be run with OpenCV's `dnn` if needed. |
+| Gujarati conjuncts come out garbled in PDF downloads | PDF and picture downloads are made by the browser from the Text view, which shapes Gujarati correctly; Word shapes it itself (C16b). |
+| A 300-page Read Book takes about an hour to cut | Capture and conversion are background jobs with progress, cancellable and resumable; pages already done are kept (C16a, C16b). |
 | The dictionary "corrects" right letters into wrong words | Confident letters are protected; every change is marked; it stays off unless measurement shows it helps (C15). |
 | Users change suggestions after accepting, and the measurements drift | Measurements are taken from the final labels after review, and repeated per book. |
 | Converted text loses track of its source | Every letter keeps its sample id and source in `text/<page>.json`. |
-| Hundreds of pages to convert flood the review screens | Pages to convert are never grouped and never shown in Review or Unsure (C16a); only single corrected samples or pages moved on purpose join the training data. |
+| Hundreds of Read Book pages flood the review screens | Read Book letters are never grouped and never shown in Review or Unsure (C16a); only single corrected letters or pages moved on purpose join Training Data. |
 
 ---
 
@@ -724,7 +757,8 @@ All in the same `Config` dataclass, per book, except where noted.
 
 1. **Tesseract: separate install or bundled?** Proposed: **separate install** for now (`INSTALL_TESSERACT.md`). The app finds it automatically, and nothing else depends on it. Bundling adds about 30 to 60 MB per platform and needs its own build steps on macOS. It can be added to C7 later if the team finds the install too hard.
 2. **Default OCR languages:** settled in C10: `script/Devanagari`, which read the printed and handwritten sample lines best (`TUNING_PHASE2.md`). It can be changed per book (`ocr_langs`).
-3. **Training in the app or as a separate tool?** Proposed: **separate** at first. Training is `python -m letter_extractor train` in an install with `requirements-train.txt` (PyTorch, CPU). The app only runs the trained model (ONNX Runtime). Bundling PyTorch would make the app about 4 times larger. A "Train" button inside the app can follow if the people who review books also need to train.
+3. **Training in the app or as a separate tool?** Settled on 2026-10-10: **in the app.** The letter reader uses a classic method in NumPy (PyTorch does not install on the development computer), so training takes seconds to minutes and needs no separate install; `python -m letter_extractor train` does the same without the app.
 4. **Word lists:** which sources may be used? Proposed: the library's own proofread text, plus lists the team imports. No list is downloaded automatically (offline, and licences differ).
-5. **Uncertain-letter marker in the text:** `[?]` (the requirement's example), `[?क]` with the best guess, or the plain guess with a side file only. Proposed: `[?]` by default, as a setting.
+5. **Uncertain-letter marker in the text:** `[?]` (the requirement's example), `[?क]` with the best guess, or the plain guess with a side file only. Proposed: `[?]` by default in the downloads, as a setting; in the app the letters are highlighted.
 6. **Phase 1 C7 / C8 timing:** proposed to do C7 and C8 **after C12**, so the first packaged version already contains Tesseract suggestions. The alternative is before C10, to get an installable app to the team sooner.
+7. **The two parts of a book and the order** (settled 2026-10-10): every book has Training Data and Read Book (Section 0). Read Book takes a PDF or images; its text is shown beside each page and downloaded as .txt, Word, PDF or a picture of the text. Order: C16a, C16b, C17, C14, C15. Double-page scans need no splitting for now.
