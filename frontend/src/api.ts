@@ -112,7 +112,8 @@ export interface JobPage {
 export interface Job {
   id: string;
   book_id: number;
-  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf";
+  kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
+    | "convert";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -140,6 +141,32 @@ export interface PageInfo {
   image: string;
   part?: Part;
   number?: number; // its place in the book
+}
+
+/** How uncertain letters are written in downloads: [?], [?ક] (the best guess inside), or the plain guess. */
+export type Marker = "mark" | "guess" | "none";
+
+/** One letter of a converted page (C16b). */
+export interface TextLetter {
+  sample_id: number;
+  box: [number, number, number, number];
+  text_dev: string; // "" when no reader could read it
+  text_guj: string;
+  conf: number; // 0 to 1
+  source: "both" | "tesseract" | "groups" | "none";
+  uncertain: boolean;
+  space: boolean; // a word gap before it (printed books)
+  readings: [string, string, number][]; // (reader, text, score) seen
+}
+
+export interface PageText {
+  page_id: number;
+  text_dev: string;
+  text_guj: string;
+  lines: TextLetter[][];
+  uncertain: number;
+  readers: string;
+  converted_at: string | null;
 }
 
 export interface Group {
@@ -347,6 +374,11 @@ export const api = {
   readFolder: (id: number, path: string, force = false) => post<Book>(`/api/books/${id}/read/folder`, { path, force }),
   readPdf: (id: number, path: string, force = false) => post<Job>(`/api/books/${id}/read/pdf`, { path, force }),
   readCapture: (id: number) => post<Job>(`/api/books/${id}/read/capture`),
+  convert: (id: number, pageIds?: number[]) => post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read" }),
+  pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
+  bookTexts: (id: number) => get<{ page_id: number; uncertain: number; converted_at: string | null }[]>(`/api/books/${id}/texts`),
+  textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, pageId?: number) =>
+    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
   pagePart: (pageId: number, part: Part, force = false) =>
     post<{ page: number; part: Part; samples: number }>(`/api/pages/${pageId}/part`, { part, force }),
 

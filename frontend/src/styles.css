@@ -1028,3 +1028,128 @@ button.reading-move:hover {
 .page-nav .page-part {
   margin-left: auto;
 }
+
+/* ---- Read Book → Text (C16b) ---- */
+.text-tools {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-bottom: 6px;
+}
+.text-tools .spacer {
+  flex: 1;
+}
+.text-downloads {
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-bottom: 8px;
+}
+a.button.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.text-panes {
+  display: grid;
+  gap: 12px;
+}
+.text-view.side .text-panes {
+  grid-template-columns: 1fr 1fr;
+}
+.text-view.stacked .text-panes {
+  grid-template-columns: 1fr;
+}
+@media (max-width: 860px) {
+  .text-view.side .text-panes {
+    grid-template-columns: 1fr;
+  }
+}
+.text-page,
+.text-text {
+  min-width: 0;
+  max-height: calc(100vh - 190px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.text-view.stacked .text-page,
+.text-view.stacked .text-text {
+  max-height: 48vh;
+}
+.text-page-image {
+  position: relative;
+  width: 100%;
+}
+.text-page-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.text-box {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.text-box.uncertain {
+  background: color-mix(in srgb, var(--warn) 25%, transparent);
+  outline: 1px solid var(--warn);
+}
+.text-box.selected {
+  outline: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.text-text {
+  padding: 8px 12px;
+}
+.text-lines {
+  font-size: 22px;
+  line-height: 1.8;
+}
+.text-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.text-letter {
+  cursor: pointer;
+  border-radius: 3px;
+}
+.text-letter.uncertain {
+  background: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+.text-letter.unknown {
+  color: var(--danger);
+}
+.text-letter.selected {
+  outline: 2px solid var(--accent);
+}
+.text-letter-info {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.print-text {
+  display: none;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-text,
+  .print-text * {
+    visibility: visible;
+  }
+  .print-text {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    font-size: 16pt;
+    line-height: 1.7;
+    color: #000;
+    background: #fff;
+  }
+  .print-text p {
+    margin: 0;
+  }
+  .print-text section + section {
+    break-before: page;
+  }
+}

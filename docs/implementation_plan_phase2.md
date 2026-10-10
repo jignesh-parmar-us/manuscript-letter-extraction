@@ -6,7 +6,7 @@ Since 2026-10-10 every book has **two parts** (Section 0): **Training Data**, wh
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. **C16b is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. C16b is built (2026-10-10): Read Book pages are converted into text, shown beside the page with uncertain letters marked, and downloaded as .txt, Word, PDF or a picture. **C17 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -579,7 +579,7 @@ Rules that carry over from Phase 1:
 
 ### C16b. Converting Read Book pages into text (FR-12)
 
-**Status:** next (order of 2026-10-10).
+**Status:** built (2026-10-10). On a copy of the user's library: 3 pages of the printed book (1,826 letters) converted in 18 s; 13% of the letters marked uncertain. Measured on 8 training pages against the reviewed labels (1,577 letters): Tesseract alone reads 84.4% right; 66 of its 246 mistakes are marked uncertain, 180 are confident mistakes, which the groups' second opinion and the letter reader (C14) are there to catch (`TUNING_PHASE2.md`).
 
 **Goal:** every Read Book page becomes Gujarati Unicode text, keeping the manuscript's line breaks, shown **in the app beside its page image**, with the uncertain letters marked; the text of a page or of the whole book can be downloaded as .txt, Word, PDF or a picture of the text.
 
@@ -605,11 +605,19 @@ Rules that carry over from Phase 1:
 - the four downloads work for a page and for the whole book, with conjuncts joined correctly in Word, PDF and the picture;
 - the CER of the printed book is measured against labelled Training Data pages (converted the same way) and recorded; the highlighted letters match the low-confidence ones.
 
+**Changes from the original plan:**
+- **The letters are the cut letters** (not Tesseract's aksharas), so every letter of the text is a sample of the page: it can be shown on the page, and corrected in C17 as a label. Letters the alignment could not place get the group's reading, or are unknown.
+- **A disagreement is uncertain only when the group is close or Tesseract not very sure** (`text_group_close` 0.45, `text_tesseract_trust` 95). Marking every disagreement made 20% of the letters uncertain on the printed book, most of them where Tesseract was right (seen on 24 of them: Tesseract right 10 of 11 times when it was at least 95 sure and the group further than 0.45). With the rule: 13%.
+- **Spaces on printed books:** a gap wider than half the line's letter width becomes a space (`text_space_gap`); handwriting gets none (FR-12).
+- **The uncertain-letter marker is chosen when downloading** (the setting is the default): `[?]`, `[?ક]` with the best guess, or the plain guess; with `[?]`, 13% of the letters make a .txt hard to read, so the choice matters.
+- **Downloads** are at `/files/texts/{book}` (`/files/books/{book}/…` already serves the book's image files). The PDF is printed by the browser from a print-only view of the text; the picture is drawn on a canvas, so the browser's own text shaping joins the Gujarati letters. Word files use the Shruti font, 14 pt, one paragraph per manuscript line, a page break and a small heading per page.
+- **Not yet:** the dictionary (C15) and the letter reader (C14) as readers; the command-line `convert` without a book (Phase 3 use) waits for C17.
+
 **C7 addition:** none. **C8 addition:** a smoke test converts the synthetic book.
 
 ### C17. Proofreading view and feedback
 
-**Status:** planned; after C16b (order of 2026-10-10).
+**Status:** next (order of 2026-10-10).
 
 **Goal:** a person checks the converted text side by side with the page. Every correction improves the data: it labels samples, adds to the dictionary and becomes training data.
 
@@ -664,8 +672,8 @@ Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C1
 | C12e | Giving aa bars back to their letter (printed books) | built | bars, stems, lone bars to their letter; lines on slanted pages | FR-5, FR-8 |
 | C13 | Suggestions from other labelled books | built (handwriting measurement open) | handwriting suggestions, no training | FR-7 |
 | C16a | The two parts of a book: Training Data and Read Book | built | PDF or images uploaded, cut, never grouped; grouped section menu | FR-12 |
-| C16b | Converting Read Book pages into text | **next** | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
-| C17 | Proofreading view | planned | proofread lines; corrections become labels | FR-12 (side-by-side view) |
+| C16b | Converting Read Book pages into text | built | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
+| C17 | Proofreading view | **next** | proofread lines; corrections become labels | FR-12 (side-by-side view) |
 | C14 | Letter reader | planned | readers trained in the app any number of times; per-letter accuracy; "Check these" | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
 | C18 | Line recognizer | optional | Kraken or Tesseract model; decision by CER | Section 8.3 |
@@ -708,7 +716,9 @@ All in the same `Config` dataclass, per book, except where noted.
 | `read_dir`, `read_pdf` (columns of the book, not in `Config`) | C16a | empty = no Read Book pages yet |
 | `pdf_dpi` | C16a | 300 |
 | `text_min_confidence` | C16b | 0.6 |
-| `uncertain_marker` | C16b | `[?]` (or `[?x]`, or none) |
+| `text_tesseract_sure`, `text_tesseract_trust`, `text_group_close` | C16b | 90, 95, 0.45 (measured) |
+| `text_space_gap` | C16b | 0.5 (printed books only) |
+| `uncertain_marker` | C16b | `mark` = `[?]` (or `guess` = `[?x]`, or `none`); also chosen per download |
 
 ---
 

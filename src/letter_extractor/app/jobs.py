@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -167,6 +167,21 @@ class Jobs:
                 raise BookHasReviewError(f"The book already has {n} Read Book pages; new pages replace them.")
         return self.start(book_id, "import_pdf",
                           lambda progress, cancel: self.lib.import_pdf(book_id, path, progress, cancel, force=force))
+
+    def convert(self, book_id: int, page_ids=None, part: str = "read", tesseract_path: str = "") -> Job:
+        """Convert pages into text (C16b); each page is stored when done, so a cancel keeps them."""
+        from sqlalchemy import func, select
+        from .db import Page
+        from .texts import convert_book
+        self.lib.get_book(book_id)
+        with self.lib.session() as s:
+            q = select(func.count(Page.id)).where(Page.book_id == book_id)
+            q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
+            total = s.scalar(q) or 0
+        if not total:
+            raise LibraryError("No pages to convert: cut the Read Book pages first.")
+        return self.start(book_id, "convert", lambda progress, cancel: convert_book(
+            self.lib, book_id, page_ids, part, progress, cancel, tesseract_path=tesseract_path), total=total)
 
     def export(self, book_id: int, folder=None, image=None) -> Job:
         """Export the book's dataset (C5g); copying many images can take a while."""

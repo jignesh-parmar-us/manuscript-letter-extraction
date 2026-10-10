@@ -23,6 +23,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   fix_bars: "Giving ા bars back to their letters",
   capture_read: "Cutting the Read Book pages",
   import_pdf: "Turning the PDF into page images",
+  convert: "Converting pages into text",
 };
 
 export default function Capture({ book, onChanged }: Props) {
@@ -208,7 +209,12 @@ export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) 
         </>
       )}
       {job.status === "failed" && <p className="error">{job.error}</p>}
-      {job.status === "done" && result && (
+      {job.status === "done" && result && job.kind === "convert" && (
+        <p className="small">
+          {result.pages} pages converted: {result.letters} letters, {result.uncertain} uncertain
+        </p>
+      )}
+      {job.status === "done" && result && job.kind !== "convert" && (
         <p className="small">
           {result.pages} pages, {result.lines} lines, {result.samples} letters
           {"groups" in result && `, ${result.groups} groups, ${result.unsure} unsure`}

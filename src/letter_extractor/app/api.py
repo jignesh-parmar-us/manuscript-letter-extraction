@@ -51,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      PagePart, ReadSource,
+                      ConvertRequest, PagePart, ReadSource,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -193,6 +193,57 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/read/capture", dependencies=auth, status_code=202)
     def read_capture(book_id: int) -> Dict:
         return jobs.capture_read(book_id).as_dict()
+
+    # ---- converted text (C16b) ---------------------------------------------------------------------
+    @app.post("/api/books/{book_id}/convert", dependencies=auth, status_code=202)
+    def convert(book_id: int, body: ConvertRequest = ConvertRequest()) -> Dict:
+        return jobs.convert(book_id, body.page_ids, body.part, tesseract_path=tesseract_setting()).as_dict()
+
+    @app.get("/api/pages/{page_id}/text", dependencies=auth)
+    def text_of_page(page_id: int) -> Dict:
+        from .texts import page_text
+        got = page_text(library, page_id)
+        if got is None:
+            raise HTTPException(404, "This page is not converted yet.")
+        return got
+
+    @app.get("/api/books/{book_id}/texts", dependencies=auth)
+    def texts_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> List[Dict]:
+        """Which pages of a part are converted, with their numbers of uncertain letters."""
+        from .texts import book_texts
+        library.get_book(book_id)
+        return [{"page_id": p.id, "uncertain": t.uncertain,
+                 "converted_at": t.converted_at.isoformat() if t.converted_at else None}
+                for p, t in book_texts(library, book_id, part)]
+
+    @app.get("/files/texts/{book_id}", dependencies=auth)
+    def download_text(book_id: int, format: str = Query("txt", pattern="^(txt|docx)$"),
+                      page_id: Optional[int] = None, script: str = Query("gujarati", pattern="^(gujarati|devanagari)$"),
+                      part: str = Query("read", pattern="^(training|read)$"),
+                      marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$")):
+        """The text of one page or of every converted page of a part, as .txt (UTF-8) or Word."""
+        from urllib.parse import quote
+        from ..mapping import mapping_for
+        from ..ocr.docx import write_docx
+        from .texts import book_texts, marked_lines
+        book = library.get_book(book_id)
+        cfg = library.book_config(book)
+        rows = book_texts(library, book_id, part, page_id)
+        if not rows:
+            raise HTTPException(404, "Nothing converted yet.")
+        mapping = mapping_for(cfg)
+        pages = [(f"{p.number or i} · {p.file}" if not page_id else "",
+                  marked_lines(t, marker or cfg.uncertain_marker, script, mapping)) for i, (p, t) in enumerate(rows, 1)]
+        name = Path(rows[0][0].file).stem if page_id else book.name
+        if format == "docx":
+            data = write_docx(pages)
+            media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            parts = [("" if not heading else f"=== {heading} ===\n") + "\n".join(lines) for heading, lines in pages]
+            data = ("\n\n".join(parts) + "\n").encode("utf-8")
+            media = "text/plain; charset=utf-8"
+        disposition = f"attachment; filename*=UTF-8''{quote(name)}.{format}"
+        return Response(data, media_type=media, headers={"Content-Disposition": disposition})
 
     @app.post("/api/pages/{page_id}/part", dependencies=auth)
     def page_part(page_id: int, body: PagePart) -> Dict:

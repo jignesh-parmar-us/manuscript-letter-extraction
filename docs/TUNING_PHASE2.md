@@ -152,6 +152,23 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
+## C16b. Converting pages into text (2026-10-10)
+
+**Data:** a copy of the user's library, book 6 (printed, cut by Tesseract's reading): 3 Read Book pages from a PDF (1,826 letters), and 8 training pages with the user's reviewed labels as the truth.
+
+**Uncertain letters on the Read Book pages:** marking every disagreement between Tesseract and the nearest labelled group made 369 letters (20%) uncertain; 353 of them were disagreements, 16 a group too far with no Tesseract reading. Looking at 24 disagreements: Tesseract right about 12 times, the group about 6, neither about 5; when Tesseract was at least 95 sure and the group further than 0.45, Tesseract was right 10 of 11 times. Leaving those certain:
+
+| A disagreement is uncertain when the group is within | Uncertain letters |
+|---|---|
+| (always) | 369 (20%) |
+| 0.50 or Tesseract below 95 | 307 (17%) |
+| **0.45 or Tesseract below 95 (kept)** | 244 (13%) |
+| 0.40 or Tesseract below 95 | 184 (10%) |
+
+**Tesseract alone on reviewed letters** (8 training pages, 1,577 letters whose group is reviewed; the groups' second opinion left out, since a training letter would vote for its own group): 1,331 right (84.4%). Of the 246 mistakes, 66 are marked uncertain and 180 are confident: the groups and the letter reader (C14) are needed to catch those. Most common: letters the alignment could not place (shown as ?), extra aksharas on ण (हण, रण, पण), जे read as ज, क as का (C14's note), छे as ळे or ठे.
+
+**Speed:** about 6 s a page (13 lines read by Tesseract, 3 at a time on the development laptop).
+
 ## C13. Suggestions from other labelled books (2026-10-06)
 
 **No handwritten book is labelled yet**, so the plan's measurement (two handwritten pages, one suggesting the other) waits for the user's labels. Measured on print instead, on a copy of the user's library: book 3 "Vachnamrut Printed 1933" (cut by shapes, 82 labelled groups) suggests for book 4 "Vachnamrut Printed 1933 Tesseract Cuts" (the same 23 pages cut by Tesseract and grouped on their own; its labels reviewed by the user are the truth). Since the two books share pages, the reference centres are built only from book 3's samples on half of the pages, and only book 4's samples on the other half are judged (both ways round).

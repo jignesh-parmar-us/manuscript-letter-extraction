@@ -133,6 +133,13 @@ class Config:
     split_min_samples: int = 5            # their group when their shape centre is this far from the group's main
     split_min_share: float = 0.1          # letters, and there are this many of them and this share of the group
     pdf_dpi: int = 300                    # Read Book: PDF pages are drawn at this resolution (C16a)
+    # converting pages into text (C16b, ocr/convert.py)
+    text_min_confidence: float = 0.6      # a letter below this confidence is uncertain
+    text_tesseract_sure: float = 90       # Tesseract's reading wins a disagreement from this confidence on
+    text_tesseract_trust: float = 95      # ...and the letter is not uncertain from this one on,
+    text_group_close: float = 0.45        # ...unless the group is this close (measured, TUNING_PHASE2.md)
+    text_space_gap: float = 0.5           # printed books: a gap wider than this x the line's letter width is a space
+    uncertain_marker: str = "mark"        # in text files: "mark" [?], "guess" [?क], "none" (the plain guess)
     cut_method: str = "shapes"            # cutting letters: "shapes" (C3a, C3b) or "tesseract" (by its reading, C12c)
     tesseract_cut_min_gap: float = 0.3    # Tesseract cutting: cuts closer than this x a letter width are not made
     recut_window: float = 0.3             # fixing cuts (C12b): a cut may move this x a letter width from Tesseract's

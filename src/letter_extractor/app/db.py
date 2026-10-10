@@ -180,6 +180,21 @@ class OcrReading(Base):
     overlap: Mapped[float] = mapped_column(Float, default=0.0)
 
 
+class PageText(Base):
+    """A page converted into text (C16b): one row per page, replaced when it is converted again.
+    `letters` holds every letter with its sample, box, text, confidence, source and whether it is
+    uncertain, line by line, so each letter of the text can be traced to the page."""
+    __tablename__ = "page_text"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    page_id: Mapped[int] = mapped_column(ForeignKey("page.id", ondelete="CASCADE"), unique=True, index=True)
+    text_dev: Mapped[str] = mapped_column(Text, default="")                # plain, line breaks kept
+    text_guj: Mapped[str] = mapped_column(Text, default="")
+    letters: Mapped[str] = mapped_column(Text, default="[]")               # JSON, per line a list of letters
+    uncertain: Mapped[int] = mapped_column(Integer, default=0)
+    readers: Mapped[str] = mapped_column(String(100), default="")          # e.g. "tesseract+groups"
+    converted_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+
+
 class Action(Base):
     """Every change made by the user, for undo and history (C5c). `payload` is JSON."""
     __tablename__ = "action"

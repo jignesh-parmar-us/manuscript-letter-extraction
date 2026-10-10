@@ -119,6 +119,12 @@ class ReadSource(BaseModel):
     force: bool = False
 
 
+class ConvertRequest(BaseModel):
+    """Convert pages into text (C16b): the given pages, or every page of a part."""
+    page_ids: Optional[List[int]] = None
+    part: Literal["training", "read"] = "read"
+
+
 class PagePart(BaseModel):
     part: Literal["training", "read"]
     force: bool = False
