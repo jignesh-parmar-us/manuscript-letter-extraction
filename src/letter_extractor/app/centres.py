@@ -46,12 +46,19 @@ def centres(s: Session, book_id: int, labelled_only: bool = False) -> Tuple[List
     q = select(LetterGroup).where(LetterGroup.book_id == book_id)
     if labelled_only:
         q = q.where(LetterGroup.label_dev != "")
-    groups, rows = [], []
-    for g in s.scalars(q.order_by(LetterGroup.id)):
-        fps = [_vec(m.fingerprint) for m in members(s, g.id) if m.fingerprint is not None]
-        if fps:
-            groups.append(g)
-            rows.append(_unit(np.stack(fps).mean(axis=0)))
+    wanted = {g.id: g for g in s.scalars(q)}
+    # every member's fingerprint in one query (one query per group took a second on a large book)
+    sums: Dict[int, np.ndarray] = {}
+    counts: Dict[int, int] = {}
+    for gid, fp in s.execute(select(Sample.group_id, Sample.fingerprint)
+                             .where(Sample.book_id == book_id, Sample.group_id.is_not(None),
+                                    Sample.deleted.is_(False), Sample.fingerprint.is_not(None))):
+        if gid in wanted:
+            v = _vec(fp).astype(np.float64)
+            sums[gid] = sums[gid] + v if gid in sums else v
+            counts[gid] = counts.get(gid, 0) + 1
+    groups = [wanted[gid] for gid in sorted(sums)]
+    rows = [_unit((sums[g.id] / counts[g.id]).astype(np.float32)) for g in groups]
     return groups, (np.stack(rows) if rows else np.zeros((0, 0), np.float32))
 
 
@@ -63,13 +70,17 @@ def suggestions(s: Session, book_id: int, samples: List[Sample], max_distance: f
     if not groups:
         return out
     labelled = np.array([g.label_dev != "" for g in groups])
-    for smp in samples:
-        v = _vec(smp.fingerprint)
-        if v is None:
-            continue
-        d = np.linalg.norm(C - v, axis=1)
+    ids = np.array([g.id for g in groups])
+    have = [smp for smp in samples if smp.fingerprint is not None]
+    if not have:
+        return out
+    V = np.stack([_vec(smp.fingerprint) for smp in have]).astype(np.float64)
+    Cd = C.astype(np.float64)
+    # all distances at once: |v - c|^2 = |v|^2 + |c|^2 - 2 v.c
+    D = np.sqrt(np.maximum((V * V).sum(axis=1)[:, None] + (Cd * Cd).sum(axis=1)[None, :] - 2 * V @ Cd.T, 0.0))
+    for smp, d in zip(have, D):
         if smp.group_id is not None:                       # never suggest its own group
-            d = np.where(np.array([g.id == smp.group_id for g in groups]), np.inf, d)
+            d = np.where(ids == smp.group_id, np.inf, d)
         j = int(np.argmin(d))
         if labelled.any():
             jl = int(np.argmin(np.where(labelled, d, np.inf)))

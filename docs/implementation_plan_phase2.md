@@ -153,7 +153,9 @@ PageText        id, page_id, version, text_dev, text_guj, letters JSON (sample i
                 lines JSON (proofread per line), edited_at (C16b, C17)
 Sample          + index ix_sample_counts (book_id, part, deleted, group_id), migration 0008 (2026-10-10): the
                   letter counts read only the index, not the rows (about 6 KB each, the fingerprint); the
-                  book list on the user's library went from 1.7 s to 0.05 s
+                  book list on the user's library went from 1.7 s to 0.05 s. The same day, Review groups and
+                  Unsure load all groups' members and fingerprints in one query (not one per group) and compute
+                  the suggestion distances at once: 0.7 s -> 0.23 s and 1.05 s -> 0.27 s, same results
 ```
 
 Rules that carry over from Phase 1:

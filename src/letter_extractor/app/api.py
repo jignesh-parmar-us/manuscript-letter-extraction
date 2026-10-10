@@ -79,10 +79,24 @@ def _sample_json(smp: Sample, book_id: int, token: str) -> Dict:
             "context": f"/files/samples/{smp.id}/context?token={token}" if smp.page_id is not None else None}
 
 
-def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None) -> Dict:
-    """`ocr`: the group's entry of suggest.group_readings (suggestion and most common readings)."""
-    mem = s.scalars(select(Sample).where(Sample.group_id == g.id, Sample.deleted.is_(False))
-                    .order_by(Sample.distance)).all()
+def _group_members(s, book_id: int, group_id: Optional[int] = None) -> Dict[int, List]:
+    """The members of a book's groups (or of one group) as light rows (id, ink, distance, image), nearest
+    to the centre first: one query for all groups, without the fingerprints."""
+    q = (select(Sample.group_id, Sample.id, Sample.ink, Sample.distance, Sample.image)
+         .where(Sample.book_id == book_id, Sample.group_id.is_not(None), Sample.deleted.is_(False)))
+    if group_id is not None:
+        q = q.where(Sample.group_id == group_id)
+    out: Dict[int, List] = {}
+    for row in s.execute(q.order_by(Sample.distance)):
+        out.setdefault(row.group_id, []).append(row)
+    return out
+
+
+def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None, mem: Optional[List] = None) -> Dict:
+    """`ocr`: the group's entry of suggest.group_readings (suggestion and most common readings); `mem`:
+    its members from _group_members, if already known."""
+    if mem is None:
+        mem = _group_members(s, g.book_id, g.id).get(g.id, [])
     red = sum(m.ink == "red" for m in mem)
     dists = [m.distance for m in mem if m.distance is not None]
     return {"id": g.id, "code": g.code, "kind": g.kind, "label_dev": g.label_dev, "label_guj": g.label_guj,
@@ -433,7 +447,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         with library.session() as s:
             book = book_or_404(s, book_id)
             ocr = group_suggestions(s, book, library.book_config(book))
-            return [_group_json(s, g, token, ocr.get(g.id)) for g in
+            mem = _group_members(s, book_id)
+            return [_group_json(s, g, token, ocr.get(g.id), mem.get(g.id, [])) for g in
                     s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id).order_by(LetterGroup.code))]
 
     @app.get("/api/groups/{group_id}", dependencies=auth)
