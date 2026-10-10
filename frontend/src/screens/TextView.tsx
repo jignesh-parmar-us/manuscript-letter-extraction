@@ -1,11 +1,13 @@
 // Read Book → Text (C16b): a page and its converted text, side by side or one above the other.
+// Printed books: "Tesseract only" shows what Tesseract read; "Tesseract + your groups" adds the labelled
+// groups' second opinion and the uncertain marks it brings (both are stored, so switching is instant).
 // Uncertain letters are highlighted in the text and on the page; clicking a letter shows it on the
 // page, and clicking a box on the page shows its letter in the text. Convert the page or all pages
 // (a background job; each page is kept as soon as it is done). Downloads: .txt and Word from the
 // backend; PDF printed by the browser from the text; a picture (.png) of the text drawn by the browser,
 // which joins Gujarati letters correctly.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, Book, Marker, PageInfo, PageText, TextLetter } from "../api";
+import { api, Book, Marker, PageInfo, PageText, Readers, TextLetter } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
@@ -22,14 +24,29 @@ interface Props {
   onChanged: () => void;
 }
 
-function shown(x: TextLetter, script: Script): string {
-  const t = script === "gujarati" ? x.text_guj : x.text_dev;
-  return t || "?";
+/** A letter as one set of readers sees it: its text and whether it is uncertain. */
+function view(x: TextLetter, readers: Readers): { dev: string; guj: string; uncertain: boolean; conf: number } {
+  if (readers === "tesseract" && x.t_text_dev !== undefined)
+    return { dev: x.t_text_dev, guj: x.t_text_guj ?? "", uncertain: !!x.t_uncertain, conf: x.t_conf ?? 0 };
+  return { dev: x.text_dev, guj: x.text_guj, uncertain: x.uncertain, conf: x.conf };
+}
+
+function shown(x: TextLetter, script: Script, readers: Readers = "both"): string {
+  const v = view(x, readers);
+  return (script === "gujarati" ? v.guj : v.dev) || "?";
 }
 
 /** A page's lines as plain text (the best guesses, no markers), in one script. */
-export function plainLines(text: PageText, script: Script): string[] {
-  return text.lines.map((line) => line.map((x) => (x.space ? " " : "") + shown(x, script)).join(""));
+export function plainLines(text: PageText, script: Script, readers: Readers = "both"): string[] {
+  return text.lines.map((line) => line.map((x) => (x.space ? " " : "") + shown(x, script, readers)).join(""));
+}
+
+function storedReaders(): Readers {
+  try {
+    return localStorage.getItem("text-readers") === "both" ? "both" : "tesseract";
+  } catch {
+    return "tesseract";
+  }
 }
 
 export default function TextView({ book, pageId, onChanged }: Props) {
@@ -39,6 +56,15 @@ export default function TextView({ book, pageId, onChanged }: Props) {
   const [layout, setLayout] = useState<Layout>("side");
   const [script, setScript] = useState<Script>("gujarati");
   const [marker, setMarker] = useState<Marker>("mark");
+  const [readersChoice, setReadersChoice] = useState<Readers>(storedReaders);
+  function chooseReaders(r: Readers) {
+    setReadersChoice(r);
+    try {
+      localStorage.setItem("text-readers", r);
+    } catch {
+      // a private window: the choice lasts until the page is closed
+    }
+  }
   const [selected, setSelected] = useState<number | null>(null); // a sample id
   const [choosing, setChoosing] = useState(false);
   const [printing, setPrinting] = useState<PageText[] | null>(null); // texts to print as PDF
@@ -81,6 +107,9 @@ export default function TextView({ book, pageId, onChanged }: Props) {
   const prev = at > 0 ? pages[at - 1] : undefined;
   const next = at >= 0 && at < pages.length - 1 ? pages[at + 1] : undefined;
   const letters = useMemo(() => (text ? text.lines.flat() : []), [text]);
+  const hasTesseract = !!text?.readers.includes("tesseract");
+  const readers: Readers = hasTesseract ? readersChoice : "both";
+  const uncertainCount = readers === "tesseract" ? text?.uncertain_tesseract ?? 0 : text?.uncertain ?? 0;
   const sel = letters.find((x) => x.sample_id === selected) ?? null;
 
   // the selected letter in view on the other side
@@ -94,7 +123,7 @@ export default function TextView({ book, pageId, onChanged }: Props) {
 
   function downloadPicture() {
     if (!text || !page) return;
-    const lines = plainLines(text, script);
+    const lines = plainLines(text, script, readers);
     const size = 30;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -180,6 +209,18 @@ export default function TextView({ book, pageId, onChanged }: Props) {
             One above the other
           </button>
         </div>
+        {hasTesseract && (
+          <div className="row" role="group" aria-label="Readers">
+            <button className={readers === "tesseract" ? "tab active" : "tab"} onClick={() => chooseReaders("tesseract")}
+              title="What Tesseract read, as it is">
+              Tesseract only
+            </button>
+            <button className={readers === "both" ? "tab active" : "tab"} onClick={() => chooseReaders("both")}
+              title="Tesseract checked against your labelled groups: disagreements are marked uncertain">
+              Tesseract + your groups
+            </button>
+          </div>
+        )}
         <div className="row" role="group" aria-label="Script">
           <button className={script === "gujarati" ? "tab active" : "tab"} onClick={() => setScript("gujarati")}>
             ગુજરાતી
@@ -202,10 +243,10 @@ export default function TextView({ book, pageId, onChanged }: Props) {
               <option value="guess">uncertain as [?ક] (best guess)</option>
               <option value="none">best guess, no marks</option>
             </select>
-            <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "txt", script, marker, pageId) : undefined}>
+            <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "txt", script, marker, readers, pageId) : undefined}>
               Page .txt
             </a>
-            <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "docx", script, marker, pageId) : undefined}>
+            <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "docx", script, marker, readers, pageId) : undefined}>
               Page Word
             </a>
             <button className="small" disabled={!text} onClick={() => printPdf(false)}>
@@ -215,10 +256,10 @@ export default function TextView({ book, pageId, onChanged }: Props) {
               Page picture
             </button>
             <span className="small muted">Whole book ({nConverted} pages):</span>
-            <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "txt", script, marker) : undefined}>
+            <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "txt", script, marker, readers) : undefined}>
               .txt
             </a>
-            <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "docx", script, marker) : undefined}>
+            <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "docx", script, marker, readers) : undefined}>
               Word
             </a>
             <button className="small" disabled={!nConverted} onClick={() => printPdf(true)}>
@@ -231,15 +272,15 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                 <div className="text-page-image" style={{ aspectRatio: `${page.width} / ${page.height}` }}>
                   <img src={page.image} alt={page.file} />
                   {letters
-                    .filter((x) => x.uncertain || x.sample_id === selected)
+                    .filter((x) => view(x, readers).uncertain || x.sample_id === selected)
                     .map((x) => (
                       <span
                         key={x.sample_id}
                         ref={(el) => {
                           if (el) boxRefs.current.set(x.sample_id, el);
                         }}
-                        className={`text-box${x.uncertain ? " uncertain" : ""}${x.sample_id === selected ? " selected" : ""}`}
-                        title={`${shown(x, script)}${x.uncertain ? " (uncertain)" : ""}`}
+                        className={`text-box${view(x, readers).uncertain ? " uncertain" : ""}${x.sample_id === selected ? " selected" : ""}`}
+                        title={`${shown(x, script, readers)}${view(x, readers).uncertain ? " (uncertain)" : ""}`}
                         onClick={() => pick(x.sample_id, "page")}
                         style={{
                           left: `${(100 * x.box[0]) / page.width}%`,
@@ -260,7 +301,8 @@ export default function TextView({ book, pageId, onChanged }: Props) {
               ) : (
                 <>
                   <p className="small muted">
-                    {text.uncertain} uncertain letters (highlighted) · read by {text.readers.replace("+", " and ") || "nothing"}
+                    {uncertainCount} uncertain letters (highlighted) ·{" "}
+                    {readers === "tesseract" ? "as Tesseract read it" : `read by ${text.readers.replace("+", " and ") || "nothing"}`}
                   </p>
                   <div className={`text-lines ${script}`} lang={script === "gujarati" ? "gu" : "sa"}>
                     {text.lines.map((line, i) => (
@@ -272,12 +314,12 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                               ref={(el) => {
                                 if (el) letterRefs.current.set(x.sample_id, el);
                               }}
-                              className={`text-letter${x.uncertain ? " uncertain" : ""}${x.text_dev ? "" : " unknown"}${
+                              className={`text-letter${view(x, readers).uncertain ? " uncertain" : ""}${view(x, readers).dev ? "" : " unknown"}${
                                 x.sample_id === selected ? " selected" : ""
                               }`}
                               onClick={() => pick(x.sample_id, "text")}
                             >
-                              {shown(x, script)}
+                              {shown(x, script, readers)}
                             </span>
                           </span>
                         ))}
@@ -286,8 +328,8 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                   </div>
                   {sel && (
                     <p className="small text-letter-info" aria-live="polite">
-                      <strong>{shown(sel, script)}</strong> · confidence {Math.round(sel.conf * 100)}%
-                      {sel.uncertain && " · uncertain"} ·{" "}
+                      <strong>{shown(sel, script, readers)}</strong> · confidence {Math.round(view(sel, readers).conf * 100)}%
+                      {view(sel, readers).uncertain && " · uncertain"} ·{" "}
                       {sel.readings.length
                         ? sel.readings.map(([r, t, v]) => `${r === "groups" ? "your groups" : "Tesseract"}: ${t || "—"} (${v})`).join(" · ")
                         : "no reader could read it"}
@@ -304,7 +346,7 @@ export default function TextView({ book, pageId, onChanged }: Props) {
           {printing.map((t) => (
             <section key={t.page_id}>
               {printing.length > 1 && <h3>{pages.find((p) => p.id === t.page_id)?.file}</h3>}
-              {plainLines(t, script).map((l, i) => (
+              {plainLines(t, script, readers).map((l, i) => (
                 <p key={i}>{l}</p>
               ))}
             </section>

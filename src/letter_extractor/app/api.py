@@ -220,7 +220,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def download_text(book_id: int, format: str = Query("txt", pattern="^(txt|docx)$"),
                       page_id: Optional[int] = None, script: str = Query("gujarati", pattern="^(gujarati|devanagari)$"),
                       part: str = Query("read", pattern="^(training|read)$"),
-                      marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$")):
+                      marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$"),
+                      readers: str = Query("both", pattern="^(both|tesseract)$")):
         """The text of one page or of every converted page of a part, as .txt (UTF-8) or Word."""
         from urllib.parse import quote
         from ..mapping import mapping_for
@@ -233,7 +234,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             raise HTTPException(404, "Nothing converted yet.")
         mapping = mapping_for(cfg)
         pages = [(f"{p.number or i} · {p.file}" if not page_id else "",
-                  marked_lines(t, marker or cfg.uncertain_marker, script, mapping)) for i, (p, t) in enumerate(rows, 1)]
+                  marked_lines(t, marker or cfg.uncertain_marker, script, mapping, readers)) for i, (p, t) in enumerate(rows, 1)]
         name = Path(rows[0][0].file).stem if page_id else book.name
         if format == "docx":
             data = write_docx(pages)

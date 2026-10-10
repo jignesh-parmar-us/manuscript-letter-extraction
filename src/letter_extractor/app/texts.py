@@ -3,7 +3,8 @@
 For each page (Read Book pages, or training pages to measure against their labels):
 1. its letters, line by line in reading order;
 2. **printed books:** Tesseract reads each line image (several lines at once); its aksharas are put on
-   the cut letters with C11's alignment;
+   the cut letters with C11's alignment, and a letter the alignment could not place takes the characters
+   Tesseract read over it (measured: 13.1% -> 10.8% CER, TUNING_PHASE2.md);
 3. every letter is compared with the book's **labelled groups** (nearest centre, C13's method);
 4. `ocr.convert.choose` decides each letter's text, confidence and whether it is uncertain;
 5. the page's text is joined line by line (spaces at word gaps on printed books), mapped to Gujarati,
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import json
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -45,7 +47,9 @@ def _nearest(fp: Optional[bytes], groups, C: np.ndarray) -> Optional[Tuple[str, 
 
 def _read_lines(lib: Library, book: Book, cfg, lines: Sequence[Line], letters: Dict[int, List[Sample]],
                 reader: LineReader) -> Dict[int, Tuple[str, float]]:
-    """Tesseract's reading of each letter of these lines: sample id -> (text, confidence 0 to 100)."""
+    """Tesseract's reading of each letter of these lines: sample id -> (text, confidence 0 to 100). A letter
+    the alignment did not place (or a line it refused) gets the characters Tesseract read over the
+    letter (their box centres inside its x span), with the lowest of their confidences."""
     book_dir = lib.book_dir(book)
 
     def read(line: Line):
@@ -54,12 +58,20 @@ def _read_lines(lib: Library, book: Book, cfg, lines: Sequence[Line], letters: D
             return {}
         rgb, _ = io_utils.load_image(book_dir / line.image)
         reading = reader(rgb)
+        dx = max(0, line.x - cfg.line_margin_px)
         al = align_line(line_aksharas(reading.words), [(x.x, x.x + x.w) for x in smps],
-                        dx=max(0, line.x - cfg.line_margin_px), min_overlap=cfg.align_min_overlap,
+                        dx=dx, min_overlap=cfg.align_min_overlap,
                         sure_overlap=cfg.align_sure_overlap, min_matched=cfg.align_min_matched)
-        if al.refused:
-            return {}
-        return {smps[m.sample].id: (m.text, m.conf) for m in al.matches}
+        got = {} if al.refused else {smps[m.sample].id: (m.text, m.conf) for m in al.matches}
+        chars = [c for w in reading.words for c in w.chars if c.box[2] > 0]
+        for x in smps:
+            if x.id in got:
+                continue
+            over = [c for c in chars if x.x <= c.box[0] + c.box[2] / 2 + dx < x.x + x.w]
+            text = unicodedata.normalize("NFC", "".join(c.text for c in over))
+            if text.strip():
+                got[x.id] = (text.strip(), min(c.conf for c in over))
+        return got
 
     out: Dict[int, Tuple[str, float]] = {}
     with ThreadPoolExecutor(max_workers=_workers()) as pool:
@@ -110,9 +122,16 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
         text_dev = "\n".join(line_text(r) for r in out_lines)
         marked = "\n".join(line_text(r, cfg.uncertain_marker) for r in out_lines)
         uncertain = sum(x.uncertain for r in out_lines for x in r)
+        def alone(x: LetterText) -> Dict:
+            """Tesseract's reading alone (the Text view's "Tesseract only"), without the groups' opinion."""
+            r = next(((t, v) for k, t, v in x.readings if k == "tesseract"), None)
+            text, conf, _, uncertain = choose(r, None, cfg, "danda" if x.text == "।" and not r else "letter")
+            return {"t_text_dev": text, "t_text_guj": mapping.gujarati(text) if text else "", "t_conf": conf,
+                    "t_uncertain": uncertain}
         letters = [[{"sample_id": x.sample_id, "box": list(x.box), "text_dev": x.text,
                      "text_guj": mapping.gujarati(x.text) if x.text else "", "conf": x.conf, "source": x.source,
-                     "uncertain": x.uncertain, "space": x.space_before, "readings": x.readings} for x in r]
+                     "uncertain": x.uncertain, "space": x.space_before, "readings": x.readings,
+                     **(alone(x) if tess else {})} for x in r]
                    for r in out_lines]
         row = s.scalar(select(PageText).where(PageText.page_id == page_id))
         if row is None:
@@ -168,8 +187,10 @@ def page_text(lib: Library, page_id: int) -> Optional[Dict]:
         row = s.scalar(select(PageText).where(PageText.page_id == page_id))
         if row is None:
             return None
+        lines = json.loads(row.letters)
         return {"page_id": page_id, "text_dev": row.text_dev, "text_guj": row.text_guj,
-                "lines": json.loads(row.letters), "uncertain": row.uncertain, "readers": row.readers,
+                "lines": lines, "uncertain": row.uncertain, "readers": row.readers,
+                "uncertain_tesseract": sum(bool(x.get("t_uncertain")) for line in lines for x in line),
                 "converted_at": row.converted_at.isoformat() if row.converted_at else None}
 
 
@@ -182,12 +203,16 @@ def book_texts(lib: Library, book_id: int, part: str = "read",
         return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id)).all()]
 
 
-def marked_lines(row: PageText, marker: str, script: str, mapping) -> List[str]:
-    """A page's lines as written in a download: with the uncertain-letter marker, in Gujarati or Devanagari."""
+def marked_lines(row: PageText, marker: str, script: str, mapping, readers: str = "both") -> List[str]:
+    """A page's lines as written in a download: with the uncertain-letter marker, in Gujarati or Devanagari;
+    `readers` "tesseract" writes Tesseract's reading alone (where the page has it)."""
     from ..ocr.convert import LetterText as L
     out = []
     for letters in json.loads(row.letters):
-        line = line_text([L(x["sample_id"], 0, tuple(x["box"]), x["text_dev"], x["conf"], x["source"],
-                            x["uncertain"], x["space"]) for x in letters], marker)
+        t = readers == "tesseract"
+        line = line_text([L(x["sample_id"], 0, tuple(x["box"]),
+                            x["t_text_dev"] if t and "t_text_dev" in x else x["text_dev"], x["conf"], x["source"],
+                            x["t_uncertain"] if t and "t_uncertain" in x else x["uncertain"], x["space"])
+                          for x in letters], marker)
         out.append(mapping.gujarati(line) if script == "gujarati" else line)
     return out

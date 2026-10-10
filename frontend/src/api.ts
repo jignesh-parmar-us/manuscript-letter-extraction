@@ -157,7 +157,15 @@ export interface TextLetter {
   uncertain: boolean;
   space: boolean; // a word gap before it (printed books)
   readings: [string, string, number][]; // (reader, text, score) seen
+  // Tesseract's reading alone, for "Tesseract only" (printed books)
+  t_text_dev?: string;
+  t_text_guj?: string;
+  t_conf?: number;
+  t_uncertain?: boolean;
 }
+
+/** Which readers the Text view shows: Tesseract's reading alone, or with the labelled groups' opinion. */
+export type Readers = "tesseract" | "both";
 
 export interface PageText {
   page_id: number;
@@ -165,6 +173,7 @@ export interface PageText {
   text_guj: string;
   lines: TextLetter[][];
   uncertain: number;
+  uncertain_tesseract?: number;
   readers: string;
   converted_at: string | null;
 }
@@ -377,8 +386,9 @@ export const api = {
   convert: (id: number, pageIds?: number[]) => post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read" }),
   pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
   bookTexts: (id: number) => get<{ page_id: number; uncertain: number; converted_at: string | null }[]>(`/api/books/${id}/texts`),
-  textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, pageId?: number) =>
-    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
+  textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: Readers,
+    pageId?: number) =>
+    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
   pagePart: (pageId: number, part: Part, force = false) =>
     post<{ page: number; part: Part; samples: number }>(`/api/pages/${pageId}/part`, { part, force }),
 

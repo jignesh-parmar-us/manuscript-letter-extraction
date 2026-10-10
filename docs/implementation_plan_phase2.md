@@ -579,7 +579,7 @@ Rules that carry over from Phase 1:
 
 ### C16b. Converting Read Book pages into text (FR-12)
 
-**Status:** built (2026-10-10). On a copy of the user's library: 3 pages of the printed book (1,826 letters) converted in 18 s; 13% of the letters marked uncertain. Measured on 8 training pages against the reviewed labels (1,577 letters): Tesseract alone reads 84.4% right; 66 of its 246 mistakes are marked uncertain, 180 are confident mistakes, which the groups' second opinion and the letter reader (C14) are there to catch (`TUNING_PHASE2.md`).
+**Status:** built (2026-10-10). On a copy of the user's library: 3 pages of the printed book (1,826 letters) converted in 18 s; 13% of the letters marked uncertain. Measured on 8 training pages against the reviewed labels (1,577 letters): Tesseract alone reads 84.4% right (CER 10.8% on all 23 training pages after filling unplaced letters, see the changes below); 66 of its 246 mistakes are marked uncertain, 180 are confident mistakes, which the groups' second opinion and the letter reader (C14) are there to catch (`TUNING_PHASE2.md`).
 
 **Goal:** every Read Book page becomes Gujarati Unicode text, keeping the manuscript's line breaks, shown **in the app beside its page image**, with the uncertain letters marked; the text of a page or of the whole book can be downloaded as .txt, Word, PDF or a picture of the text.
 
@@ -611,6 +611,8 @@ Rules that carry over from Phase 1:
 - **Spaces on printed books:** a gap wider than half the line's letter width becomes a space (`text_space_gap`); handwriting gets none (FR-12).
 - **The uncertain-letter marker is chosen when downloading** (the setting is the default): `[?]`, `[?ક]` with the best guess, or the plain guess; with `[?]`, 13% of the letters make a .txt hard to read, so the choice matters.
 - **Downloads** are at `/files/texts/{book}` (`/files/books/{book}/…` already serves the book's image files). The PDF is printed by the browser from a print-only view of the text; the picture is drawn on a canvas, so the browser's own text shaping joins the Gujarati letters. Word files use the Shruti font, 14 pt, one paragraph per manuscript line, a page break and a small heading per page.
+- **Letters the alignment cannot place take Tesseract's characters over them** (added 2026-10-10 after measuring, `TUNING_PHASE2.md`): CER on reviewed letters 13.1% -> 10.8%; Tesseract's own line text (16.4%) and the whole page read at once (17.4 to 17.7%) are worse.
+- **"Tesseract only" / "Tesseract + your groups"** switch in the Text view (asked by the user, 2026-10-10): both readings are stored per letter, so switching is instant; downloads follow the switch (`readers=tesseract|both`). "Tesseract only" marks almost nothing uncertain (0.4% on the printed book), because Tesseract's confidence stays high when it is wrong; the marks come from the groups (13%).
 - **Not yet:** the dictionary (C15) and the letter reader (C14) as readers; the command-line `convert` without a book (Phase 3 use) waits for C17.
 
 **C7 addition:** none. **C8 addition:** a smoke test converts the synthetic book.

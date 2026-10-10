@@ -17,10 +17,11 @@ const letter = (id: number, dev: string, guj: string, x: number, over = {}) => (
   ...over,
 });
 const text: PageText = {
-  page_id: 9, text_dev: "नार\nका", text_guj: "નાર\nકા", uncertain: 1, readers: "tesseract+groups", converted_at: null,
+  page_id: 9, text_dev: "नार\nका", text_guj: "નાર\nકા", uncertain: 2, uncertain_tesseract: 1, readers: "tesseract+groups",
+  converted_at: null,
   lines: [
     [letter(1, "ना", "ના", 10), letter(2, "र", "ર", 40, { uncertain: true, conf: 0.4, source: "tesseract",
-      readings: [["tesseract", "र", 92], ["groups", "व", 0.3]] })],
+      readings: [["tesseract", "र", 92], ["groups", "व", 0.3]], t_text_dev: "र", t_text_guj: "ર", t_conf: 0.74, t_uncertain: false })],
     [letter(3, "का", "કા", 10, { space: false }), letter(4, "", "", 40, { uncertain: true, conf: 0, source: "none", readings: [] })],
   ],
 };
@@ -37,6 +38,7 @@ describe("TextView", () => {
   });
 
   it("shows the text beside the page, uncertain letters marked on both", async () => {
+    localStorage.setItem("text-readers", "both");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     const lines = await screen.findByLabelText("Text");
     await waitFor(() => expect(within(lines).getByText("ર")).toBeInTheDocument());
@@ -50,6 +52,7 @@ describe("TextView", () => {
   });
 
   it("switches layout and script, and links the downloads with the chosen marker", async () => {
+    localStorage.removeItem("text-readers");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     await screen.findByText("ર");
     await userEvent.click(screen.getByRole("button", { name: "One above the other" }));
@@ -58,8 +61,22 @@ describe("TextView", () => {
     expect(screen.getByText("र")).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Uncertain letters in downloads"), "guess");
     const word = screen.getByRole("link", { name: "Page Word" });
-    expect(word.getAttribute("href")).toMatch(/^\/files\/texts\/4\?format=docx&script=devanagari&marker=guess&page_id=9/);
+    expect(word.getAttribute("href")).toMatch(/^\/files\/texts\/4\?format=docx&script=devanagari&marker=guess&readers=tesseract&page_id=9/);
     expect(screen.getByRole("link", { name: ".txt" }).getAttribute("href")).not.toMatch(/page_id/);   // whole book
+  });
+
+  it("shows Tesseract alone, or with the groups' second opinion", async () => {
+    localStorage.removeItem("text-readers");
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    const lines = await screen.findByLabelText("Text");
+    await waitFor(() => expect(within(lines).getByText("ર")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Tesseract only" })).toHaveClass("active");      // the default
+    expect(within(lines).getByText("ર")).not.toHaveClass("uncertain");                        // Tesseract was sure
+    expect(screen.getByText(/1 uncertain letters/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Tesseract + your groups" }));
+    expect(within(lines).getByText("ર")).toHaveClass("uncertain");                            // the groups disagree
+    expect(screen.getByText(/2 uncertain letters/)).toBeInTheDocument();
+    expect(localStorage.getItem("text-readers")).toBe("both");
   });
 
   it("converts a page that is not converted yet", async () => {

@@ -169,6 +169,19 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Speed:** about 6 s a page (13 lines read by Tesseract, 3 at a time on the development laptop).
 
+**Whole page, line text, or letters?** (asked by the user, 2026-10-10). No training page has every letter reviewed yet, so the truth is every stretch of 3 or more reviewed letters in a row: 259 stretches, 1,684 characters, on all 23 training pages. Tesseract only, no groups; character error rate (CER):
+
+| How Tesseract's reading becomes text | CER |
+|---|---|
+| (d) the whole page (Tesseract finds the lines itself, mode 3 / mode 6) | 17.7% / 17.4% |
+| (a) each line image, Tesseract's text as it is | 16.4% |
+| (b) each line image, its aksharas put on the cut letters (C11's alignment) | 13.1% |
+| **(c) as (b), and letters the alignment cannot place take Tesseract's characters over them (kept)** | **10.8%** |
+
+(a) and (d) are scored on the characters whose boxes fall inside each stretch, so a character at a stretch's edge can be counted wrongly: they lose a little to that, but not 6 points. The whole page is faster (about 3 s a page) but worse: on these slanted, close-set pages the app's own line finding gives Tesseract cleaner lines. (c) filled a gap in 30 of the 259 stretches.
+
+**Tesseract's confidence does not mark its mistakes:** on the 3 Read Book pages, "Tesseract only" marks 8 of 1,826 letters uncertain (0.4%), although about 1 character in 6 is wrong; with the groups' second opinion, 237 (13%). The marks come from the groups, as C10 found for handwriting.
+
 ## C13. Suggestions from other labelled books (2026-10-06)
 
 **No handwritten book is labelled yet**, so the plan's measurement (two handwritten pages, one suggesting the other) waits for the user's labels. Measured on print instead, on a copy of the user's library: book 3 "Vachnamrut Printed 1933" (cut by shapes, 82 labelled groups) suggests for book 4 "Vachnamrut Printed 1933 Tesseract Cuts" (the same 23 pages cut by Tesseract and grouped on their own; its labels reviewed by the user are the truth). Since the two books share pages, the reference centres are built only from book 3's samples on half of the pages, and only book 4's samples on the other half are judged (both ways round).

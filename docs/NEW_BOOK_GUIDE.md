@@ -77,7 +77,7 @@ Every book has two parts in the section menu: **Training Data** (everything abov
 3. **Book pages** shows each page with its letters, to fix cuts (draw a box, join, split, delete). Read Book letters are never grouped and never appear in Review groups.
 4. **A page that reads badly:** **Use for training** moves it to Training Data, where its letters go to Unsure to be labelled.
 
-5. **Text:** **Convert all pages** (or one page). Each page is shown beside its text; uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader read. **Download** the page or the whole book as .txt, Word, PDF or a picture, with uncertain letters as `[?]`, `[?ક]` or the best guess.
+5. **Text:** **Convert all pages** (or one page). Each page is shown beside its text: **Tesseract only** shows what Tesseract read, **Tesseract + your groups** adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader read. **Download** the page or the whole book as .txt, Word, PDF or a picture, with uncertain letters as `[?]`, `[?ક]` or the best guess.
 
 > **Printed books** are read by Tesseract and checked against your labelled groups; **handwritten books** by your groups alone for now, so their text is rough until the letter reader. Correcting the text in this view comes next.
 

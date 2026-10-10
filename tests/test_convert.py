@@ -115,6 +115,42 @@ class ConvertTests(unittest.TestCase):
         with self.lib.session() as s:
             self.assertEqual(s.scalar(select(func.count(PageText.id)).where(PageText.page_id == self.page)), 1)
 
+    def test_a_letter_the_alignment_cannot_place_takes_tesseracts_characters_over_it(self):
+        from letter_extractor.app import texts as T
+        from letter_extractor.app.db import Line
+        from letter_extractor.ocr.tesseract import Char, LineReading, Word
+        with self.lib.session() as s:
+            line = s.scalars(select(Line).where(Line.page_id == self.page).order_by(Line.number)).first()
+            smps = s.scalars(select(Sample).where(Sample.line_id == line.id, Sample.deleted.is_(False))
+                             .order_by(Sample.x)).all()
+            book = self.lib.get_book(self.book)
+            cfg = self.lib.book_config(book)
+            dx = max(0, line.x - cfg.line_margin_px)
+            first = smps[0]
+            # one character over the first letter only: too few for the alignment, which refuses the line
+            char = Char("क", (first.x - dx + 2, 5, max(4, first.w - 4), 30), 88.0)
+            reading = LineReading([Word(char.box, 88.0, [char])], "", 1.0)
+            got = T._read_lines(self.lib, book, cfg, [line], {line.id: smps}, lambda rgb: reading)
+        self.assertEqual(got, {first.id: ("क", 88.0)})
+
+    def test_tesseract_alone_is_kept_beside_the_combined_reading(self):
+        other = next(i for i in self.all if i not in self.labelled)
+        disagree = next(iter(self.labelled))
+        readings = {i: ("क", 97.0) for i in self.labelled} | {disagree: ("ख", 92.0), other: ("ग", 96.0)}
+        with self.read_as(readings):
+            convert_page(self.lib, self.page, reader=lambda rgb: None)
+        got = page_text(self.lib, self.page)
+        letters = {x["sample_id"]: x for line in got["lines"] for x in line}
+        x = letters[disagree]
+        self.assertEqual((x["text_dev"], x["uncertain"]), ("ख", True))          # the group (क, close) disagrees
+        self.assertEqual((x["t_text_dev"], x["t_uncertain"]), ("ख", False))      # Tesseract alone: 0.74, sure
+        self.assertEqual(got["uncertain_tesseract"], sum(v["t_uncertain"] for v in letters.values()))
+        c = TestClient(create_app(self.lib, "t"))
+        url = f"/files/texts/{self.book}?format=txt&part=training&marker=mark&page_id={self.page}&token=t"
+        both, alone = c.get(url).text, c.get(url + "&readers=tesseract").text
+        self.assertGreater(both.count("[?]"), alone.count("[?]"))
+        c.close()
+
     def test_handwriting_reads_with_the_labelled_groups_only(self):
         self.lib.set_book_writing(self.book, "handwritten")
         r = convert_page(self.lib, self.page)
