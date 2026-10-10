@@ -29,6 +29,14 @@ interface Props {
   onChanged: () => void;
 }
 
+const READER_NAMES: Record<string, string> = { tesseract: "Tesseract", reader: "your letter reader", groups: "your groups" };
+
+/** The readers of a converted page, in words ("Tesseract, your letter reader and your groups"). */
+function readerWords(readers: string): string {
+  const names = readers.split("+").filter(Boolean).map((r) => READER_NAMES[r] ?? r);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "nothing";
+}
+
 /** A letter as one set of readers sees it: its text and whether it is uncertain. */
 function view(x: TextLetter, readers: Readers): { dev: string; guj: string; uncertain: boolean; conf: number } {
   if (readers === "tesseract" && x.t_text_dev !== undefined)
@@ -141,6 +149,7 @@ export default function TextView({ book, pageId, onChanged }: Props) {
   const next = at >= 0 && at < pages.length - 1 ? pages[at + 1] : undefined;
   const letters = useMemo(() => (text ? text.lines.flat() : []), [text]);
   const hasTesseract = !!text?.readers.includes("tesseract");
+  const hasReader = !!text?.readers.includes("reader");
   const readers: Readers = hasTesseract ? readersChoice : "both";
   const uncertainCount = readers === "tesseract" ? text?.uncertain_tesseract ?? 0 : text?.uncertain ?? 0;
   const sel = letters.find((x) => x.sample_id === selected) ?? null;
@@ -260,8 +269,10 @@ export default function TextView({ book, pageId, onChanged }: Props) {
               Tesseract only
             </button>
             <button className={readers === "both" ? "tab active" : "tab"} onClick={() => chooseReaders("both")}
-              title="Tesseract checked against your labelled groups: disagreements are marked uncertain">
-              Tesseract + your groups
+              title={hasReader
+                ? "Tesseract, your letter reader and your labelled groups vote on every letter: disagreements are marked uncertain"
+                : "Tesseract checked against your labelled groups: disagreements are marked uncertain"}>
+              {hasReader ? "Tesseract + your reader and groups" : "Tesseract + your groups"}
             </button>
           </div>
         )}
@@ -346,7 +357,7 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                 <>
                   <p className="small muted">
                     {uncertainCount} uncertain letters (highlighted) ·{" "}
-                    {readers === "tesseract" ? "as Tesseract read it" : `read by ${text.readers.replace("+", " and ") || "nothing"}`}
+                    {readers === "tesseract" ? "as Tesseract read it" : `read by ${readerWords(text.readers)}`}
                     {" · "}
                     {text.proofread ?? 0} of {text.lines.length} lines proofread
                     {!!text.corrected && ` · ${text.corrected} letters corrected`}{" "}
@@ -410,7 +421,9 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                             {" "}
                             · confidence {Math.round(view(sel, readers).conf * 100)}%{view(sel, readers).uncertain && " · uncertain"} ·{" "}
                             {sel.readings.length
-                              ? sel.readings.map(([r, t, v]) => `${r === "groups" ? "your groups" : "Tesseract"}: ${t || "—"} (${v})`).join(" · ")
+                              ? sel.readings
+                                  .map(([r, t, v]) => `${READER_NAMES[r] ?? r}: ${t || "—"} (${r === "reader" ? `${Math.round(v * 100)}%` : v})`)
+                                  .join(" · ")
                               : "no reader could read it"}
                           </>
                         )}

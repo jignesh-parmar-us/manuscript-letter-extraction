@@ -61,6 +61,7 @@ Labels given by Tesseract or by other books are marked *not reviewed*. Check the
 - **Wrong labels are the problem.** A group labelled ने that still holds ते letters teaches the reader that both are ने. That is why the review matters more than the number of labels.
 - **It learns only from groups you reviewed**, unless you tick *also groups not reviewed*.
 - **Check these** (Review groups, side bar) lists the letters the reader is sure are in the wrong group: **Move to …**, or **It is right** if the reader is wrong. Fix them, then train again.
+- **The reader also reads the Read Book text** when you convert (section 7), on the letters it was taught: a big group you have not reviewed is a letter it does not know. Review the big groups, train again, then convert again.
 - **Good enough to start:** the big groups reviewed, and the mixed ones split.
 
 ## 6. Replacing old books

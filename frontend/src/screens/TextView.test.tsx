@@ -151,6 +151,20 @@ describe("TextView", () => {
     expect(api.join).toHaveBeenCalledWith(4, [1, 2]);
   });
 
+  it("names the letter reader when the page was read with it", async () => {
+    localStorage.setItem("text-readers", "both");
+    const withReader = structuredClone(text);
+    withReader.readers = "tesseract+reader+groups";
+    withReader.lines[0][1].readings = [["tesseract", "र", 92], ["reader", "व", 0.97], ["groups", "व", 0.3]];
+    vi.mocked(api.pageText).mockResolvedValue(withReader);
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await waitFor(() => expect(within(textLines()).getByText("ર")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Tesseract + your reader and groups" })).toHaveClass("active");
+    expect(screen.getByText(/read by Tesseract, your letter reader and your groups/)).toBeInTheDocument();
+    await userEvent.click(within(textLines()).getByText("ર"));
+    expect(screen.getByText(/Tesseract: र \(92\) · your letter reader: व \(97%\) · your groups: व \(0.3\)/)).toBeInTheDocument();
+  });
+
   it("writes plain lines for the picture and the PDF", () => {
     expect(plainLines(text, "gujarati")).toEqual(["નાર", "કા?"]);
   });

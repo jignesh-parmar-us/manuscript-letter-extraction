@@ -17,6 +17,20 @@ Each cut letter can have two readings:
 - neither: unknown (no text, 0).
 A letter is uncertain when its confidence is below `text_min_confidence` (0.6) or the readers disagree.
 
+`vote` is used instead when the book has a **letter reader** (C14), which reads every letter with a
+probability, and the letter is one the reader was taught (`taught`): a reader knows only the labels of
+the groups it learned from (reviewed ones, by default), and reads any other letter confidently as the
+nearest one it knows. Those letters keep `choose`. The three readers vote (measured on the printed
+book, each page read by a reader and group centres that never saw it, TUNING_PHASE2.md: on reviewed
+letters CER 10.4% -> 9.8%, 11% of the letters marked; letters wrong 8.6% where the reader knows every
+label, so it gains as more groups are reviewed):
+- Tesseract and the reader agree: sure;
+- the reader and the nearest group agree against Tesseract: the reader's, uncertain unless it is at
+  least `text_reader_sure` (0.95) sure;
+- Tesseract and the group agree against the reader: Tesseract's, uncertain if the reader was sure;
+- nobody agrees: the reader's if it is sure, otherwise Tesseract's; uncertain either way.
+Without Tesseract (handwriting) the reader and the group decide alone (not measured yet).
+
 `line_text` joins a line's letters; printed books get a space where the gap between two letters is wider
 than `text_space_gap` x the line's median letter width (handwriting gets none: FR-12).
 """
@@ -67,6 +81,37 @@ def choose(tesseract: Optional[Tuple[str, float]], group: Optional[Tuple[str, fl
     if kind == "danda":                                    # a danda's shape is plain: keep it
         return "।", 0.7, "none", False
     return UNKNOWN, 0.0, "none", True
+
+
+def taught(tesseract: Optional[Tuple[str, float]], group: Optional[Tuple[str, float]], classes, cfg: Config) -> bool:
+    """Whether the letter reader may vote on this letter: what Tesseract read (or, where it read nothing,
+    the nearest group) is a label the reader knows."""
+    if tesseract and tesseract[0]:
+        return tesseract[0] in classes
+    return not (group and group[0] and group[1] <= cfg.group_distance) or group[0] in classes
+
+
+def vote(tesseract: Optional[Tuple[str, float]], reader: Tuple[str, float], group: Optional[Tuple[str, float]],
+         cfg: Config) -> Tuple[str, float, str, bool]:
+    """(text, confidence 0 to 1, source, uncertain) of one letter read by the letter reader too:
+    `reader` is (label, probability 0 to 1); the others as in `choose`."""
+    tt = tesseract[0] if tesseract and tesseract[0] else ""
+    rl, p = reader
+    gl = group[0] if group and group[0] and group[1] <= cfg.group_distance else ""
+    sure = p >= cfg.text_reader_sure
+    if tt and tt == rl:
+        return rl, 0.99, "tesseract+reader", False
+    if not tt:                                              # handwriting, or Tesseract read nothing here
+        if gl == rl:
+            return rl, round(p, 3), "reader+groups", not sure
+        return rl, round(p, 3), "reader", not sure or bool(gl)       # a group that disagrees: uncertain
+    if gl and gl == rl:
+        return rl, round(p, 3), "reader+groups", not sure
+    if gl and gl == tt:
+        return tt, 0.5 if sure else 0.8, "tesseract+groups", sure
+    if sure:
+        return rl, 0.5, "reader", True
+    return tt, 0.4, "tesseract", True
 
 
 def mark_spaces(letters: Sequence[LetterText], cfg: Config, printed: bool) -> None:

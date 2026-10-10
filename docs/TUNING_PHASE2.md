@@ -152,6 +152,24 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
+## C14 in conversion: the letter reader as a reader of the text (2026-10-10)
+
+**Measured** on book 6 (copy), its 23 training pages in 4 folds by page: each page read by a reader trained on the other pages (reviewed letters, labels with 5 or more) and by group centres without its letters; Tesseract's readings as in C16b (gap-filled). Truth: stretches of 3 or more letters in labelled groups.
+
+| Rule | Reviewed letters (914): CER / letters wrong / marked / mistakes marked | All labelled letters (7,837): CER / marked / mistakes marked |
+|---|---|---|
+| Tesseract only | 10.8% / 14.1% / 0.1% / 1% | 8.8% / 0.2% / 2% |
+| Tesseract + groups (C16b) | 10.4% / 13.3% / 13.0% / 69% | 8.5% / 11.7% / 67% |
+| reader alone | 16.0% / 14.9% / 11.7% / 66% | |
+| three readers vote (reader sure at 0.95) | 8.5% / 8.6% / 11.1% / 82% | 9.3% / **27.6%** / 79% |
+| **vote, only on letters the reader was taught (built)** | **9.8%** / 12.4% / 10.9% / 69% | **8.3%** / 10.6% / 64% |
+
+Thresholds 0.8 to 0.97 for the vote differ little (CER 9.1 to 8.4%). "Tesseract wins on labels the reader does not know" was worse (CER 10.0%: Tesseract often reads common letters as rare ones). The unreviewed labels came mostly from Tesseract, so the second column flatters Tesseract.
+
+**Why the guard:** the reader learns only reviewed groups; on this book the म group (155 letters) and पा (39) were not reviewed, so the reader read every म as ग and every पा as या, at 99 to 100%. Without the guard, 40% of the Read Book letters were marked uncertain (239 of 608 on page 1).
+
+**On the 3 Read Book pages** (no truth): uncertain letters 73 to 82 a page (Tesseract + groups) -> 93 to 98 (with the reader); 20 letters changed on page 1, by eye 9 fixed (त, जे, अ, उ, वृ...), about 6 broken (all on boxes holding two letters or a stray bar: र्म, नांव, ।जे), the rest wrong either way. Converting 3 pages: 16 s (was 18 s).
+
 ## C16b. Converting pages into text (2026-10-10)
 
 **Data:** a copy of the user's library, book 6 (printed, cut by Tesseract's reading): 3 Read Book pages from a PDF (1,826 letters), and 8 training pages with the user's reviewed labels as the truth.

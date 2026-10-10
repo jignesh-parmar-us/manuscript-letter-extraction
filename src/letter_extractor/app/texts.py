@@ -5,8 +5,10 @@ For each page (Read Book pages, or training pages to measure against their label
 2. **printed books:** Tesseract reads each line image (several lines at once); its aksharas are put on
    the cut letters with C11's alignment, and a letter the alignment could not place takes the characters
    Tesseract read over it (measured: 13.1% -> 10.8% CER, TUNING_PHASE2.md);
-3. every letter is compared with the book's **labelled groups** (nearest centre, C13's method);
-4. `ocr.convert.choose` decides each letter's text, confidence and whether it is uncertain;
+3. every letter is compared with the book's **labelled groups** (nearest centre, C13's method), and read
+   by the book's active **letter reader** (C14) if it has one;
+4. `ocr.convert.choose` (or `vote`, with a letter reader) decides each letter's text, confidence and
+   whether it is uncertain;
 5. the page's text is joined line by line (spaces at word gaps on printed books), mapped to Gujarati,
    stored as a `PageText` row and written to `text/<part>/<page>.txt` (with the uncertain-letter
    marker) and `.json` (every letter with its sample and box: traceable to the page).
@@ -37,7 +39,7 @@ from .. import io_utils
 from ..mapping import mapping_for
 from ..ocr.align import align_line
 from ..ocr.aksharas import line_aksharas
-from ..ocr.convert import LetterText, choose, line_text, mark_spaces
+from ..ocr.convert import LetterText, choose, line_text, mark_spaces, taught, vote
 from .centres import centres
 from .db import Book, LetterGroup, Line, Page, PageText, Sample, now
 from .library import Cancelled, Library, LibraryError
@@ -164,10 +166,35 @@ def _write_files(lib: Library, book: Book, page: Page, lines: List[List[Dict]], 
                                                                   ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+def _letter_reader(lib: Library, book: Book):
+    """The book's active letter reader (C14), or None."""
+    if not book.reader_id:
+        return None
+    from .readers import load_reader
+    try:
+        return load_reader(lib, book.reader_id)[1]
+    except (LibraryError, OSError):
+        return None                                  # its files are gone: convert without it
+
+
+def _reader_readings(lib: Library, book: Book, smps: Sequence[Sample], spacing: float,
+                     letter_reader) -> Dict[int, Tuple[str, float]]:
+    """The letter reader's reading of each letter: sample id -> (label, probability)."""
+    from ..ocr.features import features
+    from .samples import _sample_mask
+    have = [x for x in smps if x.mask]
+    if letter_reader is None or not have:
+        return {}
+    X = np.stack([features(_sample_mask(lib, book, x), float(spacing or 1.6 * x.h)) for x in have])
+    P = letter_reader.probabilities(X)
+    return {x.id: (letter_reader.classes[int(p.argmax())], float(p.max())) for x, p in zip(have, P)}
+
+
 def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None,
-                 targets=None) -> Dict:
+                 targets=None, letter_reader="book") -> Dict:
     """Convert one page and store its text. `reader` reads a line image (Tesseract by default on printed
-    books; tests pass their own); `targets` are the book's labelled groups and centres, if already known."""
+    books; tests pass their own); `targets` are the book's labelled groups and centres, if already known;
+    `letter_reader` the book's letter reader if already loaded ("book": load it here; None: none)."""
     with lib.session() as s:
         page = s.get(Page, page_id)
         if page is None:
@@ -187,6 +214,12 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
         if printed and reader is not None:
             tess = _read_lines(lib, book, cfg, lines, by_line, reader)
             readers.append("tesseract")
+        if letter_reader == "book":
+            letter_reader = _letter_reader(lib, book)
+        mine = _reader_readings(lib, book, smps, page.line_spacing, letter_reader)
+        known = set(letter_reader.classes) if mine else set()
+        if mine:
+            readers.append("reader")
         if len(C):
             readers.append("groups")
         mapping = mapping_for(cfg)
@@ -196,8 +229,13 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
             for x in by_line.get(line.id, []):
                 t = tess.get(x.id)
                 g = _nearest(x.fingerprint, groups, C)
-                text, conf, source, uncertain = choose(t, g, cfg, x.kind)
+                r = mine.get(x.id)
+                if r is not None and taught(t, g, known, cfg):
+                    text, conf, source, uncertain = vote(t, r, g, cfg)
+                else:
+                    text, conf, source, uncertain = choose(t, g, cfg, x.kind)
                 seen = ([("tesseract", t[0], round(t[1], 1))] if t else []) + \
+                       ([("reader", r[0], round(r[1], 3))] if r else []) + \
                        ([("groups", g[0], round(g[1], 3))] if g else [])
                 row.append(LetterText(x.id, line.number, (x.x, x.y, x.w, x.h), text, conf, source, uncertain,
                                       readings=seen))
@@ -261,12 +299,13 @@ def convert_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] =
         raise LibraryError("No pages to convert: cut the Read Book pages first.")
     if reader is None and book.writing == "printed":
         reader = tesseract_reader(cfg, tesseract_path)
+    letter_reader = _letter_reader(lib, book)                # loaded once for all the pages
     done, uncertain, letters = 0, 0, 0
     for n, pid in enumerate(ids, 1):
         if cancel and cancel():
             raise Cancelled(f"Stopped after {done} pages; those are converted.")
         t = time.time()
-        r = convert_page(lib, pid, reader, targets)
+        r = convert_page(lib, pid, reader, targets, letter_reader)
         done += 1
         uncertain += r["uncertain"]
         letters += r["letters"]

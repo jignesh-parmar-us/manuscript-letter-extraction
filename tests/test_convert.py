@@ -18,7 +18,7 @@ from letter_extractor.app.db import LetterGroup, Page, PageText, Sample   # noqa
 from letter_extractor.app.library import LibraryError              # noqa: E402
 from letter_extractor.app.texts import convert_book, convert_page, page_text   # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
-from letter_extractor.ocr.convert import LetterText, choose, line_text, mark_spaces   # noqa: E402
+from letter_extractor.ocr.convert import LetterText, choose, line_text, mark_spaces, taught, vote   # noqa: E402
 from letter_extractor.ocr.docx import write_docx                    # noqa: E402
 from sqlalchemy import func, select                                 # noqa: E402
 
@@ -43,6 +43,26 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(choose(None, ("क", 0.2), self.cfg), ("क", 0.8, "groups", False))
         self.assertEqual(choose(None, ("क", 0.7), self.cfg), ("", 0.0, "none", True))   # beyond group_distance
         self.assertEqual(choose(None, None, self.cfg, kind="danda")[0], "।")
+
+    def test_with_a_letter_reader_the_three_readers_vote(self):
+        c = self.cfg
+        self.assertEqual(vote(("क", 70), ("क", 0.6), None, c)[2:], ("tesseract+reader", False))     # agree: sure
+        self.assertEqual(vote(("क", 99), ("फ", 0.97), ("फ", 0.3), c)[::2], ("फ", "reader+groups"))  # two against one
+        self.assertFalse(vote(("क", 99), ("फ", 0.97), ("फ", 0.3), c)[3])                          # ...reader sure
+        self.assertTrue(vote(("क", 99), ("फ", 0.8), ("फ", 0.3), c)[3])                            # ...reader not sure
+        self.assertEqual(vote(("क", 80), ("फ", 0.97), ("क", 0.3), c)[::3], ("क", True))           # reader sure, outvoted
+        self.assertEqual(vote(("क", 80), ("फ", 0.8), ("क", 0.3), c)[::3], ("क", False))
+        self.assertEqual(vote(("क", 99), ("फ", 0.97), ("ग", 0.3), c)[::3], ("फ", True))           # nobody agrees
+        self.assertEqual(vote(("क", 99), ("फ", 0.8), None, c)[::3], ("क", True))
+        self.assertEqual(vote(None, ("फ", 0.97), None, c)[::3], ("फ", False))                     # handwriting
+        self.assertEqual(vote(None, ("फ", 0.97), ("ग", 0.3), c)[::3], ("फ", True))
+
+    def test_the_reader_votes_only_on_letters_it_was_taught(self):
+        known = {"क", "फ"}
+        self.assertTrue(taught(("क", 90), None, known, self.cfg))
+        self.assertFalse(taught(("म", 99), ("ग", 0.2), known, self.cfg))     # a म group it never learned from
+        self.assertTrue(taught(None, None, known, self.cfg))
+        self.assertFalse(taught(None, ("म", 0.2), known, self.cfg))
 
     def test_spaces_and_markers(self):
         def letter(x, text="क", uncertain=False):

@@ -154,7 +154,8 @@ export interface TextLetter {
   text_dev: string; // "" when no reader could read it
   text_guj: string;
   conf: number; // 0 to 1
-  source: "both" | "tesseract" | "groups" | "none" | "label"; // "label": corrected by you (C17)
+  // who read it: "both" (Tesseract and the groups), "tesseract+reader", "reader+groups", ... ; "label": corrected by you (C17)
+  source: string;
   uncertain: boolean;
   space: boolean; // a word gap before it (printed books)
   image?: string | null; // the letter's picture

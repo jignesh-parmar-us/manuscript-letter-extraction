@@ -113,6 +113,24 @@ class BookTests(unittest.TestCase):
         self.assertEqual(train_reader(self.lib, [self.book], min_samples=5)["left_out"] >= 1, True)
         self.assertEqual(train_reader(self.lib, [self.book], min_samples=1)["labels"], 4)
 
+    def test_conversion_reads_with_the_reader(self):
+        from unittest import mock
+        from letter_extractor.app.db import Page
+        from letter_extractor.app.texts import convert_page, page_text
+        r = train_reader(self.lib, [self.book], min_samples=2)
+        with self.lib.session() as s:
+            page = s.scalar(select(Sample.page_id).where(Sample.id == self.planted))
+        with mock.patch("letter_extractor.app.texts._read_lines", return_value={}):
+            got = convert_page(self.lib, page, reader=lambda rgb: None)
+        self.assertIn("reader", got["readers"])
+        letters = [x for line in page_text(self.lib, page)["lines"] for x in line]
+        read = [x for x in letters if any(k == "reader" for k, _, _ in x["readings"])]
+        self.assertTrue(read)
+        self.assertTrue(all(x["readings"][0][1] in ("क", "ख", "ग") for x in read))
+        delete_reader(self.lib, r["reader"])                                  # without it: as before
+        with mock.patch("letter_extractor.app.texts._read_lines", return_value={}):
+            self.assertNotIn("reader", convert_page(self.lib, page, reader=lambda rgb: None)["readers"])
+
     def test_too_few_labels(self):
         with self.assertRaises(LibraryError):
             train_reader(self.lib, [self.book], min_samples=10_000)
