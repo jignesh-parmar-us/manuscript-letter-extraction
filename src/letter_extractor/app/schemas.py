@@ -134,6 +134,12 @@ class TrainRequest(BaseModel):
     name: str = ""
 
 
+class Proofread(BaseModel):
+    """Mark a line of a converted page proofread, or not (C17): `line` is its index on the page."""
+    line: int = Field(ge=0)
+    proofread: bool = True
+
+
 class ReaderChoice(BaseModel):
     reader_id: Optional[int] = None                 # None: no reader for this book
 

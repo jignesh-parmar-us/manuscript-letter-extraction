@@ -1126,6 +1126,51 @@ a.button.disabled {
   border-top: 1px solid var(--line);
   padding-top: 6px;
 }
+.text-line.proofread {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+.text-line.changed {
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+.proofread-mark {
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  vertical-align: middle;
+  color: var(--muted);
+}
+.proofread-mark.done {
+  color: var(--ok);
+  border-color: var(--ok);
+  font-weight: 600;
+}
+.text-line.changed .proofread-mark {
+  color: var(--warn);
+}
+.text-editor {
+  position: sticky;
+  bottom: 0;
+  background: var(--panel);
+  padding-bottom: 6px;
+}
+.text-editor .row {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.text-editor-letter {
+  height: 72px;
+  max-width: 200px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.text-editor-letter.cutting {
+  cursor: col-resize;
+  outline: 2px dashed var(--accent);
+}
 .print-text {
   display: none;
 }

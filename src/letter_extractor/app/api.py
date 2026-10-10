@@ -51,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      ConvertRequest, PagePart, ReadSource, ReaderChoice, TrainRequest,
+                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -205,16 +205,37 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         got = page_text(library, page_id)
         if got is None:
             raise HTTPException(404, "This page is not converted yet.")
+        return with_images(got)
+
+    def with_images(got: Dict) -> Dict:
+        with library.session() as s:
+            book_id = s.get(Page, got["page_id"]).book_id
+        for line in got["lines"]:
+            for x in line:
+                x["image"] = f"/files/books/{book_id}/{x['image']}?token={token}" if x.get("image") else None
         return got
+
+    @app.post("/api/pages/{page_id}/proofread", dependencies=auth)
+    def proofread_line(page_id: int, body: Proofread) -> Dict:
+        """Mark a line proofread (its text as it is now is kept) or not (C17)."""
+        from .texts import set_proofread
+        return with_images(set_proofread(library, page_id, body.line, body.proofread))
+
+    @app.get("/api/books/{book_id}/proofread-stats", dependencies=auth)
+    def proofread_stats_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> Dict:
+        """How right the conversion was on the proofread lines (C17)."""
+        from .texts import proofread_stats
+        library.get_book(book_id)
+        return proofread_stats(library, book_id, part)
 
     @app.get("/api/books/{book_id}/texts", dependencies=auth)
     def texts_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> List[Dict]:
-        """Which pages of a part are converted, with their numbers of uncertain letters."""
-        from .texts import book_texts
+        """Which pages of a part are converted, with their numbers of uncertain letters and proofread lines."""
+        from .texts import book_page_texts
         library.get_book(book_id)
-        return [{"page_id": p.id, "uncertain": t.uncertain,
-                 "converted_at": t.converted_at.isoformat() if t.converted_at else None}
-                for p, t in book_texts(library, book_id, part)]
+        return [{"page_id": p.id, "uncertain": t["uncertain"], "proofread": t["proofread"], "lines": len(t["lines"]),
+                 "converted_at": t["converted_at"]}
+                for p, t in book_page_texts(library, book_id, part)]
 
     @app.get("/files/texts/{book_id}", dependencies=auth)
     def download_text(book_id: int, format: str = Query("txt", pattern="^(txt|docx)$"),
@@ -226,15 +247,15 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         from urllib.parse import quote
         from ..mapping import mapping_for
         from ..ocr.docx import write_docx
-        from .texts import book_texts, marked_lines
+        from .texts import book_page_texts, marked_lines
         book = library.get_book(book_id)
         cfg = library.book_config(book)
-        rows = book_texts(library, book_id, part, page_id)
+        rows = book_page_texts(library, book_id, part, page_id)
         if not rows:
             raise HTTPException(404, "Nothing converted yet.")
         mapping = mapping_for(cfg)
         pages = [(f"{p.number or i} · {p.file}" if not page_id else "",
-                  marked_lines(t, marker or cfg.uncertain_marker, script, mapping, readers)) for i, (p, t) in enumerate(rows, 1)]
+                  marked_lines(t["lines"], marker or cfg.uncertain_marker, script, mapping, readers)) for i, (p, t) in enumerate(rows, 1)]
         name = Path(rows[0][0].file).stem if page_id else book.name
         if format == "docx":
             data = write_docx(pages)

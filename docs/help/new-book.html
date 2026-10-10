@@ -230,7 +230,8 @@
     <li><strong>Cut the pages.</strong> The pages are cut into lines and letters in the background, a few at a time.
       Stopping keeps the pages already cut; the next <span class="ui">Cut the remaining pages</span> continues.</li>
     <li><span class="ui">Book pages</span> shows each page with its letters, to fix cuts (draw a box, join, split,
-      delete). Read Book letters are never grouped and never appear in Review groups.</li>
+      delete). Read Book letters are never grouped automatically; only the letters you correct in the Text view (step
+      6) go into groups.</li>
     <li><strong>A page that reads badly:</strong> <span class="ui">Use for training</span> moves it to Training
       Data, where its letters go to Unsure to be labelled.</li>
   </ol>
@@ -241,10 +242,17 @@
       is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader
       read. <span class="ui">Download</span> the page or the whole book as .txt, Word, PDF or a picture, with
       uncertain letters as [?], [?ક] or the best guess.</li>
+    <li><strong>Proofread</strong> in the Text view: click a wrong letter (or <span class="ui">Next uncertain ▶</span>)
+      and type the right one, then <span class="ui">Correct</span>. The correction labels that letter, so it shows in
+      Review groups and the next reader training learns from it; <span class="ui">Undo</span> takes it back.
+      <span class="ui">Two letters…</span> splits a box (click where the letters meet), <span class="ui">Join with the
+      next</span> joins two boxes, <span class="ui">Not a letter</span> deletes a speck. Click <span class="ui">✓</span>
+      at the end of a line once its text is right: converting again keeps proofread lines, and the proofread lines
+      measure how many characters the conversion gets wrong.</li>
   </ol>
   <div class="box tip"><strong>Printed books</strong> are read by Tesseract and checked against your labelled groups;
     <strong>handwritten books</strong> by your groups alone for now, so their text is rough until the letter reader.
-    Correcting the text in this view comes next.</div>
+    Every letter you correct teaches the next reader training.</div>
 
   <h2 id="trouble">8. If something goes wrong</h2>
   <table>

@@ -6,9 +6,14 @@
 // (a background job; each page is kept as soon as it is done). Downloads: .txt and Word from the
 // backend; PDF printed by the browser from the text; a picture (.png) of the text drawn by the browser,
 // which joins Gujarati letters correctly.
+//
+// Proofreading (C17): the selected letter can be corrected (it labels its sample: one undoable action,
+// and the letter joins the book's Training Data), split in two, joined with the next letter or deleted.
+// A line is marked proofread with its ✓ button; converting again keeps proofread lines as they are.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, Book, Marker, PageInfo, PageText, Readers, TextLetter } from "../api";
+import { api, ActionResult, Book, Marker, PageInfo, PageText, ProofreadStats, Readers, TextLetter, TextSummary } from "../api";
 import ErrorBox from "../components/ErrorBox";
+import LabelPicker from "../components/LabelPicker";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
@@ -51,7 +56,8 @@ function storedReaders(): Readers {
 
 export default function TextView({ book, pageId, onChanged }: Props) {
   const [pages, setPages] = useState<PageInfo[]>([]);
-  const [converted, setConverted] = useState<Map<number, number>>(new Map()); // page id -> uncertain letters
+  const [converted, setConverted] = useState<Map<number, TextSummary>>(new Map()); // converted pages
+  const [stats, setStats] = useState<ProofreadStats | null>(null);
   const [text, setText] = useState<PageText | null>(null);
   const [layout, setLayout] = useState<Layout>("side");
   const [script, setScript] = useState<Script>("gujarati");
@@ -70,21 +76,48 @@ export default function TextView({ book, pageId, onChanged }: Props) {
   const [printing, setPrinting] = useState<PageText[] | null>(null); // texts to print as PDF
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
+  const [splitting, setSplitting] = useState(false); // choosing where to cut the selected letter
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.pages(book.id, "read").then(setPages, setError);
-    api.bookTexts(book.id).then((ts) => setConverted(new Map(ts.map((t) => [t.page_id, t.uncertain]))), setError);
+    api.bookTexts(book.id).then((ts) => setConverted(new Map(ts.map((t) => [t.page_id, t]))), setError);
+    api.proofreadStats(book.id).then(setStats, () => setStats(null));
   }, [book.id, version]);
   // no page chosen: open the first one
   useEffect(() => {
     if (pageId === null && pages.length) go(`/books/${book.id}/text/${pages[0].id}`);
   }, [pageId, pages, book.id]);
+  // the page's text again when it is converted (again), not after each correction
+  const convertedAt = pageId !== null && converted.has(pageId) ? converted.get(pageId)!.converted_at ?? "" : null;
   useEffect(() => {
     setText(null);
     setSelected(null);
-    if (pageId === null || !converted.has(pageId)) return;
+    if (pageId === null || convertedAt === null) return;
     api.pageText(pageId).then(setText, setError);
-  }, [pageId, converted]);
+  }, [pageId, convertedAt]);
+
+  /** Run a change of the page's letters, then show the page's text as it is now. */
+  async function act(run: () => Promise<ActionResult | PageText>, after?: (r: ActionResult) => void) {
+    if (pageId === null) return false;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await run();
+      if ("lines" in r) setText(r as PageText);
+      else {
+        setText(await api.pageText(pageId));
+        after?.(r as ActionResult);
+      }
+      setVersion((v) => v + 1);
+      return true;
+    } catch (e) {
+      setError(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const onEnd = useCallback(() => {
     setVersion((v) => v + 1);
@@ -111,6 +144,16 @@ export default function TextView({ book, pageId, onChanged }: Props) {
   const readers: Readers = hasTesseract ? readersChoice : "both";
   const uncertainCount = readers === "tesseract" ? text?.uncertain_tesseract ?? 0 : text?.uncertain ?? 0;
   const sel = letters.find((x) => x.sample_id === selected) ?? null;
+  const selLine = text && sel ? text.lines.find((l) => l.includes(sel)) ?? [] : [];
+  const selNext = sel ? selLine[selLine.indexOf(sel) + 1] : undefined;
+  useEffect(() => setSplitting(false), [selected]);
+
+  function nextUncertain() {
+    const at = letters.findIndex((x) => x.sample_id === selected);
+    const after = [...letters.slice(at + 1), ...letters.slice(0, at + 1)];
+    const next = after.find((x) => view(x, readers).uncertain || !view(x, readers).dev);
+    if (next) pick(next.sample_id, "text");
+  }
 
   // the selected letter in view on the other side
   const boxRefs = useRef(new Map<number, HTMLElement>());
@@ -165,6 +208,7 @@ export default function TextView({ book, pageId, onChanged }: Props) {
   }, [printing]);
 
   const nConverted = pages.filter((p) => converted.has(p.id)).length;
+  const states = text?.line_states ?? [];
 
   return (
     <div className={`text-view ${layout}`}>
@@ -303,10 +347,22 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                   <p className="small muted">
                     {uncertainCount} uncertain letters (highlighted) ·{" "}
                     {readers === "tesseract" ? "as Tesseract read it" : `read by ${text.readers.replace("+", " and ") || "nothing"}`}
+                    {" · "}
+                    {text.proofread ?? 0} of {text.lines.length} lines proofread
+                    {!!text.corrected && ` · ${text.corrected} letters corrected`}{" "}
+                    <button className="link small" onClick={nextUncertain} disabled={!uncertainCount && !letters.some((x) => !x.text_dev)}>
+                      Next uncertain ▶
+                    </button>
                   </p>
+                  {stats && stats.lines > 0 && stats.cer !== null && (
+                    <p className="small muted" aria-label="Measured">
+                      Measured on your {stats.lines} proofread lines: {(100 * stats.cer).toFixed(1)}% of the characters were read
+                      wrong{stats.cer_tesseract !== null && ` (Tesseract alone ${(100 * stats.cer_tesseract).toFixed(1)}%)`}.
+                    </p>
+                  )}
                   <div className={`text-lines ${script}`} lang={script === "gujarati" ? "gu" : "sa"}>
                     {text.lines.map((line, i) => (
-                      <div key={i} className="text-line">
+                      <div key={i} className={`text-line${states[i] ? ` ${states[i]}` : ""}`}>
                         {line.map((x) => (
                           <span key={x.sample_id}>
                             {x.space && " "}
@@ -323,17 +379,99 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                             </span>
                           </span>
                         ))}
+                        {line.length > 0 && (
+                          <button
+                            className={`proofread-mark${states[i] === "proofread" ? " done" : ""}`}
+                            disabled={busy}
+                            aria-label={`Line ${i + 1} ${states[i] === "proofread" ? "proofread" : "not proofread"}`}
+                            title={
+                              states[i] === "proofread"
+                                ? "Proofread: click to undo"
+                                : states[i] === "changed"
+                                  ? "Changed since it was proofread: click to mark it proofread again"
+                                  : "Mark this line proofread (its text is right)"
+                            }
+                            onClick={() => act(() => api.proofread(pageId!, i, states[i] !== "proofread"))}
+                          >
+                            {states[i] === "changed" ? "⚠" : "✓"}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                   {sel && (
-                    <p className="small text-letter-info" aria-live="polite">
-                      <strong>{shown(sel, script, readers)}</strong> · confidence {Math.round(view(sel, readers).conf * 100)}%
-                      {view(sel, readers).uncertain && " · uncertain"} ·{" "}
-                      {sel.readings.length
-                        ? sel.readings.map(([r, t, v]) => `${r === "groups" ? "your groups" : "Tesseract"}: ${t || "—"} (${v})`).join(" · ")
-                        : "no reader could read it"}
-                    </p>
+                    <div className="text-editor" aria-label="Letter">
+                      <p className="small text-letter-info" aria-live="polite">
+                        <strong>{shown(sel, script, readers)}</strong>
+                        {sel.source === "label" ? (
+                          <> · corrected by you{sel.read_dev !== undefined && ` (read as ${sel.read_dev || "?"})`}</>
+                        ) : (
+                          <>
+                            {" "}
+                            · confidence {Math.round(view(sel, readers).conf * 100)}%{view(sel, readers).uncertain && " · uncertain"} ·{" "}
+                            {sel.readings.length
+                              ? sel.readings.map(([r, t, v]) => `${r === "groups" ? "your groups" : "Tesseract"}: ${t || "—"} (${v})`).join(" · ")
+                              : "no reader could read it"}
+                          </>
+                        )}
+                      </p>
+                      <div className="row">
+                        {sel.image && (
+                          <img
+                            className={`text-editor-letter${splitting ? " cutting" : ""}`}
+                            src={sel.image}
+                            alt={`letter ${sel.sample_id}`}
+                            title={splitting ? "Click where the two letters meet" : undefined}
+                            onClick={(e) => {
+                              if (!splitting) return;
+                              const r = e.currentTarget.getBoundingClientRect();
+                              const x = Math.round(sel.box[0] + ((e.clientX - r.left) / r.width) * sel.box[2]);
+                              act(() => api.split(book.id, sel.sample_id, x), (res) => {
+                                const first = (res as { samples?: { id: number }[] }).samples?.[0];
+                                if (first) setSelected(first.id);
+                              });
+                            }}
+                          />
+                        )}
+                        <LabelPicker
+                          key={sel.sample_id}
+                          bookId={book.id}
+                          current={{ dev: view(sel, readers).dev, guj: view(sel, readers).guj }}
+                          disabled={busy}
+                          saveText="Correct"
+                          canClear={false}
+                          compact
+                          onSave={(t) => act(() => api.labelSamples(book.id, [sel.sample_id], t))}
+                        />
+                      </div>
+                      <div className="row small">
+                        <button disabled={busy || !sel.image} onClick={() => setSplitting((v) => !v)}
+                          title="The box holds two letters: click on the picture where they meet">
+                          {splitting ? "Cancel split" : "Two letters…"}
+                        </button>
+                        <button
+                          disabled={busy || !selNext}
+                          onClick={() =>
+                            selNext &&
+                            act(() => api.join(book.id, [sel.sample_id, selNext.sample_id]), (res) => {
+                              const id = (res as { sample?: { id: number } }).sample?.id;
+                              if (id) setSelected(id);
+                            })
+                          }
+                          title="This letter and the next one are one letter"
+                        >
+                          Join with the next
+                        </button>
+                        <button disabled={busy} onClick={() => act(() => api.deleteSamples(book.id, [sel.sample_id]))}
+                          title="A speck or a stroke that is not a letter">
+                          Not a letter
+                        </button>
+                        <button disabled={busy} onClick={() => act(() => api.undo(book.id))} title="Undo the last change of the book">
+                          Undo
+                        </button>
+                        {splitting && <span className="muted">Click on the picture where the two letters meet.</span>}
+                      </div>
+                    </div>
                   )}
                 </>
               )}

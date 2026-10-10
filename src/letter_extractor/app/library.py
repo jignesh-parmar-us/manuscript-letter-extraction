@@ -629,7 +629,8 @@ class Library:
 
     def set_page_part(self, page_id: int, part: str, force: bool = False) -> Dict:
         """Move a page to the other part. To Training Data: its letters become unsure there, with a
-        suggested group each (as "Add new pages"). To Read Book: its letters leave their groups; refused
+        suggested group each (as "Add new pages"); letters corrected while proofreading (C17) keep their
+        groups. To Read Book: its letters leave their groups; refused
         when the page holds manual work, unless `force`. The page's files stay where they are."""
         from .centres import recompute
         if part not in ("training", "read"):
@@ -648,7 +649,9 @@ class Library:
             smps = s.scalars(select(Sample).where(Sample.page_id == page_id)).all()
             touched = {x.group_id for x in smps if x.group_id is not None}
             for x in smps:
-                x.part, x.group_id, x.distance = part, None, None
+                x.part = part
+                if part == "read" or x.group_id is None:
+                    x.group_id, x.distance = None, None
             page.part = part
             s.flush()
             recompute(s, touched)

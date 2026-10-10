@@ -7,7 +7,8 @@ import TextView, { plainLines } from "./TextView";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { ...real.api, pages: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), convert: vi.fn(),
-    job: vi.fn(), cancelJob: vi.fn() } };
+    job: vi.fn(), cancelJob: vi.fn(), proofread: vi.fn(), proofreadStats: vi.fn(), labelSamples: vi.fn(),
+    checkLabel: vi.fn(), split: vi.fn(), join: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn() } };
 });
 
 const book = { id: 4, job: null } as unknown as Book;
@@ -26,6 +27,9 @@ const text: PageText = {
   ],
 };
 
+/** The text's lines only (the letter editor below them shows the selected letter too). */
+const textLines = () => document.querySelector(".text-lines") as HTMLElement;
+
 describe("TextView", () => {
   beforeEach(() => {
     vi.mocked(api.pages).mockResolvedValue([
@@ -34,6 +38,9 @@ describe("TextView", () => {
     ]);
     vi.mocked(api.bookTexts).mockResolvedValue([{ page_id: 9, uncertain: 1, converted_at: null }]);
     vi.mocked(api.pageText).mockResolvedValue(text);
+    vi.mocked(api.proofreadStats).mockResolvedValue({ lines: 0, chars: 0, cer: null, cer_tesseract: null });
+    vi.mocked(api.checkLabel).mockImplementation(async (t: string) => ({ ok: true, devanagari: t === "ળ" ? "ळ" : t, gujarati: t,
+      codepoints: "", used_by: [] }) as never);
     window.location.hash = "";
   });
 
@@ -87,6 +94,61 @@ describe("TextView", () => {
     await userEvent.click(screen.getByRole("button", { name: "Convert this page" }));
     expect(api.convert).toHaveBeenCalledWith(4, [10]);
     expect(await screen.findByText(/Converting pages into text/)).toBeInTheDocument();
+  });
+
+  it("corrects a letter by labelling its sample", async () => {
+    const ok = { action_id: 1, kind: "label_samples", undo: 1, redo: 0 } as never;
+    vi.mocked(api.labelSamples).mockResolvedValue(ok);
+    vi.mocked(api.deleteSamples).mockResolvedValue(ok);
+    const corrected = structuredClone(text);
+    corrected.lines[0][1] = { ...corrected.lines[0][1], text_dev: "ळ", text_guj: "ળ", source: "label", uncertain: false, read_dev: "र" };
+    corrected.corrected = 1;
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    const lines = await screen.findByLabelText("Text");
+    await waitFor(() => expect(within(lines).getByText("ર")).toBeInTheDocument());
+    await userEvent.click(within(lines).getByText("ર"));
+    vi.mocked(api.pageText).mockResolvedValue(corrected);
+    const editor = screen.getByLabelText("Letter");
+    const input = within(editor).getByLabelText("Label");
+    await userEvent.clear(input);
+    await userEvent.type(input, "ળ");
+    await waitFor(() => expect(within(editor).getByRole("button", { name: "Correct" })).toBeEnabled());
+    await userEvent.click(within(editor).getByRole("button", { name: "Correct" }));
+    expect(api.labelSamples).toHaveBeenCalledWith(4, [2], "ળ");
+    await waitFor(() => expect(within(textLines()).getByText("ળ")).toBeInTheDocument());
+    expect(screen.getByText(/corrected by you \(read as र\)/)).toBeInTheDocument();
+    expect(screen.getByText(/1 letters corrected/)).toBeInTheDocument();
+    await userEvent.click(within(editor).getByRole("button", { name: "Not a letter" }));
+    expect(api.deleteSamples).toHaveBeenCalledWith(4, [2]);
+  });
+
+  it("marks a line proofread and shows the measurement", async () => {
+    vi.mocked(api.proofreadStats).mockResolvedValue({ lines: 3, chars: 100, cer: 0.042, cer_tesseract: 0.08 });
+    vi.mocked(api.proofread).mockResolvedValue({ ...text, line_states: ["proofread", ""], proofread: 1 });
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await screen.findByLabelText("Line 1 not proofread");
+    expect(screen.getByLabelText("Measured")).toHaveTextContent("3 proofread lines: 4.2% of the characters were read wrong (Tesseract alone 8.0%)");
+    await userEvent.click(screen.getByLabelText("Line 1 not proofread"));
+    expect(api.proofread).toHaveBeenCalledWith(9, 0, true);
+    expect(await screen.findByLabelText("Line 1 proofread")).toHaveClass("done");
+    expect(screen.getByText(/1 of 2 lines proofread/)).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("Line 1 proofread"));
+    expect(api.proofread).toHaveBeenLastCalledWith(9, 0, false);
+  });
+
+  it("joins a letter with the next and moves between uncertain letters", async () => {
+    vi.mocked(api.join).mockResolvedValue({ action_id: 2, kind: "join", undo: 1, redo: 0, sample: { id: 7, page_id: 9, box: [], source: "joined" } } as never);
+    localStorage.setItem("text-readers", "both");
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    const lines = await screen.findByLabelText("Text");
+    await waitFor(() => expect(within(lines).getByText("ના")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Next uncertain ▶" }));
+    expect(within(textLines()).getByText("ર")).toHaveClass("selected");
+    await userEvent.click(screen.getByRole("button", { name: "Next uncertain ▶" }));
+    expect(within(textLines()).getByText("?")).toHaveClass("selected");
+    await userEvent.click(within(textLines()).getByText("ના"));
+    await userEvent.click(screen.getByRole("button", { name: "Join with the next" }));
+    expect(api.join).toHaveBeenCalledWith(4, [1, 2]);
   });
 
   it("writes plain lines for the picture and the PDF", () => {

@@ -154,9 +154,11 @@ export interface TextLetter {
   text_dev: string; // "" when no reader could read it
   text_guj: string;
   conf: number; // 0 to 1
-  source: "both" | "tesseract" | "groups" | "none";
+  source: "both" | "tesseract" | "groups" | "none" | "label"; // "label": corrected by you (C17)
   uncertain: boolean;
   space: boolean; // a word gap before it (printed books)
+  image?: string | null; // the letter's picture
+  read_dev?: string; // what the conversion read, where you corrected it
   readings: [string, string, number][]; // (reader, text, score) seen
   // Tesseract's reading alone, for "Tesseract only" (printed books)
   t_text_dev?: string;
@@ -177,6 +179,26 @@ export interface PageText {
   uncertain_tesseract?: number;
   readers: string;
   converted_at: string | null;
+  // proofreading (C17)
+  line_states?: ("" | "proofread" | "changed")[]; // per line; "changed": edited since it was proofread
+  proofread?: number;
+  corrected?: number;
+  edited_at?: string | null;
+}
+
+export interface TextSummary {
+  page_id: number;
+  uncertain: number;
+  proofread?: number;
+  lines?: number;
+  converted_at: string | null;
+}
+
+export interface ProofreadStats {
+  lines: number;
+  chars: number;
+  cer: number | null; // share of characters the conversion read wrong on proofread lines
+  cer_tesseract: number | null;
 }
 
 export interface Group {
@@ -439,7 +461,10 @@ export const api = {
   checkThese: (id: number) => get<CheckItem[]>(`/api/books/${id}/check`),
   convert: (id: number, pageIds?: number[]) => post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read" }),
   pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
-  bookTexts: (id: number) => get<{ page_id: number; uncertain: number; converted_at: string | null }[]>(`/api/books/${id}/texts`),
+  bookTexts: (id: number) => get<TextSummary[]>(`/api/books/${id}/texts`),
+  proofread: (pageId: number, line: number, proofread = true) =>
+    post<PageText>(`/api/pages/${pageId}/proofread`, { line, proofread }),
+  proofreadStats: (bookId: number) => get<ProofreadStats>(`/api/books/${bookId}/proofread-stats`),
   textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: Readers,
     pageId?: number) =>
     `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,

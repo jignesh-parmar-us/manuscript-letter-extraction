@@ -56,8 +56,8 @@ def _letters(lib: Library, book_ids: Sequence[int], include_unreviewed: bool, in
                 raise LibraryError(f"No book with id {bid}.")
             q = (select(Sample, LetterGroup.label_dev, LetterGroup.status, Page.line_spacing)
                  .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
-                 .where(Sample.book_id == bid, Sample.deleted.is_(False), Sample.part == "training",
-                        LetterGroup.label_dev != ""))
+                 .where(Sample.book_id == bid, Sample.deleted.is_(False),       # Read Book letters
+                        LetterGroup.label_dev != ""))                                  # corrected in C17 too
             if not include_unreviewed:
                 q = q.where(LetterGroup.status != "auto")
             for x, label, status, spacing in s.execute(q).all():

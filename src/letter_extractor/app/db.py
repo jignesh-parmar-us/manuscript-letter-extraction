@@ -199,7 +199,8 @@ class Reader(Base):
 class PageText(Base):
     """A page converted into text (C16b): one row per page, replaced when it is converted again.
     `letters` holds every letter with its sample, box, text, confidence, source and whether it is
-    uncertain, line by line, so each letter of the text can be traced to the page."""
+    uncertain, line by line, so each letter of the text can be traced to the page. `proofread` (C17)
+    maps a proofread line's number to its text when it was marked; converting again keeps those lines."""
     __tablename__ = "page_text"
     id: Mapped[int] = mapped_column(primary_key=True)
     page_id: Mapped[int] = mapped_column(ForeignKey("page.id", ondelete="CASCADE"), unique=True, index=True)
@@ -209,6 +210,8 @@ class PageText(Base):
     uncertain: Mapped[int] = mapped_column(Integer, default=0)
     readers: Mapped[str] = mapped_column(String(100), default="")          # e.g. "tesseract+groups"
     converted_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    proofread: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")   # JSON {line: text_dev}
+    edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class Action(Base):

@@ -11,6 +11,15 @@ For each page (Read Book pages, or training pages to measure against their label
    stored as a `PageText` row and written to `text/<part>/<page>.txt` (with the uncertain-letter
    marker) and `.json` (every letter with its sample and box: traceable to the page).
 A conversion job stores each page when it is done, so a cancel keeps the pages already converted.
+
+**Proofreading (C17).** The stored letters are the conversion's reading; what the Text view and the
+downloads show is that reading brought up to date with the page's samples (`live_lines`):
+- a letter whose sample is in a labelled group shows the label: correcting a letter labels its sample
+  (an undoable action), so undo, Review and the next training of the reader all see the correction;
+- letters whose sample was split, joined or deleted give way to the samples made since.
+A line can be marked proofread: its text at that moment is kept, its letters count as sure, and
+converting again keeps the line's letters as they were. Proofread lines are the ground truth for
+measuring the conversion (`proofread_stats`).
 """
 from __future__ import annotations
 
@@ -30,7 +39,7 @@ from ..ocr.align import align_line
 from ..ocr.aksharas import line_aksharas
 from ..ocr.convert import LetterText, choose, line_text, mark_spaces
 from .centres import centres
-from .db import Book, Line, Page, PageText, Sample, now
+from .db import Book, LetterGroup, Line, Page, PageText, Sample, now
 from .library import Cancelled, Library, LibraryError
 from .suggest import LineDone, tesseract_reader, _workers
 
@@ -78,6 +87,78 @@ def _read_lines(lib: Library, book: Book, cfg, lines: Sequence[Line], letters: D
         for got in pool.map(read, lines):
             out.update(got)
     return out
+
+
+T_FIELDS = ("t_text_dev", "t_text_guj", "t_conf", "t_uncertain")
+
+
+def _letters(dicts: Sequence[Dict], readers: str = "both") -> List[LetterText]:
+    """Stored (or live) letter dicts as LetterText, as one set of readers sees them."""
+    t = readers == "tesseract"
+    return [LetterText(x["sample_id"], 0, tuple(x["box"]),
+                       x["t_text_dev"] if t and "t_text_dev" in x else x["text_dev"], x["conf"], x["source"],
+                       x["t_uncertain"] if t and "t_uncertain" in x else x["uncertain"], x["space"])
+            for x in dicts]
+
+
+def _line_numbers(s, page_id: int) -> List[int]:
+    return list(s.scalars(select(Line.number).where(Line.page_id == page_id).order_by(Line.number)))
+
+
+def live_lines(s, page_id: int, stored: List[List[Dict]], mapping, proofread: Optional[Dict] = None) -> List[List[Dict]]:
+    """The stored letters of a page brought up to date with its samples: a Read Book sample in a labelled
+    group shows its label (source "label", sure; the reading it replaced stays in `read_dev`), letters of
+    samples that are gone (split, joined, deleted) give way to the samples made since, and the letters
+    of proofread lines are sure."""
+    rows = s.execute(select(Sample, LetterGroup.label_dev).outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
+                     .where(Sample.page_id == page_id, Sample.deleted.is_(False))).all()
+    live = {x.id: (x, label or "") for x, label in rows}
+    numbers = _line_numbers(s, page_id)
+    index = {n: i for i, n in enumerate(numbers)} if len(numbers) == len(stored) else {}
+    known = {x["sample_id"] for line in stored for x in line}
+    new: Dict[int, List[Sample]] = {}
+    for x, _ in live.values():
+        if x.id not in known and x.line_number in index:
+            new.setdefault(index[x.line_number], []).append(x)
+    with_t = any("t_text_dev" in x for line in stored for x in line)
+    out = []
+    for i, line in enumerate(stored):
+        kept = [dict(x) for x in line if x["sample_id"] in live]
+        added = []
+        for smp in sorted(new.get(i, []), key=lambda m: m.x):
+            # a piece of a split letter (or a joined letter) keeps the word gap before the letter it replaced
+            gone = [x for x in line if x["sample_id"] not in live and x["space"]
+                    and x["box"][0] < smp.x + smp.w and smp.x < x["box"][0] + x["box"][2]]
+            added.append({"sample_id": smp.id, "box": [smp.x, smp.y, smp.w, smp.h], "text_dev": "", "text_guj": "",
+                          "conf": 0.0, "source": "none", "uncertain": True,
+                          "space": bool(gone) and not any(a["space"] for a in added), "readings": [],
+                          **({"t_text_dev": "", "t_text_guj": "", "t_conf": 0.0, "t_uncertain": True} if with_t else {})})
+        row = sorted(kept + added, key=lambda x: x["box"][0])
+        sure = proofread is not None and i < len(numbers) and str(numbers[i]) in proofread
+        for x in row:
+            smp, label = live[x["sample_id"]]
+            x["image"] = smp.image
+            if label and smp.part == "read":         # training pages keep the reading: it is measured against the labels
+                if x["text_dev"] != label:
+                    x["read_dev"] = x["text_dev"]
+                x.update(text_dev=label, text_guj=mapping.gujarati(label), conf=1.0, source="label", uncertain=False)
+                if with_t:
+                    x.update(t_text_dev=label, t_text_guj=x["text_guj"], t_conf=1.0, t_uncertain=False)
+            if sure and x["text_dev"]:
+                x["uncertain"] = False
+                if with_t and x.get("t_text_dev"):
+                    x["t_uncertain"] = False
+        out.append(row)
+    return out
+
+
+def _write_files(lib: Library, book: Book, page: Page, lines: List[List[Dict]], marker: str, mapping) -> None:
+    folder = lib.book_dir(book) / "text" / page.part
+    folder.mkdir(parents=True, exist_ok=True)
+    marked = "\n".join(line_text(_letters(r), marker) for r in lines)
+    (folder / f"{Path(page.file).stem}.txt").write_text(mapping.gujarati(marked) + "\n", encoding="utf-8")
+    (folder / f"{Path(page.file).stem}.json").write_text(json.dumps({"page": page.file, "part": page.part, "lines": lines},
+                                                                  ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None,
@@ -135,8 +216,19 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
                    for r in out_lines]
         row = s.scalar(select(PageText).where(PageText.page_id == page_id))
         if row is None:
-            row = PageText(page_id=page_id)
+            row = PageText(page_id=page_id, proofread="{}")
             s.add(row)
+        else:                                        # proofread lines (C17) keep their letters
+            proofread = json.loads(row.proofread or "{}")
+            old = json.loads(row.letters)
+            numbers = [ln.number for ln in lines]
+            if proofread and len(old) == len(letters) == len(numbers):
+                for i, n in enumerate(numbers):
+                    if str(n) in proofread:
+                        letters[i] = old[i]
+                text_dev = "\n".join(line_text(_letters(r)) for r in letters)
+                marked = "\n".join(line_text(_letters(r), cfg.uncertain_marker) for r in letters)
+                uncertain = sum(x["uncertain"] for r in letters for x in r)
         row.text_dev, row.text_guj = text_dev, mapping.gujarati(text_dev)
         row.letters, row.uncertain, row.readers = json.dumps(letters, ensure_ascii=False), uncertain, "+".join(readers)
         row.converted_at = now()
@@ -181,17 +273,109 @@ def convert_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] =
     return {"pages": done, "letters": letters, "uncertain": uncertain, "seconds": round(time.time() - t0, 1)}
 
 
+def _page_text(lib: Library, s, row: PageText) -> Dict:
+    page = s.get(Page, row.page_id)
+    mapping = mapping_for(lib.book_config(s.get(Book, page.book_id)))
+    proofread = json.loads(row.proofread or "{}")
+    lines = live_lines(s, row.page_id, json.loads(row.letters), mapping, proofread)
+    numbers = _line_numbers(s, row.page_id)
+    texts = [line_text(_letters(r)) for r in lines]
+    # a proofread line whose text changed since (a letter corrected, split or undone) is "changed"
+    states = []
+    for i, t in enumerate(texts):
+        done = proofread.get(str(numbers[i])) if i < len(numbers) else None
+        states.append("" if done is None else "proofread" if done == t else "changed")
+    text_dev = "\n".join(texts)
+    return {"page_id": row.page_id, "text_dev": text_dev, "text_guj": mapping.gujarati(text_dev),
+            "lines": lines, "line_states": states,
+            "proofread": states.count("proofread"),
+            "corrected": sum(x["source"] == "label" for r in lines for x in r),
+            "uncertain": sum(bool(x["uncertain"]) for r in lines for x in r), "readers": row.readers,
+            "uncertain_tesseract": sum(bool(x.get("t_uncertain")) for r in lines for x in r),
+            "converted_at": row.converted_at.isoformat() if row.converted_at else None,
+            "edited_at": row.edited_at.isoformat() if row.edited_at else None}
+
+
 def page_text(lib: Library, page_id: int) -> Optional[Dict]:
-    """A converted page for the Text view: its lines with their letters, or None if not converted."""
+    """A converted page for the Text view, as it is now (`live_lines`), or None if not converted."""
+    with lib.session() as s:
+        row = s.scalar(select(PageText).where(PageText.page_id == page_id))
+        return None if row is None else _page_text(lib, s, row)
+
+
+def book_page_texts(lib: Library, book_id: int, part: str = "read", page_id: Optional[int] = None) -> List[Tuple[Page, Dict]]:
+    """The converted pages of a part (or one page) as they are now, in page order."""
+    with lib.session() as s:
+        q = select(Page, PageText).join(PageText, PageText.page_id == Page.id).where(Page.book_id == book_id)
+        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part)
+        out = []
+        for page, row in s.execute(q.order_by(Page.number, Page.id)).all():
+            s.expunge(page)
+            out.append((page, _page_text(lib, s, row)))
+        return out
+
+
+def set_proofread(lib: Library, page_id: int, line: int, done: bool = True) -> Dict:
+    """Mark line `line` (its index on the page) proofread, keeping its text as it is now, or not."""
     with lib.session() as s:
         row = s.scalar(select(PageText).where(PageText.page_id == page_id))
         if row is None:
-            return None
-        lines = json.loads(row.letters)
-        return {"page_id": page_id, "text_dev": row.text_dev, "text_guj": row.text_guj,
-                "lines": lines, "uncertain": row.uncertain, "readers": row.readers,
-                "uncertain_tesseract": sum(bool(x.get("t_uncertain")) for line in lines for x in line),
-                "converted_at": row.converted_at.isoformat() if row.converted_at else None}
+            raise LibraryError("This page is not converted yet.")
+        now_ = _page_text(lib, s, row)
+        numbers = _line_numbers(s, page_id)
+        if not 0 <= line < min(len(numbers), len(now_["lines"])):
+            raise LibraryError(f"The page has no line {line + 1}.")
+        if done and any(not x["text_dev"] for x in now_["lines"][line]):
+            raise LibraryError("The line has letters no reader could read (shown as ?): type them first.")
+        proofread = json.loads(row.proofread or "{}")
+        if done:
+            proofread[str(numbers[line])] = line_text(_letters(now_["lines"][line]))
+        else:
+            proofread.pop(str(numbers[line]), None)
+        row.proofread = json.dumps(proofread, ensure_ascii=False)
+        row.edited_at = now()
+        got = _page_text(lib, s, row)
+        page = s.get(Page, page_id)
+        book = s.get(Book, page.book_id)
+        cfg = lib.book_config(book)
+        _write_files(lib, book, page, got["lines"], cfg.uncertain_marker, mapping_for(cfg))
+        return got
+
+
+def _distance(a: str, b: str) -> int:
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def proofread_stats(lib: Library, book_id: int, part: str = "read") -> Dict:
+    """How right the conversion was on the proofread lines: the share of characters (Devanagari code
+    points, spaces left out) wrong in the conversion's reading, with the groups and with Tesseract alone."""
+    lines = chars = wrong = wrong_t = 0
+    with lib.session() as s:
+        q = select(PageText).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id, Page.part == part)
+        for row in s.scalars(q):
+            proofread = json.loads(row.proofread or "{}")
+            if not proofread:
+                continue
+            stored = json.loads(row.letters)
+            numbers = _line_numbers(s, row.page_id)
+            for i, n in enumerate(numbers):
+                truth = proofread.get(str(n))
+                if truth is None or i >= len(stored):
+                    continue
+                truth = truth.replace(" ", "")
+                lines += 1
+                chars += len(truth)
+                wrong += _distance(line_text(_letters(stored[i])).replace(" ", ""), truth)
+                wrong_t += _distance(line_text(_letters(stored[i], "tesseract")).replace(" ", ""), truth)
+    return {"lines": lines, "chars": chars,
+            "cer": round(wrong / chars, 4) if chars else None,
+            "cer_tesseract": round(wrong_t / chars, 4) if chars else None}
 
 
 def book_texts(lib: Library, book_id: int, part: str = "read",
@@ -203,16 +387,12 @@ def book_texts(lib: Library, book_id: int, part: str = "read",
         return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id)).all()]
 
 
-def marked_lines(row: PageText, marker: str, script: str, mapping, readers: str = "both") -> List[str]:
-    """A page's lines as written in a download: with the uncertain-letter marker, in Gujarati or Devanagari;
-    `readers` "tesseract" writes Tesseract's reading alone (where the page has it)."""
-    from ..ocr.convert import LetterText as L
+def marked_lines(lines: List[List[Dict]], marker: str, script: str, mapping, readers: str = "both") -> List[str]:
+    """A page's lines (as `page_text` gives them) as written in a download: with the uncertain-letter
+    marker, in Gujarati or Devanagari; `readers` "tesseract" writes Tesseract's reading alone (where the
+    page has it)."""
     out = []
-    for letters in json.loads(row.letters):
-        t = readers == "tesseract"
-        line = line_text([L(x["sample_id"], 0, tuple(x["box"]),
-                            x["t_text_dev"] if t and "t_text_dev" in x else x["text_dev"], x["conf"], x["source"],
-                            x["t_uncertain"] if t and "t_uncertain" in x else x["uncertain"], x["space"])
-                          for x in letters], marker)
+    for letters in lines:
+        line = line_text(_letters(letters, readers), marker)
         out.append(mapping.gujarati(line) if script == "gujarati" else line)
     return out

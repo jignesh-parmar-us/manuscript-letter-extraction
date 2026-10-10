@@ -75,12 +75,14 @@ Every book has two parts in the section menu: **Training Data** (everything abov
 
 1. **Read Book → Upload & capture.** Type the path of the book's **PDF** and click **Use this PDF** (its pages become images in the book folder), or choose a **folder of page images**.
 2. **Cut the pages.** The pages are cut into lines and letters in the background, a few at a time. Stopping keeps the pages already cut; the next **Cut the remaining pages** continues.
-3. **Book pages** shows each page with its letters, to fix cuts (draw a box, join, split, delete). Read Book letters are never grouped and never appear in Review groups.
+3. **Book pages** shows each page with its letters, to fix cuts (draw a box, join, split, delete). Read Book letters are never grouped automatically; only the letters you correct in the Text view (step 6) go into groups.
 4. **A page that reads badly:** **Use for training** moves it to Training Data, where its letters go to Unsure to be labelled.
 
 5. **Text:** **Convert all pages** (or one page). Each page is shown beside its text: **Tesseract only** shows what Tesseract read, **Tesseract + your groups** adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader read. **Download** the page or the whole book as .txt, Word, PDF or a picture, with uncertain letters as `[?]`, `[?ક]` or the best guess.
 
-> **Printed books** are read by Tesseract and checked against your labelled groups; **handwritten books** by your groups alone for now, so their text is rough until the letter reader. Correcting the text in this view comes next.
+6. **Proofread** in the Text view: click a wrong letter (or **Next uncertain ▶**) and type the right one, then **Correct**. The correction labels that letter, so it shows in Review groups and the next reader training learns from it; **Undo** takes it back. **Two letters…** splits a box (click where the letters meet), **Join with the next** joins two boxes, **Not a letter** deletes a speck. Click **✓** at the end of a line once its text is right: converting again keeps proofread lines, and the proofread lines measure how many characters the conversion gets wrong.
+
+> **Printed books** are read by Tesseract and checked against your labelled groups; **handwritten books** by your groups alone for now, so their text is rough until the letter reader. Every letter you correct teaches the next reader training.
 
 ## 8. If something goes wrong
 
