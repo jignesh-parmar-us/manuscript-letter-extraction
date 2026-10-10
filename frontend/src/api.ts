@@ -160,6 +160,7 @@ export interface TextLetter {
   space: boolean; // a word gap before it (printed books)
   image?: string | null; // the letter's picture
   read_dev?: string; // what the conversion read, where you corrected it
+  lm_from?: string; // what the readers read, where the language model changed it (C15)
   readings: [string, string, number][]; // (reader, text, score) seen
   // Tesseract's reading alone, for "Tesseract only" (printed books)
   t_text_dev?: string;
@@ -193,6 +194,26 @@ export interface TextSummary {
   proofread?: number;
   lines?: number;
   converted_at: string | null;
+}
+
+/** An imported text file the language model learns from (C15). */
+export interface WordListInfo {
+  id: number;
+  name: string;
+  file: string;
+  lines: number;
+  aksharas: number;
+  books: number[]; // the books that use it
+  created_at: string | null;
+}
+
+/** What a book's language model learns from (C15). */
+export interface BookLanguage {
+  enabled: boolean;
+  labels: { stretches: number; aksharas: number };
+  proofread: { lines: number; aksharas: number };
+  lists: WordListInfo[];
+  aksharas: number; // all together
 }
 
 export interface ProofreadStats {
@@ -466,6 +487,14 @@ export const api = {
   proofread: (pageId: number, line: number, proofread = true) =>
     post<PageText>(`/api/pages/${pageId}/proofread`, { line, proofread }),
   proofreadStats: (bookId: number) => get<ProofreadStats>(`/api/books/${bookId}/proofread-stats`),
+  // the language model (C15)
+  bookLanguage: (bookId: number) => get<BookLanguage>(`/api/books/${bookId}/language`),
+  wordLists: () => get<WordListInfo[]>("/api/wordlists"),
+  importWordList: (path: string, name: string, bookId: number) =>
+    post<WordListInfo>("/api/wordlists", { path, name, book_id: bookId }),
+  useWordList: (id: number, bookId: number, use: boolean) =>
+    patch<WordListInfo>(`/api/wordlists/${id}`, { book_id: bookId, use }),
+  deleteWordList: (id: number) => del<void>(`/api/wordlists/${id}`),
   textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: Readers,
     pageId?: number) =>
     `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,

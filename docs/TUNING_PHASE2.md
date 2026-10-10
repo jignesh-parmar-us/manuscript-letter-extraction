@@ -152,6 +152,21 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
+## C15. The language model (2026-10-10)
+
+**Measured** as the reader in conversion (book 6, 4 folds by page): each fold's model learned only from the label sequences of the other pages' lines (about 7,000 aksharas; stretches end at unlabelled letters), the readers too; after the production vote, each uncertain letter got candidates (Tesseract with its confidence, the reader's best three, the two nearest groups; weights 1, 1, 0.5) and `correct_line` chose.
+
+| lm weight, min gain | Reviewed letters: CER, changed (fixed / broke) | All labelled letters: CER, changed (fixed / broke) |
+|---|---|---|
+| no language model | 9.80% | 8.34% |
+| 0.5, 0 | 9.62%, 82 (42 / 17) | 7.15%, 522 (294 / 73) |
+| 0.5, 3 | 9.20%, 33 (22 / 3) | 7.28%, 218 (163 / 8) |
+| 1.0, 1 | 9.62%, 77 (37 / 15) | 6.83%, 502 (312 / 60) |
+| **1.0, 3 (kept)** | **9.20%, 60 (30 / 9)** | **6.91%, 401 (266 / 34)** |
+| 2.0, 3 | 9.86%, 71 (31 / 13) | 6.95%, 496 (304 / 61) |
+
+On by default (`language_model`). **On the 3 Read Book pages** (model from the book's 9,636 labelled aksharas and 1 proofread line): 28 to 30 letters changed a page; of 32 looked at by eye, 17 fixed (ओआ->आ, नाम->म, यथा->था, पा->पो, त्र->ब्र...), 6 broken (सो->मां, छा->ला, गि->नि, a box of two letters read as a word label), the rest wrong either way. Converting 3 pages: 30 s (16 s without; the model is built once and kept). An imported full text of the book should help far more than 7,000 aksharas of labels.
+
 ## C14 in conversion: the letter reader as a reader of the text (2026-10-10)
 
 **Measured** on book 6 (copy), its 23 training pages in 4 folds by page: each page read by a reader trained on the other pages (reviewed letters, labels with 5 or more) and by group centres without its letters; Tesseract's readings as in C16b (gap-filled). Truth: stretches of 3 or more letters in labelled groups.

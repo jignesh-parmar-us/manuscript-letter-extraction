@@ -51,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest,
+                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -280,6 +280,37 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             media = "text/plain; charset=utf-8"
         disposition = f"attachment; filename*=UTF-8''{quote(name)}.{format}"
         return Response(data, media_type=media, headers={"Content-Disposition": disposition})
+
+    # ---- the language model and its word lists (C15) ---------------------------------------------------
+    @app.get("/api/wordlists", dependencies=auth)
+    def list_word_lists() -> List[Dict]:
+        from .dictionary import word_lists
+        return word_lists(library)
+
+    @app.post("/api/wordlists", dependencies=auth)
+    def import_list(body: WordListImport) -> Dict:
+        from .dictionary import import_word_list
+        if body.book_id is not None:
+            library.get_book(body.book_id)
+        return import_word_list(library, body.path, body.name, [body.book_id] if body.book_id is not None else [])
+
+    @app.patch("/api/wordlists/{list_id}", dependencies=auth)
+    def use_list(list_id: int, body: WordListUse) -> Dict:
+        from .dictionary import use_word_list
+        library.get_book(body.book_id)
+        return use_word_list(library, list_id, body.book_id, body.use)
+
+    @app.delete("/api/wordlists/{list_id}", dependencies=auth, status_code=204)
+    def delete_list(list_id: int) -> Response:
+        from .dictionary import delete_word_list
+        delete_word_list(library, list_id)
+        return Response(status_code=204)
+
+    @app.get("/api/books/{book_id}/language", dependencies=auth)
+    def language_of_book(book_id: int) -> Dict:
+        """What the book's language model learns from (C15)."""
+        from .dictionary import book_language
+        return book_language(library, book_id)
 
     # ---- letter readers (C14) ------------------------------------------------------------------------
     def reader_json(r, full: bool = False) -> Dict:

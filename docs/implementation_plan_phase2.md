@@ -6,7 +6,7 @@ Since 2026-10-10 every book has **two parts** (Section 0): **Training Data**, wh
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15; C14 was moved before C17 the same day.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. C16b is built (2026-10-10): Read Book pages are converted into text, shown beside the page with uncertain letters marked, and downloaded as .txt, Word, PDF or a picture. C14 is built (2026-10-10): letter readers trained in the app (96% of the test letters of the printed book read right), the book's main suggestion source, with "Check these" for letters probably in the wrong group. C17 is built (2026-10-10): Read Book text is proofread beside its page; a corrected letter labels its sample (undoable) and joins Training Data, and proofread lines are kept on conversion and measure it. **C15 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15; C14 was moved before C17 the same day.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. C16b is built (2026-10-10): Read Book pages are converted into text, shown beside the page with uncertain letters marked, and downloaded as .txt, Word, PDF or a picture. C14 is built (2026-10-10): letter readers trained in the app (96% of the test letters of the printed book read right), the book's main suggestion source, with "Check these" for letters probably in the wrong group. C17 is built (2026-10-10): Read Book text is proofread beside its page; a corrected letter labels its sample (undoable) and joins Training Data, and proofread lines are kept on conversion and measure it. The letter reader reads the text too (2026-10-10). C15 is built (2026-10-10): an akshara language model from the book's labels, proofread lines and imported word lists corrects uncertain letters when converting (CER 8.3% -> 6.9% on labelled letters). **Phase 2 is complete except C18 (only if needed).** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -514,7 +514,7 @@ Rules that carry over from Phase 1:
 
 ### C15. Dictionary and language model
 
-**Status:** next; it learns from proofread text (C17) and is measured on it.
+**Status:** built (2026-10-10). Measured (`TUNING_PHASE2.md`), each page corrected by a model that learned only from the other pages' labels: CER on reviewed letters 9.80% -> 9.20%, on all labelled letters 8.34% -> 6.91% (of 401 letters changed, 266 fixed and 34 broken). On by default.
 
 **Goal:** use known words and known letter sequences to correct unlikely letters in a line, and to decide between close readings (व or ब), without ever silently changing confident letters.
 
@@ -542,6 +542,15 @@ Rules that carry over from Phase 1:
 - importing a word list works in both scripts;
 - on proofread lines, the language model lowers the CER, or the measurement shows it does not and it stays off;
 - tests show confident letters are never changed.
+
+**Changes from the original plan:**
+- **What it learns from:** besides proofread lines and imported lists, **the book's own labels**: its Training Data letters in reading order (a stretch ends at an unlabelled letter). This works before anything is proofread (the user chose "labels now, word lists later", 2026-10-10). Spaces are left out of the model (manuscripts have none).
+- **Witten-Bell smoothing**; the model is built per book in memory and rebuilt when the book's labels (its `updated_at`), proofread lines or word lists change (`app/dictionary.py`).
+- **No word trie or word-break bonus yet:** the akshara trigrams alone gave the gain above; a trie can be added when a large word list exists to measure it on.
+- **Candidates** for an uncertain letter: Tesseract's reading (its confidence), the letter reader's best three, the two nearest groups (weights 1, 1, 0.5); a sure letter has only its reading, so it is never changed (instead of `lm_protect_confidence`). A change must gain `lm_min_gain` (3) in log probability for the line, with `lm_weight` 1.
+- **Changed letters stay uncertain** and keep what the readers read in `lm_from`; the Text view underlines them ("the language model changed it from ..."), only in "Tesseract + ..." (the "Tesseract only" view is Tesseract's reading).
+- **Word lists** are imported by typing the file's path (like the PDF), stored as Devanagari NFC in `<library>/dictionaries/` (`WordList`, migration 0009, which lists the books that use it); the **Dictionary** section of Read Book shows what the model learns from, imports, chooses the lists per book, and turns the model off.
+- **Not yet:** the model as a tie-breaker in the group votes (C11 / C14).
 
 ### Part D: whole page to Unicode text
 
@@ -699,7 +708,7 @@ Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C1
 | C16b | Converting Read Book pages into text | built | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
 | C17 | Proofreading view | built | proofread lines; corrections become labels | FR-12 (side-by-side view) |
 | C14 | Letter reader | built | readers trained in the app any number of times; per-letter accuracy; "Check these" | FR-11 |
-| C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
+| C15 | Dictionary and language model | built | word lists, correction, measured CER | new |
 | C18 | Line recognizer | optional | Kraken or Tesseract model; decision by CER | Section 8.3 |
 
 ---
@@ -736,7 +745,9 @@ All in the same `Config` dataclass, per book, except where noted.
 | `reader_id` (a column of the book: its active reader) | C14 | none |
 | `reader_unreviewed` (train on automatic labels too) | C14 | off |
 | `word_lists` | C15 | none |
-| `lm_min_gain`, `lm_protect_confidence` | C15 | set in C15, 0.95 |
+| `language_model` (book setting: on or off) | C15 | on |
+| `lm_weight`, `lm_min_gain` | C15 | 1.0, 3.0 (measured) |
+| `text_reader_sure` | C14 in conversion | 0.95 (measured) |
 | `read_dir`, `read_pdf` (columns of the book, not in `Config`) | C16a | empty = no Read Book pages yet |
 | `pdf_dpi` | C16a | 300 |
 | `text_min_confidence` | C16b | 0.6 |

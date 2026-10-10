@@ -94,6 +94,7 @@ class ConvertTests(unittest.TestCase):
     def setUp(self):
         self.tmp, self.lib, self.book, _ = appbook.fresh_copy()
         self.lib.set_book_writing(self.book, "printed")
+        self.lib.set_book_config(self.book, Config(language_model=False))       # the rules alone (C15: test_language)
         with self.lib.session() as s:
             self.page = s.scalar(select(Page.id).where(Page.book_id == self.book).order_by(Page.id))
             g = s.scalars(select(LetterGroup).join(Sample, Sample.group_id == LetterGroup.id)

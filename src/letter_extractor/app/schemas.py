@@ -134,6 +134,18 @@ class TrainRequest(BaseModel):
     name: str = ""
 
 
+class WordListImport(BaseModel):
+    """Import a text file as a word list (C15), used by `book_id` if given."""
+    path: str
+    name: str = ""
+    book_id: Optional[int] = None
+
+
+class WordListUse(BaseModel):
+    book_id: int
+    use: bool = True
+
+
 class Proofread(BaseModel):
     """Mark a line of a converted page proofread, or not (C17): `line` is its index on the page."""
     line: int = Field(ge=0)

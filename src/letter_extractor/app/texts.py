@@ -8,7 +8,9 @@ For each page (Read Book pages, or training pages to measure against their label
 3. every letter is compared with the book's **labelled groups** (nearest centre, C13's method), and read
    by the book's active **letter reader** (C14) if it has one;
 4. `ocr.convert.choose` (or `vote`, with a letter reader) decides each letter's text, confidence and
-   whether it is uncertain;
+   whether it is uncertain; then the book's **language model** (C15, `dictionary.book_model`) may change
+   uncertain letters of each line to readings that make more likely text (`ocr.language.correct_line`);
+   a changed letter stays uncertain and keeps what it was in `lm_from`;
 5. the page's text is joined line by line (spaces at word gaps on printed books), mapped to Gujarati,
    stored as a `PageText` row and written to `text/<part>/<page>.txt` (with the uncertain-letter
    marker) and `.json` (every letter with its sample and box: traceable to the page).
@@ -40,6 +42,7 @@ from ..mapping import mapping_for
 from ..ocr.align import align_line
 from ..ocr.aksharas import line_aksharas
 from ..ocr.convert import LetterText, choose, line_text, mark_spaces, taught, vote
+from ..ocr.language import candidates, correct_line
 from .centres import centres
 from .db import Book, LetterGroup, Line, Page, PageText, Sample, now
 from .library import Cancelled, Library, LibraryError
@@ -48,12 +51,12 @@ from .suggest import LineDone, tesseract_reader, _workers
 LineReader = Callable[[np.ndarray], object]
 
 
-def _nearest(fp: Optional[bytes], groups, C: np.ndarray) -> Optional[Tuple[str, float]]:
+def _nearest(fp: Optional[bytes], groups, C: np.ndarray, k: int = 1) -> List[Tuple[str, float]]:
+    """The `k` nearest labelled groups (label, distance), nearest first."""
     if fp is None or C.size == 0:
-        return None
+        return []
     d = np.linalg.norm(C - np.frombuffer(fp, np.float32), axis=1)
-    i = int(np.argmin(d))
-    return groups[i].label_dev, float(d[i])
+    return [(groups[i].label_dev, float(d[i])) for i in np.argsort(d)[:k]]
 
 
 def _read_lines(lib: Library, book: Book, cfg, lines: Sequence[Line], letters: Dict[int, List[Sample]],
@@ -178,8 +181,8 @@ def _letter_reader(lib: Library, book: Book):
 
 
 def _reader_readings(lib: Library, book: Book, smps: Sequence[Sample], spacing: float,
-                     letter_reader) -> Dict[int, Tuple[str, float]]:
-    """The letter reader's reading of each letter: sample id -> (label, probability)."""
+                     letter_reader) -> Dict[int, List[Tuple[str, float]]]:
+    """The letter reader's three best readings of each letter: sample id -> [(label, probability)]."""
     from ..ocr.features import features
     from .samples import _sample_mask
     have = [x for x in smps if x.mask]
@@ -187,14 +190,24 @@ def _reader_readings(lib: Library, book: Book, smps: Sequence[Sample], spacing: 
         return {}
     X = np.stack([features(_sample_mask(lib, book, x), float(spacing or 1.6 * x.h)) for x in have])
     P = letter_reader.probabilities(X)
-    return {x.id: (letter_reader.classes[int(p.argmax())], float(p.max())) for x, p in zip(have, P)}
+    return {x.id: [(letter_reader.classes[int(k)], float(p[k])) for k in np.argsort(-p)[:3]] for x, p in zip(have, P)}
+
+
+def _language_model(lib: Library, book: Book, cfg):
+    """The book's language model (C15), or None when it is off or has learned nothing."""
+    if not cfg.language_model:
+        return None
+    from .dictionary import book_model
+    lm = book_model(lib, book.id)
+    return lm if len(lm) else None
 
 
 def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None,
-                 targets=None, letter_reader="book") -> Dict:
+                 targets=None, letter_reader="book", lm="book") -> Dict:
     """Convert one page and store its text. `reader` reads a line image (Tesseract by default on printed
     books; tests pass their own); `targets` are the book's labelled groups and centres, if already known;
-    `letter_reader` the book's letter reader if already loaded ("book": load it here; None: none)."""
+    `letter_reader` the book's letter reader if already loaded ("book": load it here; None: none); `lm`
+    the same for the language model."""
     with lib.session() as s:
         page = s.get(Page, page_id)
         if page is None:
@@ -222,14 +235,23 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
             readers.append("reader")
         if len(C):
             readers.append("groups")
+        if lm == "book":
+            lm = _language_model(lib, book, cfg)
+        if lm is not None:
+            readers.append("language")
         mapping = mapping_for(cfg)
+        lm_from: Dict[int, str] = {}
         out_lines: List[List[LetterText]] = []
         for line in lines:
             row: List[LetterText] = []
+            seen_by: List[Tuple] = []
             for x in by_line.get(line.id, []):
                 t = tess.get(x.id)
-                g = _nearest(x.fingerprint, groups, C)
-                r = mine.get(x.id)
+                near = _nearest(x.fingerprint, groups, C, 2)
+                g = near[0] if near else None
+                top = mine.get(x.id, [])
+                r = top[0] if top else None
+                seen_by.append((t, top, near))
                 if r is not None and taught(t, g, known, cfg):
                     text, conf, source, uncertain = vote(t, r, g, cfg)
                 else:
@@ -239,6 +261,14 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
                        ([("groups", g[0], round(g[1], 3))] if g else [])
                 row.append(LetterText(x.id, line.number, (x.x, x.y, x.w, x.h), text, conf, source, uncertain,
                                       readings=seen))
+            if lm is not None and row:                # the language model may change uncertain letters
+                opts = [candidates(x.text, x.uncertain, t, top, near, cfg.group_distance)
+                        for x, (t, top, near) in zip(row, seen_by)]
+                _, changes = correct_line(lm, opts, cfg.lm_weight, cfg.lm_min_gain)
+                for c in changes:
+                    x = row[c.index]
+                    lm_from[x.sample_id] = x.text
+                    x.text, x.source = c.new, f"{x.source}+language"
             mark_spaces(row, cfg, printed)
             out_lines.append(row)
         text_dev = "\n".join(line_text(r) for r in out_lines)
@@ -253,6 +283,7 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
         letters = [[{"sample_id": x.sample_id, "box": list(x.box), "text_dev": x.text,
                      "text_guj": mapping.gujarati(x.text) if x.text else "", "conf": x.conf, "source": x.source,
                      "uncertain": x.uncertain, "space": x.space_before, "readings": x.readings,
+                     **({"lm_from": lm_from[x.sample_id]} if x.sample_id in lm_from else {}),
                      **(alone(x) if tess else {})} for x in r]
                    for r in out_lines]
         row = s.scalar(select(PageText).where(PageText.page_id == page_id))
@@ -300,12 +331,13 @@ def convert_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] =
     if reader is None and book.writing == "printed":
         reader = tesseract_reader(cfg, tesseract_path)
     letter_reader = _letter_reader(lib, book)                # loaded once for all the pages
+    lm = _language_model(lib, book, cfg)
     done, uncertain, letters = 0, 0, 0
     for n, pid in enumerate(ids, 1):
         if cancel and cancel():
             raise Cancelled(f"Stopped after {done} pages; those are converted.")
         t = time.time()
-        r = convert_page(lib, pid, reader, targets, letter_reader)
+        r = convert_page(lib, pid, reader, targets, letter_reader, lm)
         done += 1
         uncertain += r["uncertain"]
         letters += r["letters"]

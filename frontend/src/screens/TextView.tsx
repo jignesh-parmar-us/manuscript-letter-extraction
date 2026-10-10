@@ -29,7 +29,12 @@ interface Props {
   onChanged: () => void;
 }
 
-const READER_NAMES: Record<string, string> = { tesseract: "Tesseract", reader: "your letter reader", groups: "your groups" };
+const READER_NAMES: Record<string, string> = {
+  tesseract: "Tesseract",
+  reader: "your letter reader",
+  groups: "your groups",
+  language: "the language model",
+};
 
 /** The readers of a converted page, in words ("Tesseract, your letter reader and your groups"). */
 function readerWords(readers: string): string {
@@ -382,6 +387,8 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                                 if (el) letterRefs.current.set(x.sample_id, el);
                               }}
                               className={`text-letter${view(x, readers).uncertain ? " uncertain" : ""}${view(x, readers).dev ? "" : " unknown"}${
+                                readers === "both" && x.lm_from !== undefined ? " lm" : ""
+                              }${
                                 x.sample_id === selected ? " selected" : ""
                               }`}
                               onClick={() => pick(x.sample_id, "text")}
@@ -414,6 +421,9 @@ export default function TextView({ book, pageId, onChanged }: Props) {
                     <div className="text-editor" aria-label="Letter">
                       <p className="small text-letter-info" aria-live="polite">
                         <strong>{shown(sel, script, readers)}</strong>
+                        {readers === "both" && sel.lm_from !== undefined && sel.source !== "label" && (
+                          <> · the language model changed it from {sel.lm_from || "?"}</>
+                        )}
                         {sel.source === "label" ? (
                           <> · corrected by you{sel.read_dev !== undefined && ` (read as ${sel.read_dev || "?"})`}</>
                         ) : (

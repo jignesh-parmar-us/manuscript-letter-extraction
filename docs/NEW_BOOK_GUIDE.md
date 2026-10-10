@@ -85,6 +85,8 @@ Every book has two parts in the section menu: **Training Data** (everything abov
 
 6. **Proofread** in the Text view: click a wrong letter (or **Next uncertain ▶**) and type the right one, then **Correct**. The correction labels that letter, so it shows in Review groups and the next reader training learns from it; **Undo** takes it back. **Two letters…** splits a box (click where the letters meet), **Join with the next** joins two boxes, **Not a letter** deletes a speck. Click **✓** at the end of a line once its text is right: converting again keeps proofread lines, and the proofread lines measure how many characters the conversion gets wrong.
 
+7. **Dictionary:** the language model corrects some uncertain letters when you convert, from the text it knows (underlined in the Text view, still marked uncertain). It learns from your labels and proofread lines; **Import** a UTF-8 text file in Gujarati or Devanagari (the full text of the book, or works like it) to give it much more, then convert again. Untick *Use the language model* to turn it off.
+
 > **Printed books** are read by Tesseract and checked against your labelled groups; **handwritten books** by your groups alone for now, so their text is rough until the letter reader. Every letter you correct teaches the next reader training.
 
 ## 8. If something goes wrong

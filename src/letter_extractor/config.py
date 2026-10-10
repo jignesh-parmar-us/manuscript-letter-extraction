@@ -139,6 +139,9 @@ class Config:
     text_tesseract_trust: float = 95      # ...and the letter is not uncertain from this one on,
     text_group_close: float = 0.45        # ...unless the group is this close (measured, TUNING_PHASE2.md)
     text_reader_sure: float = 0.95        # with a letter reader (C14): it wins against Tesseract from this probability on
+    language_model: bool = True           # C15: correct uncertain letters with the book's akshara language model
+    lm_weight: float = 1.0                # ...its weight against the readers' opinions
+    lm_min_gain: float = 3.0              # ...a letter changes only if the line gains this much (log probability)
     text_space_gap: float = 0.5           # printed books: a gap wider than this x the line's letter width is a space
     uncertain_marker: str = "mark"        # in text files: "mark" [?], "guess" [?क], "none" (the plain guess)
     cut_method: str = "shapes"            # cutting letters: "shapes" (C3a, C3b) or "tesseract" (by its reading, C12c)

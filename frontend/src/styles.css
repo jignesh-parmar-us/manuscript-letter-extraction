@@ -1235,3 +1235,18 @@ a.button.disabled {
   flex-wrap: wrap;
   gap: 4px;
 }
+.text-letter.lm {
+  text-decoration: underline dotted var(--accent);
+  text-underline-offset: 4px;
+}
+.dictionary .card + .card {
+  margin-top: 16px;
+}
+.dictionary table.compact {
+  max-width: 560px;
+  margin-top: 10px;
+}
+.dictionary .wordlist-path {
+  flex: 1 1 320px;
+  min-width: 0;
+}

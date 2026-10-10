@@ -254,6 +254,11 @@
       next</span> joins two boxes, <span class="ui">Not a letter</span> deletes a speck. Click <span class="ui">✓</span>
       at the end of a line once its text is right: converting again keeps proofread lines, and the proofread lines
       measure how many characters the conversion gets wrong.</li>
+    <li><span class="ui">Dictionary</span>: the language model corrects some uncertain letters when you convert,
+      from the text it knows (underlined in the Text view, still marked uncertain). It learns from your labels and
+      proofread lines; <span class="ui">Import</span> a UTF-8 text file in Gujarati or Devanagari (the full text of the
+      book, or works like it) to give it much more, then convert again. Untick <em>Use the language model</em> to
+      turn it off.</li>
   </ol>
   <div class="box tip"><strong>Printed books</strong> are read by Tesseract and checked against your labelled groups;
     <strong>handwritten books</strong> by your groups alone for now, so their text is rough until the letter reader.

@@ -216,6 +216,19 @@ class PageText(Base):
     edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class WordList(Base):
+    """An imported text file the language model learns from (C15), stored as Devanagari NFC in
+    <library>/dictionaries/<file>; `books` lists the books that use it."""
+    __tablename__ = "word_list"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    file: Mapped[str] = mapped_column(String(200), unique=True)
+    lines: Mapped[int] = mapped_column(Integer, default=0)
+    aksharas: Mapped[int] = mapped_column(Integer, default=0)
+    books: Mapped[str] = mapped_column(Text, default="[]")                  # JSON list of book ids
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+
+
 class Action(Base):
     """Every change made by the user, for undo and history (C5c). `payload` is JSON."""
     __tablename__ = "action"
