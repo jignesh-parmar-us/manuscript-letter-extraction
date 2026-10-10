@@ -4,6 +4,8 @@ How to turn a folder of page images into clean letters with clean labels, with a
 
 The same guide is in the app: the **Help** link at the top right opens [docs/help/new-book.html](help/new-book.html). Change both together.
 
+**New here, or lost?** [The steps in order](help/workflow.html) shows the whole route as a flowchart, from creating a book to downloading its text (also linked at the top of the guide in the app).
+
 ## 1. Before you start
 
 - **One folder per book** with its page images (JPG, PNG, TIFF or BMP), in page order by name (page2 comes before page10). The app only reads this folder; it never changes your images.

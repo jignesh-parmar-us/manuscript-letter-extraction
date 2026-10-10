@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The steps in order</title>
+<!--
+  Help page of the review app, served at /help/workflow.html, linked from the top of new-book.html.
+  A flowchart of the whole route, from a new book to its text; each box links to the step in
+  new-book.html (and docs/NEW_BOOK_GUIDE.md), which has the details. Change them together.
+-->
+<style>
+  :root {
+    --bg: #f6f4f0; --panel: #ffffff; --text: #22201d; --muted: #6b665e; --line: #e2ddd4;
+    --accent: #8a3b12; --ok: #1f7a3d; --warn: #9a6700; --tip: #eef6f0; --note: #fbf3e2;
+    --train: #8a3b12; --read: #1d5f8a; --train-bg: #fbf1ea; --read-bg: #eaf2f8;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1a18; --panel: #24221f; --text: #eeeae4; --muted: #a39d93; --line: #3a3732;
+      --accent: #e0915f; --ok: #4cc27a; --warn: #e6b450; --tip: #1f2b22; --note: #2e2717;
+      --train: #e0915f; --read: #6fb3e0; --train-bg: #2c221c; --read-bg: #1a2730;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b1a18; --panel: #24221f; --text: #eeeae4; --muted: #a39d93; --line: #3a3732;
+    --accent: #e0915f; --ok: #4cc27a; --warn: #e6b450; --tip: #1f2b22; --note: #2e2717;
+    --train: #e0915f; --read: #6fb3e0; --train-bg: #2c221c; --read-bg: #1a2730;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 20px; max-width: 72ch; }
+  a { color: var(--accent); }
+  .ui { font-weight: 600; white-space: nowrap; }
+
+  /* the two parts of a book */
+  .part { border: 2px solid var(--c); background: var(--bg-c); border-radius: 14px; padding: 14px 14px 6px; margin: 0 0 8px; }
+  .part.train { --c: var(--train); --bg-c: var(--train-bg); }
+  .part.read { --c: var(--read); --bg-c: var(--read-bg); }
+  .part > h2 { margin: 0 0 2px; font-size: 20px; color: var(--c); }
+  .part > .why { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+
+  /* steps, joined by arrows */
+  .flow { display: flex; flex-direction: column; align-items: stretch; }
+  .step {
+    position: relative; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--c);
+    border-radius: 10px; padding: 10px 14px 10px 48px;
+  }
+  .step .n {
+    position: absolute; left: 10px; top: 10px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--c); color: var(--panel); font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step h3 { margin: 0; font-size: 16px; }
+  .step p { margin: 3px 0 0; font-size: 15px; }
+  .step .where { color: var(--muted); font-size: 14px; }
+  .step .more { font-size: 14px; white-space: nowrap; }
+  .arrow { text-align: center; color: var(--muted); font-size: 20px; line-height: 1; padding: 3px 0; user-select: none; }
+  .arrow.big { font-size: 26px; padding: 8px 0; }
+
+  /* a choice: two paths side by side */
+  .choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .choice .step { padding-left: 14px; }
+  .choice .tag { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px; border: 1px solid currentColor; margin-bottom: 4px; }
+  .printed { color: var(--accent); }
+  .hand { color: var(--ok); }
+  .ask { text-align: center; font-weight: 600; margin: 2px 0 6px; }
+
+  /* going round again */
+  .loop {
+    border: 2px dashed var(--c); border-radius: 10px; padding: 8px 12px; margin: 6px 0 0;
+    font-size: 15px; background: var(--panel);
+  }
+  .loop strong { color: var(--c); }
+  .loop.other { --c: var(--read); }
+
+  .box { border-radius: 10px; padding: 10px 14px; margin: 16px 0; border: 1px solid var(--line); }
+  .tip { background: var(--tip); }
+  .note { background: var(--note); }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); margin: 10px 0; font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); }
+  h2.plain { font-size: 21px; margin: 36px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  @media (max-width: 600px) {
+    .choice { grid-template-columns: 1fr; }
+    .step { padding-left: 44px; }
+    th, td { padding: 6px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>The steps in order</h1>
+  <p class="lead">Every book has two parts. In <strong>Training Data</strong> you teach the app the letters of the book
+    from a few sample pages. In <strong>Read Book</strong> the whole book is turned into text. Do them in this order.
+    Each box links to its details in <a href="new-book.html">Adding a new book</a>.</p>
+
+  <section class="part train" aria-label="Part 1: Training Data">
+    <h2>Part 1 · Training Data</h2>
+    <p class="why">A folder of 20 to 25 sample pages. Done once per book (and topped up later).</p>
+    <div class="flow">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>Create the book</h3>
+        <p><span class="ui">Books → New book</span>: a name, the folder with the sample page images, and
+          <span class="ui">Printed</span> or <span class="ui">Handwritten</span>.</p>
+        <p class="more"><a href="new-book.html#before">Before you start →</a></p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>Capture the letters</h3>
+        <p><span class="where">Training Data → Pages &amp; capture.</span> Printed books: first choose
+          <span class="ui">Cutting → By Tesseract's reading</span>. Then <span class="ui">Capture letters</span> and wait
+          (about 5 minutes for 23 pages). The pages are cut into lines and letters, and similar letters are put into groups.</p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>Give the groups labels</h3>
+        <p class="where">Training Data → Review groups</p>
+      </div>
+      <div class="arrow">↓</div>
+      <p class="ask">Printed or handwritten?</p>
+      <div class="choice">
+        <div class="step">
+          <span class="tag printed">printed</span>
+          <p>Tesseract has already labelled the groups it is sure about. Then:
+            <span class="ui">Suggest from labelled books</span> (if you have other printed books) →
+            <span class="ui">Split mixed groups</span> → <span class="ui">Accept N with ≥ 90 %</span>.</p>
+          <p class="more"><a href="new-book.html#printed">Details →</a></p>
+        </div>
+        <div class="step">
+          <span class="tag hand">handwritten</span>
+          <p>With another labelled handwritten book: <span class="ui">Suggest from labelled books</span> →
+            <span class="ui">Split mixed groups</span> → <span class="ui">Accept</span>. Otherwise label the 30 to 50 biggest
+            groups by hand.</p>
+          <p class="more"><a href="new-book.html#handwritten">Details →</a></p>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">4</span>
+        <h3>Review the groups</h3>
+        <p>Biggest groups first: look at the letters, move the wrong ones out, fix the label, tick
+          <span class="ui">Reviewed</span>. You do not need to finish every group: the big ones matter most.</p>
+        <p class="more"><a href="new-book.html#review">Details →</a></p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">5</span>
+        <h3>Train the letter reader</h3>
+        <p><span class="where">Training Data → Readers →</span> <span class="ui">Train</span> (about a minute). It learns your
+          reviewed letters and reports how many it reads right on pages it did not learn from.</p>
+        <p class="more"><a href="new-book.html#ready">Details →</a></p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">6</span>
+        <h3>Fix what the reader finds</h3>
+        <p><span class="where">Review groups →</span> <span class="ui">Check these</span>: letters the reader is sure are in
+          the wrong group. <span class="ui">Move to …</span>, or <span class="ui">It is right</span>.</p>
+      </div>
+      <div class="loop">
+        <strong>↺ Go round again</strong> whenever you like: review more groups (4), fix the letters in Check these (6),
+        then <strong>Train</strong> again (5). Each training makes a new reader; the older ones are kept.
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow big" aria-hidden="true">↓</div>
+
+  <section class="part read" aria-label="Part 2: Read Book">
+    <h2>Part 2 · Read Book</h2>
+    <p class="why">The whole book, as a PDF or a folder of page images.</p>
+    <div class="flow">
+      <div class="step">
+        <span class="n">7</span>
+        <h3>Upload and cut the whole book</h3>
+        <p><span class="where">Read Book → Upload &amp; capture.</span> The book's PDF (<span class="ui">Use this PDF</span>)
+          or a folder of page images, then <span class="ui">Cut the pages</span>. It runs in the background; stopping keeps
+          the pages already cut.</p>
+        <p class="more"><a href="new-book.html#read">Details →</a></p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">8</span>
+        <h3>Convert the pages into text</h3>
+        <p><span class="where">Read Book → Text →</span> <span class="ui">Convert all pages</span>. Each page is shown
+          beside its text, with uncertain letters highlighted. <span class="ui">Tesseract + your groups</span> marks far
+          more of the real mistakes than <span class="ui">Tesseract only</span>.</p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">9</span>
+        <h3>Proofread</h3>
+        <p>Click a wrong letter (or <span class="ui">Next uncertain ▶</span>), type the right one, <span class="ui">Correct</span>.
+          <span class="ui">Two letters…</span>, <span class="ui">Join with the next</span> and <span class="ui">Not a letter</span>
+          fix bad boxes. Click <span class="ui">✓</span> at the end of each line that is right.</p>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <span class="n">10</span>
+        <h3>Download the text</h3>
+        <p>The page or the whole book as <strong>.txt</strong>, <strong>Word</strong>, <strong>PDF</strong> or a
+          <strong>picture</strong>, with uncertain letters as [?], [?ક] or the best guess.</p>
+      </div>
+      <div class="loop other">
+        <strong>↺ Back to Part 1:</strong> every letter you correct in step 9 joins its group in Training Data, so the next
+        <strong>Train</strong> (5) learns from it. A page that reads very badly can be moved to Training Data
+        (<span class="where">Read Book → Book pages →</span> <span class="ui">Use for training</span>) and labelled there.
+      </div>
+    </div>
+  </section>
+
+  <div class="box note"><strong>What the reader changes today.</strong> The letter reader (step 5) gives the groups
+    their suggestions and finds the letters in Check these. The text of Read Book (step 8) is read by Tesseract and
+    checked against your <em>groups</em>, not by the reader yet. So reviewing groups and fixing Check these improves
+    the text; using the reader for the text is planned next.</div>
+
+  <h2 class="plain">Which step do I need?</h2>
+  <table>
+    <tr><th>I want to…</th><th>Go to</th></tr>
+    <tr><td>start a new book</td><td>Steps 1 to 4, then 5</td></tr>
+    <tr><td>get the text of a book whose Training Data is done</td><td>Steps 7 to 10</td></tr>
+    <tr><td>make the reader better</td><td>Review more groups (4), fix Check these (6), Train again (5)</td></tr>
+    <tr><td>make the text better</td><td>Review groups (4), then Convert again (8); proofread (9)</td></tr>
+    <tr><td>add another book of the same print or hand</td><td>Keep the labelled book: in the new one, step 3 uses
+      <span class="ui">Suggest from labelled books</span> to label it from the old one</td></tr>
+  </table>
+
+  <div class="box tip"><strong>Everything can be undone.</strong> <span class="ui">Undo</span> (or Ctrl/Cmd+Z) takes
+    back any change to groups and letters, including corrections in the text.</div>
+</main>
+</body>
+</html>
