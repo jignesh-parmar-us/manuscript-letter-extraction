@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -182,6 +182,37 @@ class Jobs:
             raise LibraryError("No pages to convert: cut the Read Book pages first.")
         return self.start(book_id, "convert", lambda progress, cancel: convert_book(
             self.lib, book_id, page_ids, part, progress, cancel, tesseract_path=tesseract_path), total=total)
+
+    def train(self, book_id: int, books=None, min_samples: int = 5, include_unreviewed: bool = False,
+              include_words: bool = False, name: str = "") -> Job:
+        """Train a letter reader (C14) on the chosen books (default: this one), make it this book's active
+        reader and read the book with it."""
+        from .readers import read_with_reader, train_reader
+        self.lib.get_book(book_id)
+        chosen = list(books or [book_id])
+
+        def run(progress, cancel):
+            r = train_reader(self.lib, chosen, min_samples, include_unreviewed, include_words, name, progress,
+                             cancel, activate=[book_id])
+            r["read"] = read_with_reader(self.lib, book_id)
+            return r
+        return self.start(book_id, "train", run, total=6)
+
+    def use_reader(self, book_id: int, reader_id: Optional[int]) -> Job:
+        """Make a reader the book's active one (or none) and read the book with it."""
+        from .db import Book, OcrRun
+        from .readers import load_reader, read_with_reader
+        if reader_id is not None:
+            load_reader(self.lib, reader_id)
+
+        def run(progress, cancel):
+            from sqlalchemy import delete
+            with self.lib.session() as s:
+                s.get(Book, book_id).reader_id = reader_id
+                if reader_id is None:
+                    s.execute(delete(OcrRun).where(OcrRun.book_id == book_id, OcrRun.engine == "reader"))
+            return read_with_reader(self.lib, book_id) if reader_id is not None else {"samples": 0}
+        return self.start(book_id, "use_reader", run, total=1)
 
     def export(self, book_id: int, folder=None, image=None) -> Job:
         """Export the book's dataset (C5g); copying many images can take a while."""

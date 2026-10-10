@@ -11,7 +11,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: BookSummary = {
-  id: 1, name: "Vachanamrut", input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0,
+  id: 1, name: "Vachanamrut", input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
   pages: 2, samples: 854, groups: 54, labelled: 27, unsure: 236,
   created_at: null, updated_at: "2026-10-04T09:00:00+00:00", captured_at: null,
 };
@@ -41,7 +41,7 @@ describe("Books", () => {
   });
 
   it("creates a printed book", async () => {
-    vi.mocked(api.createBook).mockResolvedValue({ ...book, id: 8, writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, settings: {}, undo: 0, redo: 0, job: null });
+    vi.mocked(api.createBook).mockResolvedValue({ ...book, id: 8, writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null, settings: {}, undo: 0, redo: 0, job: null });
     render(<Books info={info} onLibraryChanged={() => {}} />);
     await userEvent.type(screen.getByPlaceholderText(/Vachanamrut, part 1/), "Printed book");
     await userEvent.type(screen.getByPlaceholderText("/path/to/the/page/images"), "/pages");

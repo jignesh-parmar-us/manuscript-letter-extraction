@@ -1153,3 +1153,40 @@ a.button.disabled {
     break-before: page;
   }
 }
+
+/* ---- Readers and Check these (C14) ---- */
+.train-options {
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 8px 0;
+}
+.active-row {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+.reader-report .big-letter-cell {
+  font-size: 20px;
+}
+.reader-report .confusion {
+  white-space: nowrap;
+}
+.check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.check-item {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+.check-item img {
+  height: 64px;
+  justify-self: start;
+}
+.check-item .row {
+  flex-wrap: wrap;
+  gap: 4px;
+}

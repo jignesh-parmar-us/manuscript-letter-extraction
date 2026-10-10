@@ -69,7 +69,7 @@ class RejectSuggestion(GroupRef):
 
 
 class RemoveReadings(SampleIds):
-    engine: Optional[Literal["tesseract", "books"]] = None   # None: the book's main reader
+    engine: Optional[Literal["tesseract", "books", "reader"]] = None   # None: the book's main reader
 
 
 class LabelSamples(SampleIds):
@@ -123,6 +123,19 @@ class ConvertRequest(BaseModel):
     """Convert pages into text (C16b): the given pages, or every page of a part."""
     page_ids: Optional[List[int]] = None
     part: Literal["training", "read"] = "read"
+
+
+class TrainRequest(BaseModel):
+    """Train a letter reader (C14)."""
+    books: Optional[List[int]] = None              # the books to learn from (default: this one)
+    min_samples: int = Field(5, ge=1)              # the least letters a label needs (asked for: down to 1)
+    include_unreviewed: bool = False               # also groups labelled automatically and not reviewed
+    include_words: bool = False                    # also word labels (several aksharas)
+    name: str = ""
+
+
+class ReaderChoice(BaseModel):
+    reader_id: Optional[int] = None                 # None: no reader for this book
 
 
 class PagePart(BaseModel):

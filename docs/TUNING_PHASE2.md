@@ -182,6 +182,24 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Tesseract's confidence does not mark its mistakes:** on the 3 Read Book pages, "Tesseract only" marks 8 of 1,826 letters uncertain (0.4%), although about 1 character in 6 is wrong; with the groups' second opinion, 237 (13%). The marks come from the groups, as C10 found for handwriting.
 
+## C14. The letter reader (2026-10-10)
+
+**Data:** a copy of the user's library, book 6 (printed): the 4,091 letters of reviewed groups, 4,040 of them single letters (not words); 93 labels with at least 5 letters (3,780 letters), 146 labels with fewer (left out by default). Test pages: 3 of 23 (535 letters); validation pages: 2.
+
+| Reader (shape features: 20 x 20 image, HOG on 40 px, size) | Test letters right | Labels with 20+ letters |
+|---|---|---|
+| **linear (kept: better on validation)** | **96.1 to 96.4%** | **96.8 to 97.2%** |
+| network, one hidden layer of 384 | 95.3% | |
+| Tesseract on the same letters (C16b) | 84.4% | |
+
+Letters read with at least 90% probability: 96% of all, and 98.1% of them right. Most confused: अ/अं, था/या, सा/ता. Worst labels on the test pages: सा 78% (9 letters), की 80% (5), ए 83% (6), का 88% (8). The test letters are cleanly cut (they are in reviewed groups); on Read Book pages with cutting mistakes the reader will do worse.
+
+**Time:** the whole training in the app 77 s (296 s before the features were computed once); reading all 13,952 letters of the book 44 s.
+
+**"Check these":** 23 letters read as another label with at least 90% probability (each by a reader that did not learn from its page), all in reviewed groups. By eye about 18 are real mistakes in the groups (for example था letters in the या group, letters whose group label lacks their ं) and the rest false alarms.
+
+**Cutting by matching the groups** (the user's idea, 2026-10-10; a prototype, not in the app): every line cut at candidate points, every run of 1 to 4 pieces scored by its distance to the nearest labelled group centre, the cheapest sequence chosen, "ask the user" where nothing matches. On the reviewed characters: 70% CER with cuts at the gaps of the letter bodies, 89% with cuts at the stroke pieces, against 10.8% for Tesseract with gaps filled. Fingerprints cannot tell half a letter or two letters from a letter. To be tried again with the letter reader trained with "not a letter" examples.
+
 ## C13. Suggestions from other labelled books (2026-10-06)
 
 **No handwritten book is labelled yet**, so the plan's measurement (two handwritten pages, one suggesting the other) waits for the user's labels. Measured on print instead, on a copy of the user's library: book 3 "Vachnamrut Printed 1933" (cut by shapes, 82 labelled groups) suggests for book 4 "Vachnamrut Printed 1933 Tesseract Cuts" (the same 23 pages cut by Tesseract and grouped on their own; its labels reviewed by the user are the truth). Since the two books share pages, the reference centres are built only from book 3's samples on half of the pages, and only book 4's samples on the other half are judged (both ways round).

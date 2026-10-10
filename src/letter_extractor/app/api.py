@@ -51,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      ConvertRequest, PagePart, ReadSource,
+                      ConvertRequest, PagePart, ReadSource, ReaderChoice, TrainRequest,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -245,6 +245,62 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             media = "text/plain; charset=utf-8"
         disposition = f"attachment; filename*=UTF-8''{quote(name)}.{format}"
         return Response(data, media_type=media, headers={"Content-Disposition": disposition})
+
+    # ---- letter readers (C14) ------------------------------------------------------------------------
+    def reader_json(r, full: bool = False) -> Dict:
+        acc = json.loads(r.accuracy or "{}")
+        out = {"id": r.id, "name": r.name, "kind": r.kind, "created_at": r.created_at.isoformat() if r.created_at else None,
+               "trained_on": json.loads(r.trained_on or "{}"), "accuracy": acc.get("overall"),
+               "accuracy_20": acc.get("labels_20"), "labels": len(json.loads(r.classes or "[]"))}
+        if full:
+            report = json.loads(r.report or "{}")
+            out.update(per_label=acc.get("per_label", []), confusions=report.get("confusions", []),
+                       check=len(report.get("check", [])), seconds=report.get("seconds"))
+        return out
+
+    @app.post("/api/books/{book_id}/train", dependencies=auth, status_code=202)
+    def train(book_id: int, body: TrainRequest = TrainRequest()) -> Dict:
+        return jobs.train(book_id, body.books, body.min_samples, body.include_unreviewed, body.include_words,
+                          body.name).as_dict()
+
+    @app.get("/api/readers", dependencies=auth)
+    def readers() -> List[Dict]:
+        from .db import Reader
+        with library.session() as s:
+            return [reader_json(r) for r in s.scalars(select(Reader).order_by(Reader.id.desc()))]
+
+    @app.get("/api/readers/{reader_id}", dependencies=auth)
+    def reader(reader_id: int) -> Dict:
+        from .db import Reader
+        with library.session() as s:
+            r = s.get(Reader, reader_id)
+            if r is None:
+                raise HTTPException(404, f"No reader with id {reader_id}.")
+            return reader_json(r, full=True)
+
+    @app.delete("/api/readers/{reader_id}", dependencies=auth, status_code=204)
+    def delete_reader(reader_id: int) -> None:
+        from .readers import delete_reader as remove
+        remove(library, reader_id)
+
+    @app.post("/api/books/{book_id}/reader", dependencies=auth, status_code=202)
+    def use_reader(book_id: int, body: ReaderChoice) -> Dict:
+        return jobs.use_reader(book_id, body.reader_id).as_dict()
+
+    @app.get("/api/books/{book_id}/check", dependencies=auth)
+    def check_these(book_id: int) -> List[Dict]:
+        """The active reader's letters that are probably in the wrong group."""
+        from .readers import check_list
+        items = check_list(library, book_id)
+        with library.session() as s:
+            out = []
+            for c in items:
+                smp = s.get(Sample, c["sample_id"])
+                g = s.get(LetterGroup, c["group_id"])
+                mapping = mapping_for(library.book_config(library.get_book(book_id)))
+                out.append({**c, "sample": _sample_json(smp, book_id, token), "group_code": g.code,
+                            "label_guj": mapping.gujarati(c["label"]), "read_guj": mapping.gujarati(c["read"])})
+            return out
 
     @app.post("/api/pages/{page_id}/part", dependencies=auth)
     def page_part(page_id: int, body: PagePart) -> Dict:

@@ -54,6 +54,7 @@ class Book(Base):
     # Read Book (C16a): a folder of images, or the name of an uploaded PDF whose pages are in read/pages/
     read_dir: Mapped[str] = mapped_column(Text, default="")
     read_pdf: Mapped[str] = mapped_column(String(500), default="")
+    reader_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reader.id", ondelete="SET NULL"), nullable=True)  # C14
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now, onupdate=now)
     captured_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
@@ -178,6 +179,21 @@ class OcrReading(Base):
     confidence: Mapped[float] = mapped_column(Float)                  # 0 to 100
     alternatives: Mapped[str] = mapped_column(Text, default="[]")     # per character: [[text, confidence], ...]
     overlap: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class Reader(Base):
+    """A trained letter reader (C14). Readers belong to the library: one trained on several books can be
+    the active reader of another. Its files are in <library>/readers/<folder>/ (reader.npz, reader.json)."""
+    __tablename__ = "reader"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    folder: Mapped[str] = mapped_column(String(200), unique=True)
+    kind: Mapped[str] = mapped_column(String(30), default="features-linear")     # features-linear | features-mlp
+    classes: Mapped[str] = mapped_column(Text, default="[]")                       # JSON: labels (Devanagari NFC)
+    trained_on: Mapped[str] = mapped_column(Text, default="{}")                    # JSON: books, counts, choices
+    accuracy: Mapped[str] = mapped_column(Text, default="{}")                      # JSON: overall, per label
+    report: Mapped[str] = mapped_column(Text, default="{}")                        # JSON: confusions, check list
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
 
 
 class PageText(Base):

@@ -17,6 +17,7 @@ import { useFitHeight } from "../components/useFitHeight";
 import { go } from "../route";
 import GroupView from "./GroupView";
 import SamplesView from "./SamplesView";
+import CheckView from "./CheckView";
 import LetterOverview, { missingCount } from "./LetterOverview";
 import { isMixed, SuggestPanel } from "./Suggestions";
 
@@ -144,6 +145,15 @@ export default function Review({ book, view, onChanged }: Props) {
           >
             Letter overview <span className="muted">({missingCount(groups)} missing)</span>
           </button>
+          {book.reader_id && (
+            <button
+              className={`side-item${view === "check" ? " active" : ""}`}
+              onClick={() => go(`/books/${book.id}/review/check`)}
+              title="Letters your letter reader is sure belong to another letter than their group's"
+            >
+              Check these
+            </button>
+          )}
           <div className="row small">
             <select aria-label="Show" value={filter} onChange={(e) => chooseFilter(e.target.value as Filter)}>
               <option value="all">All groups</option>
@@ -195,6 +205,8 @@ export default function Review({ book, view, onChanged }: Props) {
             <GroupView key={current.id} group={current} ctx={ctx} />
           ) : view === "letters" ? (
             <LetterOverview ctx={ctx} />
+          ) : view === "check" ? (
+            <CheckView ctx={ctx} readerId={book.reader_id} />
           ) : view === "unsure" || view === "deleted" ? (
             <SamplesView key={view} kind={view} ctx={ctx} />
           ) : (

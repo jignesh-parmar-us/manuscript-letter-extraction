@@ -51,14 +51,15 @@ Labels given by Tesseract or by other books are marked *not reviewed*. Check the
 
 > **Remember:** every change can be undone (**Undo**, or Ctrl/Cmd+Z). Locked groups never change until you unlock them.
 
-## 5. When is a book ready for training?
+## 5. Training the letter reader
 
-The letter reader (C14) is the next part of the app. This is how it is planned to work.
+**Training Data → Readers → Train** teaches a letter reader your reviewed letters (about a minute). Train again whenever you have reviewed or corrected more: each training makes a new reader, and older ones are kept.
 
-- **Not every label is needed.** The letter reader will learn only from labelled letters; letters with fewer than 5 samples will be left out and listed. Its report will show the accuracy of every letter, so you see which ones need more samples.
+- **Not every label is needed.** It learns only from labelled letters; labels with fewer letters than the minimum you choose (5 by default, down to 1) are left out and listed. Its report shows how many letters of pages it did not learn from it reads right, and the accuracy of every letter, so you see which ones need more samples.
 - **Wrong labels are the problem.** A group labelled ने that still holds ते letters teaches the reader that both are ने. That is why the review matters more than the number of labels.
-- **By default it will learn only from groups you labelled or reviewed.** The labels given at capture or by suggestions count once you have reviewed them; including them unreviewed will be an option.
-- **Good enough to start:** the big groups reviewed, and the mixed ones split. You can train again whenever you have reviewed more.
+- **It learns only from groups you reviewed**, unless you tick *also groups not reviewed*.
+- **Check these** (Review groups, side bar) lists the letters the reader is sure are in the wrong group: **Move to …**, or **It is right** if the reader is wrong. Fix them, then train again.
+- **Good enough to start:** the big groups reviewed, and the mixed ones split.
 
 ## 6. Replacing old books
 

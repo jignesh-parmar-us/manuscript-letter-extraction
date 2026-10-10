@@ -10,7 +10,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: Book = {
-  id: 7, name: "Vachnamrut Printed", input_dir: "/pages", writing: "printed", read_dir: "", read_pdf: "", read_pages: 312, reviewed: 2823, pages: 23, samples: 15169, groups: 531,
+  id: 7, name: "Vachnamrut Printed", input_dir: "/pages", writing: "printed", read_dir: "", read_pdf: "", read_pages: 312, reviewed: 2823, reader_id: null, pages: 23, samples: 15169, groups: 531,
   labelled: 82, unsure: 3644, created_at: null, updated_at: null, captured_at: null, settings: {}, undo: 0, redo: 0,
   job: null,
 };
@@ -30,7 +30,7 @@ describe("BookView", () => {
     expect(menu).toHaveValue("export");
     const parts = [...menu.querySelectorAll("optgroup")].map((g) => [g.label, [...g.querySelectorAll("option")].map((o) => o.textContent)]);
     expect(parts).toEqual([
-      ["Training Data", ["Pages & capture", "Review groups", "Pages", "Export dataset"]],
+      ["Training Data", ["Pages & capture", "Review groups", "Pages", "Readers", "Export dataset"]],
       ["Read Book", ["Upload & capture", "Book pages", "Text"]],
     ]);
     await userEvent.selectOptions(menu, "review");

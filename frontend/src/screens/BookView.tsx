@@ -12,6 +12,7 @@ import Capture from "./Capture";
 import Export from "./Export";
 import PageViewer from "./PageViewer";
 import ReadBook from "./ReadBook";
+import Readers from "./Readers";
 import TextView from "./TextView";
 import Review from "./Review";
 
@@ -19,6 +20,7 @@ export const TABS: { id: string; label: string; part: "Training Data" | "Read Bo
   { id: "capture", label: "Pages & capture", part: "Training Data" },
   { id: "review", label: "Review groups", part: "Training Data" },
   { id: "pages", label: "Pages", part: "Training Data" },
+  { id: "readers", label: "Readers", part: "Training Data" },
   { id: "export", label: "Export dataset", part: "Training Data" },
   { id: "read", label: "Upload & capture", part: "Read Book" },
   { id: "readpages", label: "Book pages", part: "Read Book" },
@@ -108,6 +110,7 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
           />
         )}
         {tab === "read" && <ReadBook book={book} info={info} onChanged={reload} />}
+        {tab === "readers" && <Readers book={book} onChanged={reload} />}
         {tab === "text" && (
           <TextView book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} onChanged={reload} />
         )}

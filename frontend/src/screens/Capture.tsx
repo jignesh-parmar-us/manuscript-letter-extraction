@@ -24,6 +24,8 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   capture_read: "Cutting the Read Book pages",
   import_pdf: "Turning the PDF into page images",
   convert: "Converting pages into text",
+  train: "Training a letter reader",
+  use_reader: "Reading with the letter reader",
 };
 
 export default function Capture({ book, onChanged }: Props) {

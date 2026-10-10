@@ -6,7 +6,7 @@ Since 2026-10-10 every book has **two parts** (Section 0): **Training Data**, wh
 
 The work is split into **small chunks (C10 to C18)**, numbered after Phase 1's chunks. As in Phase 1, each chunk ends with something to run and check by eye, and is a separate commit. Where the implementation turns out different from this plan, the chunk gets a **Changes from the original plan** note, and later chunks are updated in the same commit.
 
-**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. C16b is built (2026-10-10): Read Book pages are converted into text, shown beside the page with uncertain letters marked, and downloaded as .txt, Word, PDF or a picture. **C17 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
+**Status:** C10 is done (2026-10-04): Tesseract reads a line into aksharas, and every book says whether it is **handwritten or printed**. C11 is done (2026-10-05): a job reads a whole book, matches the readings to the samples, and groups carry suggestions in the API. C12 is built (2026-10-05): suggestions, mixed groups and bulk accept in the Review tab; its final measurement waits for a full review of a printed book. C12b is built (2026-10-05): on printed books, Tesseract's readings split samples that hold several letters and join cut pieces. C12c is built (2026-10-06): a printed book can be cut by Tesseract's reading instead of by ink shapes, chosen per book. C13 is built (2026-10-06): suggestions from the labelled groups of other books, the first reader for handwriting; its measurement on handwriting waits for labels. C12d is built (2026-10-06): groups that mix two letters are split by their readings where the shapes agree. C12e is built (2026-10-07 and 08): aa bars, stems and lone bars cut onto the wrong letter go back to theirs, at capture and with "Fix ા bars"; lines are followed on slanted pages. **On 2026-10-10 the plan was rearranged around the two parts of a book (Section 0); the order is now C16a, C16b, C17, C14, C15; C14 was moved before C17 the same day.** C16a is built (2026-10-10): every book has Training Data and Read Book; Read Book takes a PDF or a folder of images, is cut in the background and never grouped. C16b is built (2026-10-10): Read Book pages are converted into text, shown beside the page with uncertain letters marked, and downloaded as .txt, Word, PDF or a picture. C14 is built (2026-10-10): letter readers trained in the app (96% of the test letters of the printed book read right), the book's main suggestion source, with "Check these" for letters probably in the wrong group. **C17 is next.** Tesseract is a separate install: see `docs/INSTALL_TESSERACT.md`. Measured numbers are in `docs/TUNING_PHASE2.md`.
 
 ---
 
@@ -465,7 +465,7 @@ Rules that carry over from Phase 1:
 
 ### C14. Letter reader: training and suggestions (FR-11)
 
-**Status:** planned; built after C17 (order of 2026-10-10). Method changed on 2026-10-10: shape features and a classic learning method in NumPy instead of PyTorch and ONNX Runtime, which do not install on the development computer (Section 1).
+**Status:** built (2026-10-10), before C17 after all: the user's idea of cutting by matching the groups needs a reader first (see below). Measured on the printed book (`TUNING_PHASE2.md`): **96.4% of the letters of 3 test pages read right, 97.2% for labels with 20 or more letters** (Tesseract: 84%); training in 77 s; "Check these" listed 23 letters, about 18 of them real mistakes in reviewed groups. Method changed on 2026-10-10: shape features and a classic learning method in NumPy instead of PyTorch and ONNX Runtime, which do not install on the development computer (Section 1).
 
 **Goal:** a reader that learns the letters of the labelled books: better suggestions than C13, a confidence for every letter, letters that are probably in the wrong group, and the reader for converting handwritten books (C16b).
 
@@ -493,6 +493,14 @@ Rules that carry over from Phase 1:
 - a reader trained on the reviewed letters of the printed book reaches at least 90% on its test pages for labels with 20 or more samples (if it does not, the measurement decides between more features, a larger network, or a neural network trained elsewhere and run with OpenCV's `dnn`);
 - accuracy per letter and the "Check these" list are shown;
 - its suggestions are measured against the user's labels, as Tesseract's were (C12).
+
+**Changes from the original plan:**
+- **The kept reader is chosen by validation accuracy** between a linear reader and a network with one hidden layer (384 units). On the printed book the linear one won (96.1% against 95.3%) and is 5 times faster; more books may change that, so both are trained each time.
+- **Features and varied copies are computed once** per training and reused by its six trainings (the reader, four check folds, the final reader): 296 s became 77 s.
+- **"Check these" uses four folds by page**, so each letter is read by a reader that did not learn from its page. A letter in a locked group is listed but cannot be moved until the group is unlocked; "It is right" hides a letter (remembered in the browser, per reader).
+- **The reader becomes the book's main suggestion source** (before Tesseract and the labelled books) once the book has been read with it. Its reading run does not split mixed groups automatically (other runs do), so reviewed groups never change behind the user's back; "Split mixed groups" stays a button.
+- **Readers are trained inside the app** (Training Data → Readers): the books of the same writing to learn from, the least letters a label needs (1 or more), and optionally unreviewed groups and word labels. "Use for this book" makes another reader active and reads the book with it.
+- **Not yet:** the reader in the conversion of Read Book pages (C16b) and the `train` command line. **Cutting by matching** (the user's idea, 2026-10-10): a prototype that cut lines by matching candidate letters with the labelled groups' fingerprints read 70 to 89% of the characters wrong (`TUNING_PHASE2.md`), because fingerprints cannot tell half a letter or two letters from a letter. To be tried again with this reader, trained with "not a letter" examples made from the existing cuts.
 
 **C7 addition:** none (NumPy only). **C8 addition:** a short training run on the synthetic book (three easy classes).
 
@@ -661,7 +669,7 @@ Rules that carry over from Phase 1:
 
 ### Chunk summary
 
-Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C16a, C16b, C17, C14, C15**, and C18 only if needed.
+Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C16a, C16b, C14** (moved before C17 on 2026-10-10), **C17, C15**, and C18 only if needed.
 
 | # | Chunk | Status | Main output | Requirements |
 |---|---|---|---|---|
@@ -676,7 +684,7 @@ Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C1
 | C16a | The two parts of a book: Training Data and Read Book | built | PDF or images uploaded, cut, never grouped; grouped section menu | FR-12 |
 | C16b | Converting Read Book pages into text | built | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |
 | C17 | Proofreading view | **next** | proofread lines; corrections become labels | FR-12 (side-by-side view) |
-| C14 | Letter reader | planned | readers trained in the app any number of times; per-letter accuracy; "Check these" | FR-11 |
+| C14 | Letter reader | built | readers trained in the app any number of times; per-letter accuracy; "Check these" | FR-11 |
 | C15 | Dictionary and language model | planned | word lists, correction, measured CER | new |
 | C18 | Line recognizer | optional | Kraken or Tesseract model; decision by CER | Section 8.3 |
 

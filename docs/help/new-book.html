@@ -80,7 +80,7 @@
       <li><a href="#printed">A printed book</a></li>
       <li><a href="#handwritten">A handwritten book</a></li>
       <li><a href="#review">Reviewing the labels</a></li>
-      <li><a href="#ready">When is a book ready for training?</a></li>
+      <li><a href="#ready">Training the letter reader</a></li>
       <li><a href="#cleanup">Replacing old books</a></li>
       <li><a href="#read">Reading the whole book</a></li>
       <li><a href="#trouble">If something goes wrong</a></li>
@@ -190,18 +190,22 @@
   <div class="box note"><strong>Remember:</strong> every change can be undone (<span class="ui">Undo</span>, or
     Ctrl/Cmd+Z). Locked groups never change until you unlock them.</div>
 
-  <h2 id="ready">5. When is a book ready for training?</h2>
-  <p class="lead">The letter reader (C14) is the next part of the app. This is how it is planned to work.</p>
+  <h2 id="ready">5. Training the letter reader</h2>
+  <p class="lead"><strong>Training Data → Readers → Train</strong> teaches a letter reader your reviewed letters
+    (about a minute). Train again whenever you have reviewed or corrected more: each training makes a new reader, and
+    older ones are kept.</p>
   <ul>
-    <li><strong>Not every label is needed.</strong> The letter reader will learn only from labelled letters;
-      letters with fewer than 5 samples will be left out and listed. Its report will show the accuracy of every
-      letter, so you see which ones need more samples.</li>
+    <li><strong>Not every label is needed.</strong> It learns only from labelled letters; labels with fewer letters
+      than the minimum you choose (5 by default, down to 1) are left out and listed. Its report shows how many letters
+      of pages it did not learn from it reads right, and the accuracy of every letter, so you see which ones need more
+      samples.</li>
     <li><strong>Wrong labels are the problem.</strong> A group labelled ने that still holds ते letters teaches the
       reader that both are ने. That is why the review matters more than the number of labels.</li>
-    <li><strong>By default it will learn only from groups you labelled or reviewed.</strong> The labels given at
-      capture or by suggestions count once you have reviewed them; including them unreviewed will be an option.</li>
-    <li><strong>Good enough to start:</strong> the big groups reviewed, and the mixed ones split. You can train
-      again whenever you have reviewed more.</li>
+    <li><strong>It learns only from groups you reviewed</strong>, unless you tick <em>also groups not reviewed</em>.</li>
+    <li><strong>Check these</strong> (Review groups, side bar) lists the letters the reader is sure are in the wrong
+      group: <strong>Move to …</strong>, or <strong>It is right</strong> if the reader is wrong. Fix them, then train
+      again.</li>
+    <li><strong>Good enough to start:</strong> the big groups reviewed, and the mixed ones split.</li>
   </ul>
 
   <h2 id="cleanup">6. Replacing old books</h2>

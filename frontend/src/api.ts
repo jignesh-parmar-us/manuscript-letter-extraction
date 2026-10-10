@@ -84,6 +84,7 @@ export interface BookSummary {
   read_pdf: string; // ...the name of the uploaded PDF (its pages are images in the book folder)
   read_pages: number; // Read Book pages cut
   reviewed: number; // letters in reviewed groups
+  reader_id: number | null; // the book's active letter reader (C14)
   pages: number; // Training Data pages
   samples: number;
   groups: number;
@@ -113,7 +114,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "convert";
+    | "convert" | "train" | "use_reader";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -212,9 +213,55 @@ export interface LabelSuggestion {
 }
 
 /** Who reads the letters: Tesseract (C11) or the labelled groups of other books (C13). */
-export type Engine = "tesseract" | "books";
+export type Engine = "tesseract" | "books" | "reader";
 
-export const ENGINE_NAME: Record<Engine, string> = { tesseract: "Tesseract", books: "your labelled books" };
+export const ENGINE_NAME: Record<Engine, string> = {
+  tesseract: "Tesseract",
+  books: "your labelled books",
+  reader: "your letter reader",
+};
+
+/** A trained letter reader (C14). */
+export interface ReaderInfo {
+  id: number;
+  name: string;
+  kind: string;
+  created_at: string | null;
+  trained_on: {
+    books?: number[];
+    book_names?: string[];
+    letters?: number;
+    labels?: number;
+    min_samples?: number;
+    include_unreviewed?: boolean;
+    include_words?: boolean;
+    left_out?: [string, number][];
+    test_pages?: number;
+    test_letters?: number;
+  };
+  accuracy: number | null; // on the test pages
+  accuracy_20: number | null; // labels with 20 or more letters
+  labels: number;
+  per_label?: { label: string; letters: number; tested: number; accuracy: number | null }[];
+  confusions?: [string, string, number][];
+  check?: number;
+  seconds?: number;
+}
+
+/** A letter the active reader is sure belongs to another label than its group's. */
+export interface CheckItem {
+  sample_id: number;
+  group_id: number;
+  group_code: string;
+  label: string;
+  read: string;
+  label_guj: string;
+  read_guj: string;
+  prob: number;
+  reviewed: boolean;
+  locked: boolean; // its group is locked: unlock it to move the letter
+  sample: Sample;
+}
 
 /** Another book whose labelled groups can suggest labels here (C13). */
 export interface ReferenceBook {
@@ -383,6 +430,13 @@ export const api = {
   readFolder: (id: number, path: string, force = false) => post<Book>(`/api/books/${id}/read/folder`, { path, force }),
   readPdf: (id: number, path: string, force = false) => post<Job>(`/api/books/${id}/read/pdf`, { path, force }),
   readCapture: (id: number) => post<Job>(`/api/books/${id}/read/capture`),
+  train: (id: number, opts: { books?: number[]; min_samples: number; include_unreviewed: boolean; include_words: boolean; name?: string }) =>
+    post<Job>(`/api/books/${id}/train`, opts),
+  readers: () => get<ReaderInfo[]>("/api/readers"),
+  reader: (readerId: number) => get<ReaderInfo>(`/api/readers/${readerId}`),
+  deleteReader: (readerId: number) => del<void>(`/api/readers/${readerId}`),
+  useReader: (id: number, readerId: number | null) => post<Job>(`/api/books/${id}/reader`, { reader_id: readerId }),
+  checkThese: (id: number) => get<CheckItem[]>(`/api/books/${id}/check`),
   convert: (id: number, pageIds?: number[]) => post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read" }),
   pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
   bookTexts: (id: number) => get<{ page_id: number; uncertain: number; converted_at: string | null }[]>(`/api/books/${id}/texts`),

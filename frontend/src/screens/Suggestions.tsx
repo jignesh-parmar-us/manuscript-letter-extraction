@@ -156,10 +156,17 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
 
   const running = job?.status === "running";
   const anyRun = !!(run || booksRun);
+  const readerRun = book.ocr_runs?.find((r) => r.engine === "reader");
+  // runs made at capture (books cut by Tesseract's reading) or by the letter reader store fewer counts
   const lastRun = (r: typeof run, who: string) =>
     r &&
-    `${who} read ${localTime(r.finished_at)}: ${String(r.result.samples_matched)} of ${String(r.result.samples)} letters, ` +
-      `${String(r.result.groups_with_suggestion)} groups with a suggestion` +
+    `${who} read ${localTime(r.finished_at)}` +
+      (r.result.samples_matched !== undefined
+        ? `: ${String(r.result.samples_matched)} of ${String(r.result.samples)} letters`
+        : r.result.samples !== undefined
+          ? `: ${String(r.result.samples)} letters`
+          : "") +
+      (r.result.groups_with_suggestion !== undefined ? `, ${String(r.result.groups_with_suggestion)} groups with a suggestion` : "") +
       (Number(r.result.groups_split) > 0 ? `, ${String(r.result.groups_split)} mixed groups split` : "");
   const tesseractButton = (
     <button
@@ -276,7 +283,9 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         {splitNote && <span>{splitNote}</span>}
         {!running && (
           <span className="muted">
-            {[lastRun(run, "Tesseract"), lastRun(booksRun, "Labelled books")].filter(Boolean).join(" · ") ||
+            {[lastRun(readerRun, "Your letter reader"), lastRun(run, "Tesseract"), lastRun(booksRun, "Labelled books")]
+              .filter(Boolean)
+              .join(" · ") ||
               (printed
                 ? "Not read yet: Tesseract reads the lines and suggests a label for each group."
                 : usable.length

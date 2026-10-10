@@ -199,7 +199,7 @@ class Library:
                     return s.scalar(q) or 0
                 out.append({
                     "id": b.id, "name": b.name, "input_dir": b.input_dir, "writing": b.writing,
-                    "read_dir": b.read_dir, "read_pdf": b.read_pdf,
+                    "read_dir": b.read_dir, "read_pdf": b.read_pdf, "reader_id": b.reader_id,
                     "pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "training")),
                     "read_pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "read")),
                     "reviewed": count(select(func.count(Sample.id)).join(LetterGroup, Sample.group_id == LetterGroup.id)
