@@ -123,6 +123,7 @@ class ConvertRequest(BaseModel):
     """Convert pages into text (C16b): the given pages, or every page of a part."""
     page_ids: Optional[List[int]] = None
     part: Literal["training", "read"] = "read"
+    mode: Literal["letters", "lines"] = "letters"     # "lines": Tesseract reads whole lines, no letter cutting
 
 
 class TrainRequest(BaseModel):

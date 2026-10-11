@@ -47,6 +47,14 @@
     </div>
   </div>
 
+  <h2>Whole lines (no letter cutting)</h2>
+  <p><em>Text → Whole lines (Tesseract)</em> skips steps 3 to 5: each line image is binarised as below and read by Tesseract
+    as one line; its text, aksharas and confidences are kept per line (<code>whole_line</code>). With the language model
+    on, every akshara's candidates are the akshara as read plus versions with one character replaced by one of Tesseract's
+    own alternatives for it (hOCR lstm choices), weighted by their confidences; the same beam search and minimum gain (3)
+    choose. On the 73 checked lines: 5.06% of the characters wrong, 4.45% with the language model, against 6.1% for the
+    cut-letter text (Tesseract only) and 7.5% with the reader and language model.</p>
+
   <h2>3a. Tesseract on each line</h2>
   <ol>
     <li>The line image (page colours, other lines inpainted away) is binarised by <strong>Otsu's threshold</strong> on grey

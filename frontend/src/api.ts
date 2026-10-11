@@ -172,6 +172,8 @@ export interface TextLetter {
 
 /** Which readers the Text view shows: Tesseract's reading alone, or with the labelled groups' opinion. */
 export type Readers = "tesseract" | "both";
+/** What the downloads write: the cut-letter text (Readers) or lines read whole, with or without the language model. */
+export type TextSource = Readers | "lines" | "lines_lm";
 
 export interface PageText {
   page_id: number;
@@ -195,6 +197,33 @@ export interface TextSummary {
   proofread?: number;
   lines?: number;
   converted_at: string | null;
+}
+
+/** A line read whole by Tesseract (no letter cutting), with the language model's corrections. */
+export interface WholeAkshara {
+  text_dev: string;
+  text_guj: string;
+  conf: number; // 0 to 100
+  space: boolean; // a word gap before it
+  uncertain: boolean;
+  lm_dev?: string; // the language model's reading, where it differs
+  lm_guj?: string;
+}
+
+export interface WholeLine {
+  line_id: number;
+  number: number;
+  box: [number, number, number, number];
+  text_dev: string;
+  text_guj: string;
+  aksharas: WholeAkshara[];
+}
+
+export interface WholeLines {
+  page_id: number;
+  lines: WholeLine[];
+  uncertain: number;
+  read_at: string | null;
 }
 
 /** The line truth screen: checked text of whole lines. */
@@ -498,7 +527,10 @@ export const api = {
   deleteReader: (readerId: number) => del<void>(`/api/readers/${readerId}`),
   useReader: (id: number, readerId: number | null) => post<Job>(`/api/books/${id}/reader`, { reader_id: readerId }),
   checkThese: (id: number) => get<CheckItem[]>(`/api/books/${id}/check`),
-  convert: (id: number, pageIds?: number[]) => post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read" }),
+  convert: (id: number, pageIds?: number[], mode: "letters" | "lines" = "letters") =>
+    post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read", mode }),
+  wholeLines: (pageId: number) => get<WholeLines>(`/api/pages/${pageId}/whole-lines`),
+  bookWholeLines: (id: number) => get<{ page_id: number; lines: number }[]>(`/api/books/${id}/whole-lines`),
   pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
   bookTexts: (id: number) => get<TextSummary[]>(`/api/books/${id}/texts`),
   proofread: (pageId: number, line: number, proofread = true) =>
@@ -522,7 +554,7 @@ export const api = {
   useWordList: (id: number, bookId: number, use: boolean) =>
     patch<WordListInfo>(`/api/wordlists/${id}`, { book_id: bookId, use }),
   deleteWordList: (id: number) => del<void>(`/api/wordlists/${id}`),
-  textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: Readers,
+  textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: TextSource,
     pageId?: number) =>
     `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
   pagePart: (pageId: number, part: Part, force = false) =>

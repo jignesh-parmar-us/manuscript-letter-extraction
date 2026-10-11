@@ -168,8 +168,10 @@ class Jobs:
         return self.start(book_id, "import_pdf",
                           lambda progress, cancel: self.lib.import_pdf(book_id, path, progress, cancel, force=force))
 
-    def convert(self, book_id: int, page_ids=None, part: str = "read", tesseract_path: str = "") -> Job:
-        """Convert pages into text (C16b); each page is stored when done, so a cancel keeps them."""
+    def convert(self, book_id: int, page_ids=None, part: str = "read", tesseract_path: str = "",
+                mode: str = "letters") -> Job:
+        """Convert pages into text (C16b), or with `mode` "lines" read their lines whole with Tesseract;
+        each page is stored when done, so a cancel keeps them."""
         from sqlalchemy import func, select
         from .db import Page
         from .texts import convert_book
@@ -180,6 +182,10 @@ class Jobs:
             total = s.scalar(q) or 0
         if not total:
             raise LibraryError("No pages to convert: cut the Read Book pages first.")
+        if mode == "lines":
+            from .wholelines import read_book_lines
+            return self.start(book_id, "convert", lambda progress, cancel: read_book_lines(
+                self.lib, book_id, page_ids, part, progress, cancel, tesseract_path=tesseract_path), total=total)
         return self.start(book_id, "convert", lambda progress, cancel: convert_book(
             self.lib, book_id, page_ids, part, progress, cancel, tesseract_path=tesseract_path), total=total)
 

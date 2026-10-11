@@ -10,6 +10,9 @@
 // Proofreading (C17): the selected letter can be corrected (it labels its sample: one undoable action,
 // and the letter joins the book's Training Data), split in two, joined with the next letter or deleted.
 // A line is marked proofread with its ✓ button; converting again keeps proofread lines as they are.
+//
+// The section opens with a choice of how the text is read: "Whole lines" (WholeLinesView: Tesseract reads
+// each line image as it is, no letters cut; measured best) or "Cut letters" (this view).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ActionResult, Book, Marker, PageInfo, PageText, ProofreadStats, Readers, TextLetter, TextSummary } from "../api";
 import ErrorBox from "../components/ErrorBox";
@@ -18,6 +21,7 @@ import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
 import PagePicker from "./PagePicker";
+import WholeLinesView from "./WholeLinesView";
 
 type Layout = "side" | "stacked";
 type Script = "gujarati" | "devanagari";
@@ -67,7 +71,50 @@ function storedReaders(): Readers {
   }
 }
 
-export default function TextView({ book, pageId, onChanged }: Props) {
+type Mode = "lines" | "letters";
+
+function storedMode(): Mode {
+  try {
+    return localStorage.getItem("text-mode") === "letters" ? "letters" : "lines";
+  } catch {
+    return "lines";
+  }
+}
+
+/** Read Book → Text: whole lines (Tesseract alone) or cut letters (with your groups, reader, language model). */
+export default function TextView(props: Props) {
+  const [mode, setMode] = useState<Mode>(storedMode);
+  function choose(m: Mode) {
+    setMode(m);
+    try {
+      localStorage.setItem("text-mode", m);
+    } catch {
+      // a private window: the choice lasts until the page is closed
+    }
+  }
+  return (
+    <>
+      <div className="row text-mode" role="group" aria-label="How the text is read">
+        <button className={mode === "lines" ? "tab active" : "tab"} onClick={() => choose("lines")}
+          title="Tesseract reads each line image whole; no letters are cut">
+          Whole lines (Tesseract)
+        </button>
+        <button className={mode === "letters" ? "tab active" : "tab"} onClick={() => choose("letters")}
+          title="The page is cut into letters, read by Tesseract and checked with your groups, reader and language model; letters can be corrected">
+          Cut letters
+        </button>
+        <span className="small muted">
+          {mode === "lines"
+            ? "Each line image goes to Tesseract as it is: no letters are cut."
+            : "Each cut letter is read and checked with your groups, letter reader and language model; proofread here."}
+        </span>
+      </div>
+      {mode === "lines" ? <WholeLinesView {...props} /> : <LettersView {...props} />}
+    </>
+  );
+}
+
+function LettersView({ book, pageId, onChanged }: Props) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [converted, setConverted] = useState<Map<number, TextSummary>>(new Map()); // converted pages
   const [stats, setStats] = useState<ProofreadStats | null>(null);

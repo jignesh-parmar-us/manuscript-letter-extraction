@@ -216,6 +216,18 @@ class PageText(Base):
     edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class WholeLine(Base):
+    """A line read whole by Tesseract (Read Book → Text, "Whole lines"): no letter cutting; the line image
+    goes to Tesseract as it is. `aksharas` is JSON [[text_dev, confidence 0-100, space before], ...]."""
+    __tablename__ = "whole_line"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    line_id: Mapped[int] = mapped_column(ForeignKey("line.id", ondelete="CASCADE"), unique=True, index=True)
+    engine: Mapped[str] = mapped_column(String(20), default="tesseract")
+    text_dev: Mapped[str] = mapped_column(Text, default="")
+    aksharas: Mapped[str] = mapped_column(Text, default="[]")
+    read_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+
+
 class LineTruth(Base):
     """The checked text of a line (the line truth screen): what the line really says, typed or corrected
     by the user from Tesseract's whole-line reading, without any letter cut. The test set every way of

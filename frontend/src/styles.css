@@ -1251,6 +1251,18 @@ a.button.disabled {
   flex-wrap: wrap;
   gap: 4px;
 }
+.text-mode {
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.text-line.whole {
+  cursor: pointer;
+  border-radius: 4px;
+}
+.text-line.whole.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .text-letter.lm {
   text-decoration: underline dotted var(--accent);
   text-underline-offset: 4px;

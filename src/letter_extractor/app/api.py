@@ -211,7 +211,23 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     # ---- converted text (C16b) ---------------------------------------------------------------------
     @app.post("/api/books/{book_id}/convert", dependencies=auth, status_code=202)
     def convert(book_id: int, body: ConvertRequest = ConvertRequest()) -> Dict:
-        return jobs.convert(book_id, body.page_ids, body.part, tesseract_path=tesseract_setting()).as_dict()
+        return jobs.convert(book_id, body.page_ids, body.part, tesseract_path=tesseract_setting(),
+                            mode=body.mode).as_dict()
+
+    @app.get("/api/pages/{page_id}/whole-lines", dependencies=auth)
+    def whole_lines_of_page(page_id: int) -> Dict:
+        """A page's lines read whole by Tesseract (no letter cutting)."""
+        from .wholelines import page_whole_lines
+        got = page_whole_lines(library, page_id)
+        if got is None:
+            raise HTTPException(404, "This page's lines are not read yet.")
+        return got
+
+    @app.get("/api/books/{book_id}/whole-lines", dependencies=auth)
+    def whole_lines_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> List[Dict]:
+        from .wholelines import book_whole_lines
+        library.get_book(book_id)
+        return book_whole_lines(library, book_id, part)
 
     @app.get("/api/pages/{page_id}/text", dependencies=auth)
     def text_of_page(page_id: int) -> Dict:
@@ -256,7 +272,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                       page_id: Optional[int] = None, script: str = Query("gujarati", pattern="^(gujarati|devanagari)$"),
                       part: str = Query("read", pattern="^(training|read)$"),
                       marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$"),
-                      readers: str = Query("both", pattern="^(both|tesseract)$")):
+                      readers: str = Query("both", pattern="^(both|tesseract|lines|lines_lm)$")):
         """The text of one page or of every converted page of a part, as .txt (UTF-8) or Word."""
         from urllib.parse import quote
         from ..mapping import mapping_for
@@ -264,12 +280,31 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         from .texts import book_page_texts, marked_lines
         book = library.get_book(book_id)
         cfg = library.book_config(book)
-        rows = book_page_texts(library, book_id, part, page_id)
-        if not rows:
-            raise HTTPException(404, "Nothing converted yet.")
         mapping = mapping_for(cfg)
-        pages = [(f"{p.number or i} · {p.file}" if not page_id else "",
-                  marked_lines(t["lines"], marker or cfg.uncertain_marker, script, mapping, readers)) for i, (p, t) in enumerate(rows, 1)]
+        if readers in ("lines", "lines_lm"):        # lines read whole by Tesseract (+ the language model)
+            from .wholelines import whole_line_texts
+            rows = whole_line_texts(library, book_id, part, page_id)
+            if not rows:
+                raise HTTPException(404, "No lines read yet.")
+            mark = marker or cfg.uncertain_marker
+
+            def line_of(ln):
+                out = ""
+                for x in ln["aksharas"]:
+                    t = x.get("lm_dev", x["text_dev"]) if readers == "lines_lm" else x["text_dev"]
+                    if x["uncertain"] and mark != "none":
+                        t = f"[?{t}]" if mark == "guess" else "[?]"
+                    out += (" " if x["space"] else "") + t
+                return mapping.gujarati(out) if script == "gujarati" else out
+            pages = [(f"{p.number or i} · {p.file}" if not page_id else "", [line_of(ln) for ln in lines])
+                     for i, (p, lines) in enumerate(rows, 1)]
+        else:
+            rows = book_page_texts(library, book_id, part, page_id)
+            if not rows:
+                raise HTTPException(404, "Nothing converted yet.")
+            pages = [(f"{p.number or i} · {p.file}" if not page_id else "",
+                      marked_lines(t["lines"], marker or cfg.uncertain_marker, script, mapping, readers))
+                     for i, (p, t) in enumerate(rows, 1)]
         name = Path(rows[0][0].file).stem if page_id else book.name
         if format == "docx":
             data = write_docx(pages)

@@ -3,7 +3,7 @@
 // cutting); correct it to what the line says, in Gujarati or Devanagari, and press Enter to save and go
 // to the next line. The text is kept per line, independent of the letter cuts. The on-screen letters
 // insert at the cursor: click where a letter is wrong, remove it (⌫) and click the right one.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, Book, TruthLine, TruthProgress } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import LetterPalette, { toGujarati } from "../components/LetterPalette";
@@ -68,17 +68,21 @@ export default function TruthView({ book, pageId }: Props) {
     };
   }, [line?.line_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // where the cursor goes after the palette changed the text: set right after the new text is drawn
+  const caret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (caret.current === null) return;
+    input.current?.focus();
+    input.current?.setSelectionRange(caret.current, caret.current);
+    caret.current = null;
+  }, [text]);
   /** Put `s` in place of the selection (or at the cursor) and keep the cursor after it. */
   function insert(s: string) {
     const el = input.current;
     const a = el?.selectionStart ?? text.length;
     const b = el?.selectionEnd ?? text.length;
-    const next = text.slice(0, a) + s + text.slice(b);
-    setText(next);
-    window.requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(a + s.length, a + s.length);
-    });
+    caret.current = a + s.length;
+    setText(text.slice(0, a) + s + text.slice(b));
   }
   /** Remove the selection, or the character before the cursor. */
   function backspace() {
@@ -86,11 +90,8 @@ export default function TruthView({ book, pageId }: Props) {
     const a = el?.selectionStart ?? text.length;
     const b = el?.selectionEnd ?? text.length;
     const from = a < b ? a : a - (Array.from(text.slice(0, a)).pop()?.length ?? 0);
+    caret.current = from;
     setText(text.slice(0, from) + text.slice(b));
-    window.requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(from, from);
-    });
   }
 
   const pages = progress?.pages ?? [];

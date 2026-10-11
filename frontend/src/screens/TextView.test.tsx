@@ -39,6 +39,7 @@ describe("TextView", () => {
     vi.mocked(api.bookTexts).mockResolvedValue([{ page_id: 9, uncertain: 1, converted_at: null }]);
     vi.mocked(api.pageText).mockResolvedValue(text);
     vi.mocked(api.proofreadStats).mockResolvedValue({ lines: 0, chars: 0, cer: null, cer_tesseract: null });
+    localStorage.setItem("text-mode", "letters");                                 // these tests: the cut-letter view
     vi.mocked(api.checkLabel).mockImplementation(async (t: string) => ({ ok: true, devanagari: t === "ળ" ? "ळ" : t, gujarati: t,
       codepoints: "", used_by: [] }) as never);
     window.location.hash = "";

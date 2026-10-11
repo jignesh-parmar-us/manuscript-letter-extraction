@@ -167,3 +167,22 @@ def candidates(current: str, uncertain: bool, tesseract: Optional[Tuple[str, flo
     out = [(current, max(score.get(current, 0.0), 1e-3) / total)]
     out += [(c, v / total) for c, v in score.most_common() if c and c != current][:most - 1]
     return out
+
+
+def tesseract_options(akshara) -> List[Tuple[str, float]]:
+    """Candidates for one akshara Tesseract read (`ocr.aksharas.Akshara`): as read first, then versions
+    with one character replaced by one of Tesseract's own alternatives for it (hOCR lstm choices),
+    weighted by their confidences and normalised. Used on whole lines read without letter cutting
+    (measured on 73 checked lines: 5.06% -> 4.45% of the characters wrong)."""
+    import unicodedata
+    base = akshara.text
+    cands = {base: max(akshara.conf, 1.0)}
+    for ci, ch in enumerate(akshara.chars):
+        for alt, conf in ch.alternatives:
+            if not alt or alt == ch.text or conf < 1.0:
+                continue
+            text = unicodedata.normalize("NFC", "".join(alt if k == ci else c.text for k, c in enumerate(akshara.chars)))
+            cands[text] = max(cands.get(text, 0.0), conf)
+    total = sum(cands.values())
+    return [(base, cands[base] / total)] + [(t, w / total) for t, w in sorted(cands.items(), key=lambda kv: -kv[1])
+                                            if t != base]

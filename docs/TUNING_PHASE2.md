@@ -152,6 +152,26 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
+## Checked lines: every way of reading (2026-10-11)
+
+**Truth:** 73 lines checked by hand in Line truth (8 Read Book pages of the printed 1933 book; 6,677 characters). The pages are also Training Data pages, so for the letter route the groups, the reader and the language model were rebuilt without the tested pages (4 folds of 2 pages) and the user's corrections were not used. CER = edit distance in code points, spaces and the border "|" left out. The truth was typed from Tesseract's whole-line reading, which slightly favours it.
+
+| Way of reading | All 73 lines | 62 lines not in the word list |
+|---|---|---|
+| Tesseract, whole line (Otsu, unscaled, `script/Devanagari`, psm 7) | 5.06% | 4.92% |
+| ... + language model (word list + labels of the other pages), weight 1, gain 3 | **4.45%** | **4.41%** |
+| ... letters scaled to 36 px / grey, paper flattened / grey 36 px / psm 13 | 5.1 / 5.3 / 5.2 / 5.6% | |
+| ... models mar / hin / san | 6.8 / 7.3 / 12.3% | |
+| Letter route: Tesseract only | 6.14% | 6.02% |
+| ... + groups | 6.07% | 5.89% |
+| ... + groups + language model with word list | 5.39% | 5.31% |
+| ... + reader + language model with word list | 7.47% | 7.51% |
+| ... + reader | 8.94% | 8.66% |
+| No Tesseract: groups + reader + language model with word list | 27.72% | 27.73% |
+| No Tesseract: groups only | 36.86% | 36.46% |
+
+Tesseract's commonest mistakes (whole lines): ल read as ळ (ळा->ला 9, ळे->छे, ळ->ल, ळि->लि), र्य read as रय (10), vowel signs (सा->स, ता->तो, पा->पो, न->ने, र->रे), म->भ, त्र->ब्र. The word list (a modern edition of the Vachanamrut, 5,546 lines, 113,527 aksharas) holds 14% of the checked text word for word.
+
 ## C15. The language model (2026-10-10)
 
 **Measured** as the reader in conversion (book 6, 4 folds by page): each fold's model learned only from the label sequences of the other pages' lines (about 7,000 aksharas; stretches end at unlabelled letters), the readers too; after the production vote, each uncertain letter got candidates (Tesseract with its confidence, the reader's best three, the two nearest groups; weights 1, 1, 0.5) and `correct_line` chose.

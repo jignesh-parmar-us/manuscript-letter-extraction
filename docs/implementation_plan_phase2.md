@@ -682,6 +682,14 @@ Rules that carry over from Phase 1:
 
 **Next (to be decided with the user):** compare every way of reading on these lines, shown line by line so each difference can be checked by eye: Tesseract's settings and models (`script/Devanagari`, `hin`, `mar`, `san`, page modes, image preparation), the current letter route, and, if the user agrees, other engines (Surya, EasyOCR, PaddleOCR or Kraken in a separate Python environment; Google Cloud Vision as an opt-in). Then probably make the text line-first (whole-line recognition, cuts only for highlighting and Training Data) and fine-tune Tesseract on the book's lines (C18).
 
+### Comparison on the checked lines, and whole-line reading (2026-10-11)
+
+**Measured** on the user's 73 checked lines (8 pages; `TUNING_PHASE2.md`), with the groups, the reader and the language model rebuilt without the tested pages (they are also Training Data pages): Tesseract on the whole line image 5.1% of the characters wrong; the letter route 6.1% (Tesseract only), 6.0% (+ groups), 5.4% (+ groups + language model with the user's word list), 7.5% (+ reader + language model: the reader hurts on real Read Book letters); without Tesseract (groups, reader, language model) 27.7% at best. Other Tesseract settings (letters scaled to 36 px, grey images with flattened paper, page mode 13, the hin / mar / san models) were not better. **The language model on Tesseract's whole-line reading**, choosing among Tesseract's own alternatives per akshara, gave 4.45% (4.41% on the 62 lines not in the word list).
+
+**Built:** Read Book → Text opens with **Whole lines (Tesseract)** / **Cut letters**. Whole lines: each line image goes to Tesseract as it is (no letters cut), kept per line with its aksharas and confidences (`WholeLine`, migration 0011, `app/wholelines.py`), with the language model's corrections beside it (`ocr.language.tesseract_options`); *With the language model* switches the view and the downloads (`readers=lines|lines_lm`). Cut letters is the earlier view, with proofreading.
+
+**Next:** decide whether the letter route keeps the reader in conversion (it hurts on the checked lines); fine-tune Tesseract on the book (needs Tesseract's training tools and more checked lines); other engines if the user agrees.
+
 ### Part E: line recognizer (optional, later)
 
 ### C18. Line recognizer (Section 8.3 of the requirements)
