@@ -4,7 +4,7 @@ How to turn a folder of page images into clean letters with clean labels, with a
 
 The same guide is in the app: the **Help** link at the top right opens [docs/help/new-book.html](help/new-book.html). Change both together.
 
-**New here, or lost?** [The steps in order](help/workflow.html) shows the whole route as a flowchart, from creating a book to downloading its text (also linked at the top of the guide in the app). [How it works](help/tech.html) explains each step technically: cutting, grouping and labels, training and the reader, reading a book (algorithms, scores, image processing).
+**New here, or lost?** [The steps in order](help/workflow.html) shows the whole route as a flowchart, from creating a book to downloading its text (also linked at the top of the guide in the app). [The parts explained](help/parts.html) says what Training Data, groups, the letter reader, the language model and the Dictionary each are. [How it works](help/tech.html) explains each step technically: cutting, grouping and labels, training and the reader, reading a book (algorithms, scores, image processing).
 
 ## 1. Before you start
 
@@ -81,7 +81,7 @@ Every book has two parts in the section menu: **Training Data** (everything abov
 3. **Book pages** shows each page with its letters, to fix cuts (draw a box, join, split, delete). Read Book letters are never grouped automatically; only the letters you correct in the Text view (step 6) go into groups.
 4. **A page that reads badly:** **Use for training** moves it to Training Data, where its letters go to Unsure to be labelled.
 
-5. **Text:** **Convert all pages** (or one page). Each page is shown beside its text: **Tesseract only** shows what Tesseract read, **Tesseract + your groups** adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader read. **Download** the page or the whole book as .txt, Word, PDF or a picture, with uncertain letters as `[?]`, `[?ક]` or the best guess.
+5. **Text:** choose **Whole lines (Tesseract)** or **Cut letters** at the top. **Whole lines** (the best on the checked lines): **Read all pages**; Tesseract reads each line image as it is, no letters are cut; *With the language model* applies the corrections of Read Book → Dictionary (underlined). **Cut letters**: **Convert all pages** (or one page). Each page is shown beside its text: **Tesseract only** shows what Tesseract read, **Tesseract + your groups** adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader read. **Download** the page or the whole book as .txt, Word, PDF or a picture, with uncertain letters as `[?]`, `[?ક]` or the best guess.
 
 6. **Proofread** in the Text view: click a wrong letter (or **Next uncertain ▶**) and type the right one, then **Correct**. The correction labels that letter, so it shows in Review groups and the next reader training learns from it; **Undo** takes it back. **Two letters…** splits a box (click where the letters meet), **Join with the next** joins two boxes, **Not a letter** deletes a speck. Click **✓** at the end of a line once its text is right: converting again keeps proofread lines, and the proofread lines measure how many characters the conversion gets wrong.
 

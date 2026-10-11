@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The parts explained</title>
+<!--
+  Help page, served at /help/parts.html (linked from new-book.html and tech.html): what Training Data,
+  groups, labels, the letter reader, the language model, the Dictionary, Tesseract, whole lines and line
+  truth are, and how they relate. Numbers are from TUNING_PHASE2.md (checked lines, 2026-10-11).
+-->
+<link rel="stylesheet" href="tech.css">
+<style>
+  .who { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+  .who .node { border-left-width: 5px; }
+  .who h3 { margin: 0 0 4px; font-size: 16px; }
+  .who p { margin: 0; font-size: 14.5px; }
+  .k-shape { --c: var(--read); }
+  .k-text { --c: var(--data); }
+  .k-data { --c: var(--train); }
+  dl { margin: 0; }
+  dt { font-weight: 700; margin-top: 10px; }
+  dd { margin: 2px 0 0 0; }
+  @media (max-width: 640px) { .who { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Help pages">
+    <a href="new-book.html">Guide</a>
+    <a href="workflow.html">The steps in order</a>
+    <a class="here" href="parts.html">The parts explained</a>
+    <a href="tech.html">How it works (technical)</a>
+  </nav>
+  <h1>The parts explained</h1>
+  <p class="lead">Training Data, groups, labels, the letter reader, the language model, the Dictionary, Tesseract,
+    whole lines and line truth: what each one is, what it learns from, where you find it, and whether it helps.</p>
+
+  <h2>Two kinds of knowledge</h2>
+  <p>Everything that reads your book uses one of two kinds of knowledge:</p>
+  <div class="who">
+    <div class="node k-shape"><h3>What letters look like</h3>
+      <p><strong>Tesseract</strong>, your <strong>groups</strong> and your <strong>letter reader</strong> look at the
+        image and say which letter it is.</p></div>
+    <div class="node k-text"><h3>Which letters go together</h3>
+      <p>The <strong>language model</strong> never looks at the image. It knows which letter sequences are common in your
+        texts, and picks between readings that the others gave.</p></div>
+    <div class="node k-data"><h3>Where they learn from</h3>
+      <p><strong>Training Data</strong> (your labelled letters), your <strong>proofread lines</strong> and your
+        <strong>word lists</strong> (Dictionary).</p></div>
+  </div>
+  <p>So "the reader" and "the language model" are different things: the reader reads <em>shapes</em>, the language model
+    knows <em>words</em>. Some screens use one, some the other, some both.</p>
+
+  <h2>Each part</h2>
+  <table>
+    <tr><th>Part</th><th>What it is</th><th>Learns from</th><th>Where in the app</th></tr>
+    <tr>
+      <td><strong>Training Data</strong></td>
+      <td>The few sample pages of a book that are cut into letters and labelled by you. Not a reader itself: the material
+        the others learn from.</td>
+      <td>—</td>
+      <td>Training Data part of the book (Pages &amp; capture, Review groups, Readers, Export)</td>
+    </tr>
+    <tr>
+      <td><strong>Groups</strong></td>
+      <td>Letters that look alike, put together automatically, so one label names many letters at once. A group can also
+        "read" a new letter: the letter belongs to the group it looks most like.</td>
+      <td>The shapes of the Training Data letters (fingerprints)</td>
+      <td>Review groups</td>
+    </tr>
+    <tr>
+      <td><strong>Labels</strong></td>
+      <td>The letter a group is, given by you (or suggested by Tesseract, other books or the reader, and accepted by
+        you).</td>
+      <td>—</td>
+      <td>Review groups</td>
+    </tr>
+    <tr>
+      <td><strong>Letter reader</strong> ("reader")</td>
+      <td>A small neural network trained on your labelled letters: shown one cut letter, it says which letter it is, with
+        a probability.</td>
+      <td>Reviewed letters of Training Data</td>
+      <td>Training Data → Readers (train it); Review groups → Check these (uses it)</td>
+    </tr>
+    <tr>
+      <td><strong>Language model</strong></td>
+      <td>Counts of which letters follow which (sequences of three aksharas). When a reading is doubtful, it prefers the
+        alternative that makes a more likely word. It does not see the image.</td>
+      <td>Your labels in reading order, your proofread lines, and your word lists</td>
+      <td>Read Book → Dictionary (what it learns from, on or off)</td>
+    </tr>
+    <tr>
+      <td><strong>Dictionary</strong></td>
+      <td>The <em>screen</em> for the language model: it shows what the model learns from, imports text files (word
+        lists) and turns the model on or off. "Dictionary" is the screen, "language model" is what it manages.</td>
+      <td>—</td>
+      <td>Read Book → Dictionary</td>
+    </tr>
+    <tr>
+      <td><strong>Word list</strong></td>
+      <td>A text file you import (for example the Vachanamrut's text), so the language model knows real words, not only
+        the few lines you labelled.</td>
+      <td>—</td>
+      <td>Read Book → Dictionary → Import</td>
+    </tr>
+    <tr>
+      <td><strong>Tesseract</strong></td>
+      <td>A separate, well-known OCR program. It reads a whole line image and gives the text, with a confidence and a few
+        alternatives for every character. It does not learn from your book (yet).</td>
+      <td>Its own training by its makers (the Devanagari model)</td>
+      <td>Used behind the scenes: Text, Line truth, suggestions</td>
+    </tr>
+    <tr>
+      <td><strong>Line truth</strong></td>
+      <td>Lines you checked by hand: what the line really says. Not a reader: the test that every way of reading is scored
+        on.</td>
+      <td>—</td>
+      <td>Read Book → Line truth</td>
+    </tr>
+  </table>
+
+  <h2>Which parts each screen uses</h2>
+  <table>
+    <tr><th>Screen</th><th>Tesseract</th><th>Groups</th><th>Letter reader</th><th>Language model</th></tr>
+    <tr><td>Review groups: suggestions</td><td>yes</td><td>—</td><td>yes (once trained)</td><td>—</td></tr>
+    <tr><td>Review groups: Check these</td><td>—</td><td>—</td><td>yes</td><td>—</td></tr>
+    <tr><td>Text → <strong>Whole lines</strong></td><td>yes, on the whole line</td><td>—</td><td>—</td><td>yes, if "With the language model" is ticked</td></tr>
+    <tr><td>Text → Cut letters, "Tesseract only"</td><td>yes, per letter</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>Text → Cut letters, "Tesseract + your groups (and reader)"</td><td>yes, per letter</td><td>yes</td><td>yes, if trained</td><td>yes, if on in Dictionary</td></tr>
+    <tr><td>Line truth</td><td>yes (to fill in the line for you to correct)</td><td>—</td><td>—</td><td>—</td></tr>
+  </table>
+
+  <h2>Do they help? (measured on your 73 checked lines)</h2>
+  <table>
+    <tr><th>Way of reading</th><th>Characters wrong</th><th>What it says</th></tr>
+    <tr><td>Whole lines: Tesseract + language model</td><td class="num"><strong>4.5%</strong></td><td>the best: the language model helps Tesseract</td></tr>
+    <tr><td>Whole lines: Tesseract alone</td><td class="num">5.1%</td><td></td></tr>
+    <tr><td>Cut letters: Tesseract + groups + language model</td><td class="num">5.4%</td><td>cutting letters costs accuracy</td></tr>
+    <tr><td>Cut letters: Tesseract only</td><td class="num">6.1%</td><td></td></tr>
+    <tr><td>Cut letters: + letter reader + language model</td><td class="num">7.5%</td><td>the letter reader makes the text worse on badly cut letters</td></tr>
+    <tr><td>No Tesseract: groups + reader + language model</td><td class="num">27.7%</td><td>for printed books Tesseract is needed</td></tr>
+  </table>
+  <p>In short: <strong>Tesseract reads, the language model corrects</strong>. Groups and labels are how you teach the app
+    your book; the letter reader is useful for finding wrongly grouped letters (Check these), but not for reading the
+    text.</p>
+
+  <h2>Short definitions</h2>
+  <dl>
+    <dt>Akshara</dt><dd>One written unit: a consonant or conjunct with its vowel signs and marks (ક્યા, ર્ત્તા, નં).</dd>
+    <dt>Cut letters</dt><dd>The page cut into one image per akshara, so each can be grouped, labelled and read alone.</dd>
+    <dt>Whole lines</dt><dd>The page cut only into lines; each line image goes to Tesseract as it is.</dd>
+    <dt>Uncertain</dt><dd>A letter a reader is not sure about, highlighted in the text and written as [?] in downloads if you want.</dd>
+    <dt>Proofread line</dt><dd>A line of the Cut letters text you marked ✓ as right; the language model learns from it.</dd>
+  </dl>
+</main>
+</body>
+</html>

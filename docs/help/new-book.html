@@ -73,8 +73,9 @@
   <p class="lead">How to turn a folder of page images into clean letters with clean labels, with as little hand work
     as possible, and get it ready for training the letter reader.</p>
   <div class="box tip"><strong>New here, or lost?</strong> <a href="workflow.html">The steps in order</a> shows the
-    whole route as a flowchart, from creating a book to downloading its text. <a href="tech.html">How it works</a>
-    explains each step technically: the algorithms, scores and image processing.</div>
+    whole route as a flowchart, from creating a book to downloading its text. <a href="parts.html">The parts explained</a>
+    says what Training Data, groups, the letter reader, the language model and the Dictionary each are.
+    <a href="tech.html">How it works</a> explains each step technically: the algorithms, scores and image processing.</div>
 
   <nav class="toc" aria-label="Contents">
     <strong>Contents</strong>
@@ -242,7 +243,10 @@
       Data, where its letters go to Unsure to be labelled.</li>
   </ol>
   <ol class="steps" start="5">
-    <li><strong>Text:</strong> <span class="ui">Convert all pages</span> (or one page). Each page is shown beside its
+    <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span> or <span class="ui">Cut
+      letters</span> at the top. <strong>Whole lines</strong> (the best on the checked lines): <span class="ui">Read all
+      pages</span>; Tesseract reads each line image as it is, no letters are cut; <em>With the language model</em> applies
+      the corrections of Read Book → Dictionary (underlined). <strong>Cut letters</strong>: <span class="ui">Convert all pages</span> (or one page). Each page is shown beside its
       text: <span class="ui">Tesseract only</span> shows what Tesseract read, <span class="ui">Tesseract + your
       groups</span> adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it
       is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader
