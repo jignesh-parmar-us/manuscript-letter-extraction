@@ -2,7 +2,7 @@
 
 Plan for reading printed lines with our own data (the labelled groups, the letter reader and the language model) instead of Tesseract, by **sliding along the line and recognising letters as we go**, rather than cutting letters first. Agreed to plan on 2026-10-11; every stage is measured on the user's checked lines and has a stop point.
 
-Status: **planned**. Nothing is built yet.
+Status: **stage 1 passed** (2026-10-11): the reader names 94.9% of real windows right at exact boundaries (gate: 90%). Stage 2 is next. Nothing is built into the app yet.
 
 ---
 
@@ -129,7 +129,7 @@ Each stage is an experiment on a copy of the library first (scripts in the scrat
 
 | Stage | Date | Result | Decision |
 |---|---|---|---|
-| 1 | | | |
+| 1 | 2026-10-11 | Windows with the neighbours' ink, exact boundaries: 94.6% right (clean masks 95.3%); shifted by up to 10%: 89.7%. Training variants: 50 per label 94.7% (rare 80.7%, but shifted 87.1%); **balanced weights 94.9%** (common 98.4, middle 97.7, rare 79.5, shifted 89.7). 169 of 1,521 rare test letters had labels only on their own page. Mistakes are mostly top marks (ता→तां, मा→मां, ता→तो). | Passed; stage 2 with balanced weights |
 | 2 | | | |
 | 3 | | | |
 | 4 | | | |

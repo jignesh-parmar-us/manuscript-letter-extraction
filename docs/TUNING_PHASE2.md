@@ -152,6 +152,18 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 **Handwriting** (book 5): 22 found, about half wrong (the rule cut the left stroke of प, स and others). Left out: printed books only.
 
+## Segmentation plan, stage 1: the reader on real windows (2026-10-11)
+
+`docs/SEGMENTATION_PLAN.md`. Book 6, the 8,946 reviewed single-akshara letters of the 23 Training Data pages, each read by a reader trained without its page (4 folds by page, labels with 1 or more letters). A window is the letter box's columns of the whole line's ink (every sample of the line pasted together), so neighbours' overhanging marks are included.
+
+| Training | Clean mask | Window, exact | Window shifted ≤ 10% | Window: common / middle / rare |
+|---|---|---|---|---|
+| As today (3–30 varied copies, more for rare labels) | 95.3% | 94.6% | 89.7% | 98.8 / 97.1 / 77.4% |
+| 50 per label (50 spread over pages and lines; small groups filled with varied copies) | 95.3% | 94.7% | 87.1% | 97.5 / 97.5 / 80.7% |
+| **Balanced weights** (all letters and copies, each label's total weight equal) | 95.6% | **94.9%** | 89.7% | 98.4 / 97.7 / 79.5% |
+
+Bands by the label's letters: common 100+ (4,452 letters), middle 20–99 (2,973), rare 1–19 (1,521; 169 of them have a label found only on their own page, so the fold's reader cannot know it). Commonest window mistakes: ता→तां, मा→मां, ता→तो, अ→अं, र→रे (top marks). Gate (≥ 90% at exact boundaries): passed.
+
 ## Checked lines: every way of reading (2026-10-11)
 
 **Truth:** 73 lines checked by hand in Line truth (8 Read Book pages of the printed 1933 book; 6,677 characters). The pages are also Training Data pages, so for the letter route the groups, the reader and the language model were rebuilt without the tested pages (4 folds of 2 pages) and the user's corrections were not used. CER = edit distance in code points, spaces and the border "|" left out. The truth was typed from Tesseract's whole-line reading, which slightly favours it.
