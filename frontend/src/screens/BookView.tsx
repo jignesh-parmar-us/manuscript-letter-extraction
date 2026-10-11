@@ -14,6 +14,7 @@ import PageViewer from "./PageViewer";
 import ReadBook from "./ReadBook";
 import Dictionary from "./Dictionary";
 import Readers from "./Readers";
+import TruthView from "./TruthView";
 import TextView from "./TextView";
 import Review from "./Review";
 
@@ -27,6 +28,7 @@ export const TABS: { id: string; label: string; part: "Training Data" | "Read Bo
   { id: "readpages", label: "Book pages", part: "Read Book" },
   { id: "text", label: "Text", part: "Read Book" },
   { id: "dictionary", label: "Dictionary", part: "Read Book" },
+  { id: "truth", label: "Line truth", part: "Read Book" },
 ];
 const PARTS = ["Training Data", "Read Book"] as const;
 
@@ -114,6 +116,7 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
         {tab === "read" && <ReadBook book={book} info={info} onChanged={reload} />}
         {tab === "readers" && <Readers book={book} onChanged={reload} />}
         {tab === "dictionary" && <Dictionary book={book} onChanged={reload} />}
+        {tab === "truth" && <TruthView book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} />}
         {tab === "text" && (
           <TextView book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} onChanged={reload} />
         )}

@@ -134,6 +134,12 @@ class TrainRequest(BaseModel):
     name: str = ""
 
 
+class LineTruthText(BaseModel):
+    """The checked text of a line (Gujarati or Devanagari; empty: not checked) and what Tesseract read."""
+    text: str = ""
+    tesseract: str = ""
+
+
 class WordListImport(BaseModel):
     """Import a text file as a word list (C15), used by `book_id` if given."""
     path: str

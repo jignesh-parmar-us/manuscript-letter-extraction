@@ -28,7 +28,7 @@ export class ApiError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
@@ -56,6 +56,7 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
 export const get = <T>(path: string) => request<T>("GET", path);
 export const post = <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {});
 export const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
+export const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
 export const del = <T>(path: string) => request<T>("DELETE", path);
 
 // ---- types of the backend's answers ---------------------------------------------------------
@@ -194,6 +195,22 @@ export interface TextSummary {
   proofread?: number;
   lines?: number;
   converted_at: string | null;
+}
+
+/** The line truth screen: checked text of whole lines. */
+export interface TruthProgress {
+  pages: { page_id: number; file: string; lines: number; checked: number }[];
+  lines: number;
+  checked: number;
+}
+
+export interface TruthLine {
+  line_id: number;
+  number: number;
+  box: [number, number, number, number];
+  image: string;
+  truth_dev: string | null; // null: not checked yet
+  truth_guj: string | null;
 }
 
 /** An imported text file the language model learns from (C15). */
@@ -487,6 +504,16 @@ export const api = {
   proofread: (pageId: number, line: number, proofread = true) =>
     post<PageText>(`/api/pages/${pageId}/proofread`, { line, proofread }),
   proofreadStats: (bookId: number) => get<ProofreadStats>(`/api/books/${bookId}/proofread-stats`),
+  // the line truth screen
+  truthProgress: (bookId: number) => get<TruthProgress>(`/api/books/${bookId}/truth`),
+  truthLines: (pageId: number) => get<TruthLine[]>(`/api/pages/${pageId}/truth`),
+  lineTesseract: (lineId: number) =>
+    get<{ line_id: number; text_dev: string; text_guj: string }>(`/api/lines/${lineId}/tesseract`),
+  saveTruth: (lineId: number, text: string, tesseract = "") =>
+    put<{ line_id: number; truth_dev: string | null; truth_guj: string | null }>(`/api/lines/${lineId}/truth`, {
+      text,
+      tesseract,
+    }),
   // the language model (C15)
   bookLanguage: (bookId: number) => get<BookLanguage>(`/api/books/${bookId}/language`),
   wordLists: () => get<WordListInfo[]>("/api/wordlists"),

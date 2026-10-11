@@ -51,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse,
+                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -280,6 +280,42 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             media = "text/plain; charset=utf-8"
         disposition = f"attachment; filename*=UTF-8''{quote(name)}.{format}"
         return Response(data, media_type=media, headers={"Content-Disposition": disposition})
+
+    # ---- the line truth screen: checked text of whole lines ---------------------------------------------
+    @app.get("/api/books/{book_id}/truth", dependencies=auth)
+    def truth_progress(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> Dict:
+        from .truth import book_progress
+        library.get_book(book_id)
+        return book_progress(library, book_id, part)
+
+    @app.get("/api/pages/{page_id}/truth", dependencies=auth)
+    def truth_lines(page_id: int) -> List[Dict]:
+        from .truth import page_lines
+        lines = page_lines(library, page_id)
+        with library.session() as s:
+            book_id = s.get(Page, page_id).book_id
+        for ln in lines:
+            ln["image"] = f"/files/books/{book_id}/{ln['image']}?token={token}"
+        return lines
+
+    @app.get("/api/lines/{line_id}/tesseract", dependencies=auth)
+    def line_tesseract(line_id: int) -> Dict:
+        """Tesseract's reading of the whole line, without letter cutting."""
+        from .suggest import tesseract_reader
+        from .truth import tesseract_text
+        with library.session() as s:
+            line = s.get(Line, line_id)
+            if line is None:
+                raise HTTPException(404, f"No line with id {line_id}.")
+            book = s.get(Book, s.get(Page, line.page_id).book_id)
+            cfg = library.book_config(book)
+        return tesseract_text(library, line_id, tesseract_reader(cfg, tesseract_setting()))
+
+    @app.put("/api/lines/{line_id}/truth", dependencies=auth)
+    def line_truth(line_id: int, body: LineTruthText) -> Dict:
+        from .truth import save_truth
+        return save_truth(library, line_id, body.text, body.tesseract) or {"line_id": line_id, "truth_dev": None,
+                                                                             "truth_guj": None}
 
     # ---- the language model and its word lists (C15) ---------------------------------------------------
     @app.get("/api/wordlists", dependencies=auth)

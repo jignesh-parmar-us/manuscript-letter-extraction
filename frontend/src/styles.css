@@ -1159,6 +1159,22 @@ a.button.disabled {
   gap: 8px;
   margin-top: 6px;
 }
+/* the text pane scrolls and is narrow: the letters open below the label box, inside the pane,
+   instead of above it where the pane cut them off */
+.text-editor .label-picker.compact {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.text-editor .label-picker.compact .palette {
+  position: static;
+  flex: 1 1 100%;
+  width: auto;
+  max-height: 40vh;
+  box-shadow: none;
+}
+.text-view.stacked .text-editor .label-picker.compact .palette {
+  max-height: 20vh; /* the pane is 48vh high there */
+}
 .text-editor-letter {
   height: 72px;
   max-width: 200px;
@@ -1249,4 +1265,31 @@ a.button.disabled {
 .dictionary .wordlist-path {
   flex: 1 1 320px;
   min-width: 0;
+}
+.truth-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.truth-line {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  object-position: left center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.truth-input {
+  width: 100%;
+  font-size: 24px;
+  padding: 8px 10px;
+  font-family: "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif;
+}
+.truth-lines {
+  margin-top: 14px;
+  columns: 2 320px;
+}
+.truth-lines li.current button {
+  font-weight: 700;
 }

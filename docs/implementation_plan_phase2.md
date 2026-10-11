@@ -674,6 +674,14 @@ Rules that carry over from Phase 1:
 - **A page moved from Read Book to Training Data keeps its corrected letters in their groups** (the others become unsure, as before).
 - **Not yet:** proofread lines in the export as line training data for C18 (with C18), and the dictionary's highlights (C15). Proofreading is not in the undo history (the ✓ undoes it).
 
+### Line truth: a hand-checked test set (2026-10-11)
+
+**Why:** on the Read Book pages the user saw Tesseract alone doing better than the letter route, which marks and changes letters wrongly where the letters are badly cut; the measurements so far used only Training Data letters in reviewed groups (cleanly cut), so they do not show this. The user asked to stop trusting numbers no one checked and to revisit the route, starting from a test set they check themselves.
+
+**Built:** Read Book → **Line truth**. A line image with Tesseract's reading of the **whole line** (no letter cutting) filled in; the user corrects it to what the line says (Gujarati or Devanagari; Enter saves and goes to the next line). Kept per line as Devanagari NFC (`LineTruth`, migration 0010, `app/truth.py`), independent of the letter cuts, with what Tesseract read at the time.
+
+**Next (to be decided with the user):** compare every way of reading on these lines, shown line by line so each difference can be checked by eye: Tesseract's settings and models (`script/Devanagari`, `hin`, `mar`, `san`, page modes, image preparation), the current letter route, and, if the user agrees, other engines (Surya, EasyOCR, PaddleOCR or Kraken in a separate Python environment; Google Cloud Vision as an opt-in). Then probably make the text line-first (whole-line recognition, cuts only for highlighting and Training Data) and fine-tune Tesseract on the book's lines (C18).
+
 ### Part E: line recognizer (optional, later)
 
 ### C18. Line recognizer (Section 8.3 of the requirements)

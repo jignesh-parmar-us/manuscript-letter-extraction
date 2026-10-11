@@ -31,7 +31,7 @@ describe("BookView", () => {
     const parts = [...menu.querySelectorAll("optgroup")].map((g) => [g.label, [...g.querySelectorAll("option")].map((o) => o.textContent)]);
     expect(parts).toEqual([
       ["Training Data", ["Pages & capture", "Review groups", "Pages", "Readers", "Export dataset"]],
-      ["Read Book", ["Upload & capture", "Book pages", "Text", "Dictionary"]],
+      ["Read Book", ["Upload & capture", "Book pages", "Text", "Dictionary", "Line truth"]],
     ]);
     await userEvent.selectOptions(menu, "review");
     expect(window.location.hash).toBe("#/books/7/review");

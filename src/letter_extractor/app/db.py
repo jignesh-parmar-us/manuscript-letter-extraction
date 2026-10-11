@@ -216,6 +216,18 @@ class PageText(Base):
     edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class LineTruth(Base):
+    """The checked text of a line (the line truth screen): what the line really says, typed or corrected
+    by the user from Tesseract's whole-line reading, without any letter cut. The test set every way of
+    reading is compared on. `tesseract_dev` is what Tesseract read when the line was checked."""
+    __tablename__ = "line_truth"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    line_id: Mapped[int] = mapped_column(ForeignKey("line.id", ondelete="CASCADE"), unique=True, index=True)
+    text_dev: Mapped[str] = mapped_column(Text, default="")
+    tesseract_dev: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+
+
 class WordList(Base):
     """An imported text file the language model learns from (C15), stored as Devanagari NFC in
     <library>/dictionaries/<file>; `books` lists the books that use it."""
