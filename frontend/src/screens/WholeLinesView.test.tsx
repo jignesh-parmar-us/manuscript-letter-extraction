@@ -33,6 +33,8 @@ describe("Whole lines", () => {
     localStorage.removeItem("text-mode");
     localStorage.removeItem("text-layout");
     localStorage.removeItem("whole-lines-lm");
+    localStorage.removeItem("text-page-style");
+    localStorage.removeItem("text-aligned");
     vi.mocked(api.pages).mockResolvedValue(pages as never);
     vi.mocked(api.bookWholeLines).mockResolvedValue([{ page_id: 9, lines: 2 }]);
     vi.mocked(api.wholeLines).mockResolvedValue(text());
@@ -94,6 +96,23 @@ describe("Whole lines", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next line" }));
     expect(screen.getByText("Line 2 of 2")).toBeInTheDocument();
     expect(screen.getByLabelText("Correct the line")).toHaveValue("જો");
+  });
+
+  it("shows the page as a page or as line strips, with or without the aligned text", async () => {
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await screen.findByLabelText("Lines");
+    expect(document.querySelectorAll(".aligned-text")).toHaveLength(2);           // line strips, aligned (the default)
+    await userEvent.click(screen.getByLabelText("Aligned text"));
+    expect(document.querySelectorAll(".aligned-text")).toHaveLength(0);
+    expect(document.querySelectorAll(".line-crop")).toHaveLength(2);              // still a strip per line, plain text
+    await userEvent.click(screen.getByRole("button", { name: "As a page" }));
+    expect(screen.getByLabelText("Page").querySelector(".text-page-image")).not.toBeNull();
+    expect(document.querySelectorAll(".line-crop")).toHaveLength(0);
+    expect(screen.queryByLabelText("Aligned text")).toBeNull();                    // no strips: no switch
+    await userEvent.click(screen.getByRole("button", { name: "Line by line" }));
+    expect(screen.queryByRole("button", { name: "As a page" })).toBeNull();
+    expect(document.querySelectorAll(".aligned-text")).toHaveLength(0);           // aligned text still off
+    expect(screen.getByLabelText("Correct the line")).toBeInTheDocument();
   });
 
   it("reads a page whole and switches to the cut-letter view", async () => {

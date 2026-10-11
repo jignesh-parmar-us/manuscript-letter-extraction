@@ -27,6 +27,25 @@ import WholeLinesView, { useArrowKeys } from "./WholeLinesView";
 /** Whole page (the page above its text) or Line by line (one line cropped from the page). */
 export type Layout = "page" | "line";
 
+/** In Whole page: the page image with its text below, or every line as a strip with its text under it. */
+export type PageStyle = "image" | "strips";
+
+function stored<T extends string>(key: string, values: T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null;
+    return v && values.includes(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function remember(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // a private window: the choice lasts until the page is closed
+  }
+}
+
 function storedLayout(): Layout {
   try {
     return localStorage.getItem("text-layout") === "line" ? "line" : "page";
@@ -95,6 +114,8 @@ function storedMode(): Mode {
 export default function TextView(props: Props) {
   const [mode, setMode] = useState<Mode>(storedMode);
   const [layout, setLayout] = useState<Layout>(storedLayout);
+  const [pageStyle, setPageStyle] = useState<PageStyle>(() => stored("text-page-style", ["image", "strips"], "strips"));
+  const [aligned, setAligned] = useState<boolean>(() => stored("text-aligned", ["on", "off"], "on") === "on");
   function chooseLayout(l: Layout) {
     setLayout(l);
     try {
@@ -133,18 +154,41 @@ export default function TextView(props: Props) {
             Line by line
           </button>
         </div>
+        {layout === "page" && (
+          <div className="row" role="group" aria-label="Whole page as">
+            <button className={pageStyle === "image" ? "tab active" : "tab"} title="The page image with its text below"
+              onClick={() => { setPageStyle("image"); remember("text-page-style", "image"); }}>
+              As a page
+            </button>
+            <button className={pageStyle === "strips" ? "tab active" : "tab"} title="Every line as its strip of the page, with its text under it"
+              onClick={() => { setPageStyle("strips"); remember("text-page-style", "strips"); }}>
+              Line strips
+            </button>
+          </div>
+        )}
+        {!(layout === "page" && pageStyle === "image") && (
+          <label className="row small" title="The text under each line image, every akshara under its letter">
+            <input type="checkbox" checked={aligned}
+              onChange={(e) => { setAligned(e.target.checked); remember("text-aligned", e.target.checked ? "on" : "off"); }} />
+            Aligned text
+          </label>
+        )}
         <span className="small muted mode-note">
           {mode === "lines"
             ? "Each line image goes to Tesseract as it is: no letters are cut."
             : "Each cut letter is read and checked with your groups, letter reader and language model; proofread here."}
         </span>
       </div>
-      {mode === "lines" ? <WholeLinesView {...props} layout={layout} /> : <LettersView {...props} layout={layout} />}
+      {mode === "lines" ? (
+        <WholeLinesView {...props} layout={layout} pageStyle={pageStyle} aligned={aligned} />
+      ) : (
+        <LettersView {...props} layout={layout} pageStyle={pageStyle} aligned={aligned} />
+      )}
     </>
   );
 }
 
-function LettersView({ book, pageId, onChanged, layout }: Props & { layout: Layout }) {
+function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Props & { layout: Layout; pageStyle: PageStyle; aligned: boolean }) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [converted, setConverted] = useState<Map<number, TextSummary>>(new Map()); // converted pages
   const [stats, setStats] = useState<ProofreadStats | null>(null);
@@ -338,8 +382,33 @@ function LettersView({ book, pageId, onChanged, layout }: Props & { layout: Layo
     if (layout === "page") lineRefs.current.get(lineIdx)?.scrollIntoView?.({ block: "nearest" });
   }, [lineIdx, layout]);
 
-  /** A line cropped from the page, with its uncertain and selected letters, and its text aligned under it. */
-  const cropAndText = (line: TextLetter[], box: [number, number, number, number]) =>
+  /** A line's letters as running text (clickable), with its ✓ if `withMark`. */
+  const plainLine = (line: TextLetter[], i: number, withMark: boolean) => (
+    <div key={i} className={`text-lines ${script}`} lang={script === "gujarati" ? "gu" : "sa"}>
+      <div className={`text-line${states[i] ? ` ${states[i]}` : ""}`}>
+        {line.map((x) => (
+          <span key={x.sample_id}>
+            {x.space && " "}
+            <span
+              ref={(el) => {
+                if (el) letterRefs.current.set(x.sample_id, el);
+              }}
+              className={`text-letter${view(x, readers).uncertain ? " uncertain" : ""}${view(x, readers).dev ? "" : " unknown"}${
+                readers === "both" && x.lm_from !== undefined ? " lm" : ""
+              }${x.sample_id === selected ? " selected" : ""}`}
+              onClick={() => pick(x.sample_id, "text")}
+            >
+              {shown(x, script, readers)}
+            </span>
+          </span>
+        ))}
+        {withMark && proofButton(i)}
+      </div>
+    </div>
+  );
+
+  /** A line cropped from the page, with its uncertain and selected letters, and its text under it (aligned or not). */
+  const cropAndText = (line: TextLetter[], box: [number, number, number, number], i: number) =>
     page && (
       <>
         <LineCrop
@@ -355,7 +424,7 @@ function LettersView({ book, pageId, onChanged, layout }: Props & { layout: Layo
               onClick: () => setSelected(x.sample_id),
             }))}
         />
-        <AlignedText
+        {!aligned ? plainLine(line, i, false) : <AlignedText
           page={page}
           box={box}
           items={line.map((x) => ({
@@ -366,7 +435,7 @@ function LettersView({ book, pageId, onChanged, layout }: Props & { layout: Layo
               readers === "both" && x.lm_from !== undefined ? "lm " : ""}${x.sample_id === selected ? "selected" : ""}`.trim(),
             onClick: () => setSelected(x.sample_id),
           }))}
-        />
+        />}
       </>
     );
 
@@ -606,12 +675,52 @@ function LettersView({ book, pageId, onChanged, layout }: Props & { layout: Layo
                   </button>
                   {proofButton(lineIdx)}
                 </div>
-                {lineBox && text.lines[lineIdx] && cropAndText(text.lines[lineIdx], lineBox)}
+                {lineBox && text.lines[lineIdx] && cropAndText(text.lines[lineIdx], lineBox, lineIdx)}
                 {editorBlock}
               </div>
             )
           ) : (
-            !text || !page ? (
+            pageStyle === "image" ? (
+              <div className="text-panes">
+                <div className="text-page" aria-label="Page">
+                  {page && (
+                    <div className="text-page-image" style={{ aspectRatio: `${page.width} / ${page.height}` }}>
+                      <img src={page.image} alt={page.file} />
+                      {letters
+                        .filter((x) => view(x, readers).uncertain || x.sample_id === selected)
+                        .map((x) => (
+                          <span
+                            key={x.sample_id}
+                            ref={(el) => {
+                              if (el) boxRefs.current.set(x.sample_id, el);
+                            }}
+                            className={`text-box${view(x, readers).uncertain ? " uncertain" : ""}${x.sample_id === selected ? " selected" : ""}`}
+                            title={`${shown(x, script, readers)}${view(x, readers).uncertain ? " (uncertain)" : ""}`}
+                            onClick={() => pick(x.sample_id, "page")}
+                            style={{
+                              left: `${(100 * x.box[0]) / page.width}%`,
+                              top: `${(100 * x.box[1]) / page.height}%`,
+                              width: `${(100 * x.box[2]) / page.width}%`,
+                              height: `${(100 * x.box[3]) / page.height}%`,
+                            }}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <div className="text-text" aria-label="Text">
+                  {!text ? (
+                    <p className="muted">{page && converted.has(page.id) ? "Loading…" : "This page is not converted yet: Convert this page."}</p>
+                  ) : (
+                    <>
+                      {summaryBlock}
+                      {text.lines.map((line, i) => plainLine(line, i, line.length > 0))}
+                      {editorBlock}
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : !text || !page ? (
               <p className="muted">{page && converted.has(page.id) ? "Loading…" : "This page is not converted yet: Convert this page."}</p>
             ) : (
               <div className="interlinear" aria-label="Lines">
@@ -622,7 +731,7 @@ function LettersView({ book, pageId, onChanged, layout }: Props & { layout: Layo
                   return (
                     <div key={i} ref={(el) => { if (el) lineRefs.current.set(i, el); }}
                       className={`interlinear-line${i === lineIdx ? " selected" : ""}${states[i] ? ` ${states[i]}` : ""}`}>
-                      {cropAndText(line, box)}
+                      {cropAndText(line, box, i)}
                       <div className="row line-tools-row">
                         <span className="small muted">Line {i + 1}</span>
                         {proofButton(i)}

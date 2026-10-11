@@ -14,7 +14,7 @@ import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
 import LineCrop, { AlignedText } from "./LineCrop";
-import type { Layout } from "./TextView";
+import type { Layout, PageStyle } from "./TextView";
 
 type Script = "gujarati" | "devanagari";
 const FONT = `"Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif`;
@@ -24,6 +24,8 @@ interface Props {
   pageId: number | null;
   onChanged: () => void;
   layout: Layout;
+  pageStyle: PageStyle;
+  aligned: boolean;
 }
 
 function aksharaText(x: WholeAkshara, script: Script, lm: boolean): string {
@@ -66,7 +68,7 @@ export function useArrowKeys(onMove: (step: number, line: number) => void) {
   }, [onMove]);
 }
 
-export default function WholeLinesView({ book, pageId, onChanged, layout }: Props) {
+export default function WholeLinesView({ book, pageId, onChanged, layout, pageStyle, aligned }: Props) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [read, setRead] = useState<Map<number, number>>(new Map()); // page id -> lines read
   const [text, setText] = useState<WholeLines | null>(null);
@@ -292,7 +294,8 @@ export default function WholeLinesView({ book, pageId, onChanged, layout }: Prop
 
   /** A line's text under its strip: each akshara under its letter, or plain text for a corrected line. */
   function lineTextRow(ln: WholeLine, i: number) {
-    if (page && !ln.edited_dev && ln.aksharas.length > 0 && ln.aksharas.every((x) => x.box))
+    if (!aligned && layout === "line") return null;            // Line by line: the correction box holds the text
+    if (aligned && page && !ln.edited_dev && ln.aksharas.length > 0 && ln.aksharas.every((x) => x.box))
       return (
         <AlignedText
           page={page}
@@ -482,6 +485,56 @@ export default function WholeLinesView({ book, pageId, onChanged, layout }: Prop
                   {correctionBox(cur)}
                 </div>
               ) : (
+                pageStyle === "image" ? (
+                  <div className="text-panes">
+                    <div className="text-page" aria-label="Page">
+                      {page && (
+                        <div className="text-page-image" style={{ aspectRatio: `${page.width} / ${page.height}` }}>
+                          <img src={page.image} alt={page.file} />
+                          {cur && (
+                            <span className="text-box line-mark" style={{
+                              left: `${(100 * cur.box[0]) / page.width}%`, top: `${(100 * cur.box[1]) / page.height}%`,
+                              width: `${(100 * cur.box[2]) / page.width}%`, height: `${(100 * cur.box[3]) / page.height}%` }} />
+                          )}
+                          {picked?.box && (
+                            <span className="text-box selected" style={{
+                              left: `${(100 * picked.box[0]) / page.width}%`, top: `${(100 * picked.box[1]) / page.height}%`,
+                              width: `${(100 * picked.box[2]) / page.width}%`, height: `${(100 * picked.box[3]) / page.height}%` }} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-text" aria-label="Text">
+                      <div className={`text-lines ${script}`} lang={script === "gujarati" ? "gu" : "sa"}>
+                        {lines.map((ln, i) => (
+                          <div key={ln.line_id} ref={(el) => { if (el) lineRefs.current.set(i, el); }}
+                            className={`text-line whole${i === li ? " selected" : ""}${ln.reviewed ? " reviewed" : ""}`}
+                            onClick={() => setLi(i)}>
+                            {editing === ln.line_id ? (
+                              correctionBox(ln, () => setEditing(null))
+                            ) : (
+                              <>
+                                {lineSpans(ln, i)}
+                                <span className="line-tools">
+                                  <button aria-label={`Correct line ${i + 1}`} title="Correct this line" disabled={busy}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLi(i);
+                                      setDraft(lineText(ln, script, lm));
+                                      setEditing(ln.line_id);
+                                    }}>
+                                    ✎
+                                  </button>
+                                  {reviewButton(ln, i)}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div className="interlinear" aria-label="Lines">
                   {page && lines.map((ln, i) => (
                     <div key={ln.line_id} ref={(el) => { if (el) lineRefs.current.set(i, el); }}
@@ -517,6 +570,7 @@ export default function WholeLinesView({ book, pageId, onChanged, layout }: Prop
                     </div>
                   ))}
                 </div>
+                )
               )}
               {picked && (
                 <p className="small text-letter-info" aria-live="polite">
