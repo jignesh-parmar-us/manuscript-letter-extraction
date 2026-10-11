@@ -164,6 +164,19 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 Bands by the label's letters: common 100+ (4,452 letters), middle 20–99 (2,973), rare 1–19 (1,521; 169 of them have a label found only on their own page, so the fold's reader cannot know it). Commonest window mistakes: ता→तां, मा→मां, ता→तो, अ→अं, र→रे (top marks). Gate (≥ 90% at exact boundaries): passed.
 
+## Segmentation plan, stage 5: a faster line search (2026-10-11)
+
+`ocr/segment.py`, the stage-3 search as a module; the window features in one batch (`features_batch`, the same numbers, 0.76 -> 0.48 ms per window). Readers retrained per fold as in stage 3; settings bonus 4, language model 0.5, width 1.
+
+| Variant | Lines | Wrong | Stage 3 on the same lines | Seconds per line | Windows | Kept |
+|---|---|---|---|---|---|---|
+| A boundary every 6 px | 18 (fold 0) | 10.21% | 9.56% | 19.9 | 14,422 | 14,422 |
+| B every 9 px | 18 | 9.32% | 9.56% | 11.3 | 8,526 | 8,526 |
+| C 6 px + windows under 5% dropped | 18 | 10.33% | 9.56% | 17.5 | 14,422 | 4,170 |
+| **D 9 px + dropped** | **73** | **10.18%** | 11.11% | **6.6** | 7,632 | 2,345 |
+
+Dropping windows saves little time (their features are still computed) but does not hurt; most of the time is the features. D is the default. A and stage 3 differ only by the readers' random training.
+
 ## Segmentation plan, stage 4: the line search as a second opinion (2026-10-11)
 
 The 73 checked lines; Tesseract's whole-line reading (aksharas, confidences, alternatives) aligned with the stage-3 reading (settings from the other half of the pages) by akshara (difflib); the language model as in stage 3.

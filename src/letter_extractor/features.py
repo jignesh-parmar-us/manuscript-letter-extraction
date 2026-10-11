@@ -85,3 +85,31 @@ def fingerprint(mask: np.ndarray, spacing: float, cfg: Config) -> np.ndarray:
 
 def fingerprint_size(cfg: Config) -> int:
     return cfg.fp_pixels ** 2 + (HOG_CELLS - 1) ** 2 * 4 * HOG_BINS + 2
+
+
+def hog_batch(imgs: np.ndarray) -> np.ndarray:
+    """`hog` of many square images at once (N x size x size, the same size): the same numbers, without a
+    Python loop per image (the line search reads about 10,000 windows a line)."""
+    g = imgs.astype(np.float32)
+    n, size, _ = g.shape
+    gx = np.stack([cv2.Sobel(im, cv2.CV_32F, 1, 0, ksize=3) for im in g]) if n else g
+    gy = np.stack([cv2.Sobel(im, cv2.CV_32F, 0, 1, ksize=3) for im in g]) if n else g
+    mag = np.sqrt(gx * gx + gy * gy)
+    ang = (np.degrees(np.arctan2(gy, gx)) + 180.0) % 180.0
+    b = np.minimum((ang / (180.0 / HOG_BINS)).astype(np.int64), HOG_BINS - 1)
+    cell = size // HOG_CELLS
+    rows = np.minimum(np.arange(size) // cell, HOG_CELLS - 1)
+    cy, cx = np.meshgrid(rows, rows, indexing="ij")
+    idx = (cy[None] * HOG_CELLS + cx[None]) * HOG_BINS + b                     # cell and bin of every pixel
+    idx = idx + (np.arange(n) * HOG_CELLS * HOG_CELLS * HOG_BINS)[:, None, None]
+    hist = np.bincount(idx.ravel(), weights=mag.ravel().astype(np.float64),
+                       minlength=n * HOG_CELLS * HOG_CELLS * HOG_BINS).astype(np.float32)
+    hist = hist.reshape(n, HOG_CELLS, HOG_CELLS, HOG_BINS)
+    blocks = []
+    for i in range(HOG_CELLS - 1):
+        for j in range(HOG_CELLS - 1):
+            v = hist[:, i:i + 2, j:j + 2].reshape(n, -1)
+            v = v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-6)
+            v = np.minimum(v, 0.2)
+            blocks.append(v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-6))
+    return np.concatenate(blocks, axis=1) if blocks else np.zeros((n, 0), np.float32)

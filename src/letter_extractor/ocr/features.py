@@ -63,3 +63,23 @@ def varied(mask: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         else:
             out[:, cols[-1] - cut + 1:] = False
     return out if out.sum() >= 10 else mask
+
+
+def features_batch(masks, spacing: float) -> np.ndarray:
+    """`features` of many masks at once (one row each), the same numbers, with the stroke directions
+    (HOG) computed for all of them together."""
+    from ..features import hog_batch
+    if not len(masks):
+        return np.zeros((0, dimension()), np.float32)
+    imgs = np.stack([cv2.GaussianBlur(normalize(m, SIZE), (0, 0), 0.8) for m in masks])
+    pix = np.stack([cv2.resize(im, (PIXELS, PIXELS), interpolation=cv2.INTER_AREA) for im in imgs]).astype(np.float32)
+    pix = pix.reshape(len(masks), -1) / 255.0
+    h_vec = hog_batch(imgs).astype(np.float32)
+    sp = max(spacing, 1.0)
+    size = []
+    for m in masks:
+        ys, xs = np.nonzero(m)
+        h = float(ys.max() - ys.min() + 1) if ys.size else 0.0
+        w = float(xs.max() - xs.min() + 1) if xs.size else 0.0
+        size.append([w / max(h, 1.0), w / sp, h / sp])
+    return np.concatenate([pix, h_vec, np.array(size, np.float32)], axis=1).astype(np.float32)
