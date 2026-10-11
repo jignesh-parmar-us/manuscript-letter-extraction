@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grouping and labels</title>
+<!--
+  Technical help, part 2: fingerprints (features.py), clustering (grouping.py), group centres
+  (app/centres.py), Tesseract readings and alignment (ocr/tesseract.py, ocr/align.py, app/suggest.py),
+  other books (suggest.run_books), votes, mixed groups, labels at capture, review actions (app/actions.py).
+-->
+<link rel="stylesheet" href="tech.css">
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Technical pages">
+    <a href="tech.html">Overview</a>
+    <a href="tech-cutting.html">1 · Cutting</a>
+    <a class="here" href="tech-grouping.html">2 · Grouping and labels</a>
+    <a href="tech-training.html">3 · Training and the reader</a>
+    <a href="tech-reading.html">4 · Reading a book</a>
+  </nav>
+  <h1>2 · Grouping letters and suggesting labels</h1>
+  <p class="lead">Training Data letters that look alike are put in groups automatically, so one label names many
+    letters. Readers then suggest labels; you decide.</p>
+
+  <div class="flow">
+    <div class="stage train">
+      <div class="title">Training Data</div>
+      <div class="node"><b>Fingerprint of every letter</b><span class="small">from its ink mask</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Clustering</b> per kind (letter / danda / digit)<span class="small">leader pass → merge (compact) → reassign, ×3 → Unsure</span></div>
+      <div class="arrow">↓</div>
+      <div class="row3">
+        <div class="node"><b>Tesseract run</b><span class="small">line → aksharas → aligned to letters</span></div>
+        <div class="node"><b>Other books</b><span class="small">5 nearest labelled centres</span></div>
+        <div class="node"><b>Letter reader</b><span class="small">probability per label</span></div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Readings per letter</b> (<code>ocr_reading</code>) → <b>vote per group</b> → suggestion<span class="small">mixed groups split where readings and shapes agree</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Review actions</b><span class="small">label, move, merge, split, delete; each stored with before / after for undo; centres and distances recomputed</span></div>
+    </div>
+  </div>
+
+  <h2 id="fingerprint">Fingerprints</h2>
+  <p>Computed from the letter's <strong>ink mask only</strong>, so paper tone, ink colour and neighbours do not matter:</p>
+  <ol>
+    <li>crop to the ink, pad to a square (aspect ratio kept, 1 px border), resize to <strong>48 × 48</strong> (area
+      interpolation);</li>
+    <li>Gaussian blur, σ = 1 px, so a stroke shifted by a pixel or two still matches;</li>
+    <li><strong>pixel part:</strong> the blurred image at 24 × 24 = 576 values, scaled to unit length;</li>
+    <li><strong>stroke-direction part (HOG):</strong> Sobel gradients; 6 × 6 cells of 8 px, each a 9-bin histogram of
+      gradient direction (0–180°) weighted by strength; cells normalised in overlapping 2 × 2 blocks (L2, clipped at 0.2,
+      renormalised): 5 × 5 blocks × 36 = 900 values, scaled to unit length;</li>
+    <li><strong>size part:</strong> width and height of the ink divided by the page's line spacing, × 0.5, so a dot and a
+      big letter of similar shape stay apart;</li>
+    <li>the whole vector (1,478 float32) is scaled to unit length, so the <strong>Euclidean distance</strong> between two
+      fingerprints runs from 0 (same) to 2 (opposite).</li>
+  </ol>
+
+  <h2>The clustering</h2>
+  <p>Plain NumPy; memory grows with the number of groups, not with pairs of letters. Done separately for letters, dandas
+    and digits; red and black letters share groups.</p>
+  <ol>
+    <li><strong>Leader pass</strong> (in reading order, batches of 1,024): a letter joins the nearest group centre within
+      <strong>0.55</strong>; otherwise it starts a new group. Centres are the unit-length mean of their members (a plain mean
+      of many shapes is short and lies near everything, so a big group would swallow its neighbours).</li>
+    <li><strong>Merge:</strong> pairs of groups whose centres are closer than 0.55, closest first, are merged, but only if
+      the merged group stays compact: <strong>90 % of its members within 0.5</strong> of the new centre. This stops groups
+      creeping from a letter into its look-alikes.</li>
+    <li><strong>Reassign:</strong> every letter moves to its nearest centre. Merge and reassign repeat 3 times.</li>
+    <li><strong>Unsure:</strong> a letter further than 0.5 from its group's centre leaves it; groups of fewer than 2 letters
+      are not groups. These letters are <em>Unsure</em>.</li>
+  </ol>
+  <p>Groups are numbered by size (g0001 is the largest). Each letter keeps its <code>distance</code> to its group's centre
+    (the review shows nearest first). Pages added later are not re-clustered: each new letter is offered the nearest
+    group within 0.55 as a suggestion.</p>
+
+  <h2>Tesseract's readings (printed books)</h2>
+  <ol>
+    <li><strong>The line image</strong> is turned into black ink on white by <strong>Otsu's threshold</strong> on its grey
+      values, with a 10 px white border (the paper and its colour are gone before Tesseract sees it).</li>
+    <li><strong>Tesseract 5</strong> (LSTM engine) runs as a separate program: model <code>script/Devanagari</code>,
+      page segmentation mode 7 (one text line), output <strong>hOCR</strong> with a box per character
+      (<code>hocr_char_boxes=1</code>) and the alternatives per character with their confidences
+      (<code>lstm_choice_mode=2</code>).</li>
+    <li><strong>Aksharas:</strong> the characters are grouped into aksharas (consonants joined by virama with their nukta,
+      vowel signs and marks; independent vowels; digits, dandas, ऽ and ॐ on their own).</li>
+    <li><strong>Matching aksharas to letters</strong> by x position only, with <strong>dynamic programming</strong> (like a
+      text diff): steps are 1 akshara ↔ 1 letter, up to 3 aksharas on one letter (an uncut word), 1 akshara over up to 3
+      letters (a cut conjunct), or skipping either (cost 0.5). A step costs 1 − overlap, + 0.1 per extra item. Character
+      boxes wider than 2.5 × the median are not trusted. A match is kept if the overlap is ≥ 0.8, or ≥ 0.6 and they are each
+      other's best overlap; a line where fewer than half of its letters match is not used.</li>
+    <li>Each matched letter stores its reading (a valid label, Devanagari NFC), the lowest confidence of its aksharas
+      (0–100) and the alternatives.</li>
+  </ol>
+
+  <h2>Suggestions from other labelled books</h2>
+  <p>For every letter, the <strong>5 nearest labelled group centres</strong> of the chosen books (same fingerprint
+    settings) within a fingerprint distance of <strong>0.5</strong> vote, each with weight 1 / distance. The reading is the
+    winner; its confidence is its share of the vote (0–100). This is the first reader for handwriting.</p>
+
+  <h2>From readings to a group suggestion</h2>
+  <p>Suggestions are never stored: they are voted live from the readings of the group's current letters, so they follow
+    every move and merge. The book's <em>main reader</em> votes: the letter reader if the book has read with it, then
+    Tesseract (printed) or the other books (handwritten).</p>
+  <ul>
+    <li>each reading weighs its confidence (at least 1); a group needs <strong>3 read letters</strong>, and the winner
+      <strong>60 %</strong> of the weight; a tie gives nothing;</li>
+    <li>the second reader's suggestion is shown beside it ("both agree", or the other opinion);</li>
+    <li>labelled groups and rejected suggestions get none; <em>Accept all ≥ 90 %</em> accepts the groups whose winner has at
+      least 90 %;</li>
+    <li>an unsure letter shows its own reading from confidence 80 (never Tesseract's on handwriting).</li>
+  </ul>
+
+  <h2>Splitting mixed groups</h2>
+  <p>Shape alone cannot keep look-alikes (ने / ते) apart, so readings decide and shapes must agree: in a group, the letters
+    read as another letter than the group's main reading leave it when there are at least 5 of them (and 10 % of the group),
+    the centre of their fingerprints is at least <strong>0.25</strong> from the centre of the main reading's letters (a
+    misreading of the same shape stays), and each is closer to its own reading's centre. Locked groups are left alone.</p>
+
+  <h2>Labels at capture (printed, cut by Tesseract)</h2>
+  <p>Right after capture: mixed groups are split as above; every unlabelled group whose vote gives a suggestion gets that
+    label with status <em>auto</em> (not reviewed); groups with the same label are merged into the largest; an unsure letter
+    whose reading is a group's label and whose fingerprint is within 0.55 of that group's centre joins it.</p>
+
+  <h2>Review and storage</h2>
+  <ul>
+    <li>A group's label is stored in Devanagari NFC (<code>label_dev</code>) and shown in Gujarati; its status is
+      <em>auto</em> (given by a reader), <em>reviewed</em> or <em>labelled</em> (by you).</li>
+    <li>Every review change (move, new group, merge, dissolve, label, accept, split, delete, join, crop) is one database
+      transaction recorded in <code>action</code> with the state of every touched letter and group <em>before and after</em>;
+      undo writes the before-state back, redo the after-state. Locked groups refuse every change.</li>
+    <li>After each change the touched groups' centres and their letters' distances are recomputed.</li>
+  </ul>
+</main>
+</body>
+</html>

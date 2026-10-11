@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cutting pages</title>
+<!--
+  Technical help, part 1: page preparation (prepare.py), lines (lines.py), stroke pieces (pieces.py),
+  letters by shape (letters.py), letters by Tesseract's reading (ocr/cut.py), the aa bar fix (bars.py).
+  Keep in step with the code; numbers are config.py defaults.
+-->
+<link rel="stylesheet" href="tech.css">
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Technical pages">
+    <a href="tech.html">Overview</a>
+    <a class="here" href="tech-cutting.html">1 · Cutting</a>
+    <a href="tech-grouping.html">2 · Grouping and labels</a>
+    <a href="tech-training.html">3 · Training and the reader</a>
+    <a href="tech-reading.html">4 · Reading a book</a>
+  </nav>
+  <h1>1 · Cutting pages into lines and letters</h1>
+  <p class="lead">Every page, of Training Data or of Read Book, goes through the same steps. Only image processing is
+    used here (OpenCV and NumPy), no learning; Tesseract is used only when a printed book is cut by its reading.</p>
+
+  <div class="flow">
+    <div class="stage data">
+      <div class="title">Per page</div>
+      <div class="node"><b>1. Prepare the page</b><span class="small">paper vs scanner background · paper tone · black / red ink masks · ruled lines · text block · specks</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>2. Find the lines</b><span class="small">headline peaks · traced headlines · boundaries · ink blobs to lines · line images</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>3. Stroke pieces</b><span class="small">cut each line where its headline breaks</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>4. Letters</b><span class="small">join rules · i-stems · split wide letters · attach marks · verse numbers</span></div>
+      <div class="arrow">↓</div>
+      <div class="row2">
+        <div class="node"><b>5a. Printed, if chosen: cut by Tesseract's reading</b><span class="small">replaces step 4's letters line by line</span></div>
+        <div class="node"><b>5b. Printed: ા bar fix</b><span class="small">bars cut onto the next letter go back</span></div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>6. Letter images, masks, fingerprints</b></div>
+    </div>
+  </div>
+
+  <h2>1. Preparing the page</h2>
+  <ol>
+    <li><strong>Colour space:</strong> the image is converted to <strong>CIE Lab</strong> (OpenCV, 0–255 per channel).
+      L is lightness, a* is the red–green axis.</li>
+    <li><strong>Paper vs scanner:</strong> pixels darker than 0.45 × the 75th percentile of L that are
+      <em>connected to the image edge</em> (8-connected components) are the scanner background. Ink is dark too but never
+      touches the edge.</li>
+    <li><strong>Local paper tone:</strong> for L and for a*, a <strong>median filter</strong> of 151 px (full-page pixels)
+      on a copy at 25 % size, then resized back. Strokes are a minority in every window, so the median follows the paper,
+      including stains and uneven lighting.</li>
+    <li><strong>Ink masks</strong> (per pixel, against the local paper):
+      <ul>
+        <li><strong>red ink:</strong> a* at least 14 above the paper's a* <em>and</em> L at least 8 darker;</li>
+        <li><strong>black ink:</strong> not red and L below 0.62 × the paper's L.</li>
+      </ul>
+      This is a <em>local, relative</em> threshold: the paper's own tone is the reference everywhere, so yellowed or
+      stained paper does not become ink.</li>
+    <li><strong>Ruled lines:</strong> morphological opening with a vertical line of 15 % of the page height and a
+      horizontal one of 15 % of the width (after widening by 5 px for slant). Only long straight runs survive; they are
+      removed from both ink masks.</li>
+    <li><strong>Text block:</strong> column and row ink profiles, smoothed over 41 px; the longest run of columns with at
+      least 20 % of a typical text column's ink (gaps up to 60 px allowed), then the same for rows (5 %), plus a 15 px
+      margin. Margin numbers and tape marks fall outside.</li>
+    <li><strong>Specks:</strong> ink components smaller than 8 px (black) or 5 px (red) are removed.</li>
+  </ol>
+
+  <h2>2. Finding the lines</h2>
+  <ol>
+    <li><strong>Headline evidence:</strong> morphological opening with a 1 × 25 px horizontal element keeps only
+      horizontal ink runs of 25 px or more (the shirorekha); stems, dandas and matras drop out.</li>
+    <li><strong>Line pitch:</strong> the autocorrelation of the row profile of those runs; its highest peak between 40 and
+      300 px is the line spacing (about 107 px on the printed 1933 book).</li>
+    <li><strong>Headline rows:</strong> local maxima of the smoothed row profile, strongest first, at least 0.6 × pitch
+      apart; peaks weaker than 0.25 × a typical peak are dropped.</li>
+    <li><strong>Tracing each headline:</strong> in half-overlapping windows of 150 px, starting from the strongest window
+      and walking left and right, each window searches within 0.3 × pitch of the previous one for its busiest row (at least
+      25 % of its columns inked). Then a polynomial (degree 2, or 1 for short lines) is fitted and windows further than
+      0.08 × pitch from it are replaced by the fit (they locked onto dandas or big matras). This follows slanted scans and
+      wavy lines. Two traces that end on the same headline are one line.</li>
+    <li><strong>Main zone:</strong> the depth below the headline where the aligned ink drops under 25 % of the letter-body
+      ink.</li>
+    <li><strong>Boundaries:</strong> between two lines, per window, the middle of the emptiest rows between 0.8 × main
+      zone below the upper headline and the lower headline.</li>
+    <li><strong>Giving ink to lines:</strong> each 8-connected ink blob is given whole: touching one headline (±4 px) → that
+      line; touching two → split at the boundary; touching none (anusvara, dots, loose matras) → the nearer of "just above
+      the headline below" (an upper mark) and "just below the main zone above" (a lower mark).</li>
+    <li><strong>Line image:</strong> the crop with a 6 px margin; ink of <em>other</em> lines inside it is grown by 4 px and
+      filled in from the surrounding paper (<strong>Telea inpainting</strong>, radius 5), so only this line's ink is left.
+      The colours of the page are kept: a line image is not binarised.</li>
+  </ol>
+
+  <h2>3. Stroke pieces (first cut)</h2>
+  <p>The headline is drawn letter by letter, so between two letters it either has a gap or thins sharply. For every column
+    of the line, the <strong>headline thickness</strong> is the ink in a band from 8 px above to 4 px below the traced
+    headline.</p>
+  <ul>
+    <li>A <strong>break</strong> is a run of columns where the thickness is at most 0.5 × the line's typical thickness
+      (soft limit) and somewhere at most 0.3 × (hard limit): hysteresis, because a join is often 1 px at its thinnest but
+      a few px wide at the soft limit. Breaks narrower than 2 px are pen texture.</li>
+    <li>Inside a break the cut goes through every empty column run of the main zone, otherwise through the column with
+      the least ink. A danda standing in a gap becomes a piece of its own.</li>
+    <li>Each piece takes the ink from 0.1 × pitch above the headline to the bottom of the main zone; upper and lower marks
+      wait for step 4. Pieces with less than 15 px of ink (10 for red) are specks. Each piece records its headline width and
+      its stem width (median row width in the lower main zone).</li>
+  </ul>
+
+  <h2>4. Letters by shape</h2>
+  <p>The line is a <strong>label image</strong>: every ink pixel carries the number of its letter. Pieces start as their
+    own labels; the rules join them (union–find), split them and attach the rest.</p>
+  <table>
+    <tr><th>Rule</th><th>What it does</th><th>Test</th></tr>
+    <tr><td>Narrow piece</td><td>a piece narrower than 0.45 × the line's typical piece is not a letter on its own</td><td>width</td></tr>
+    <tr><td>Tall stroke</td><td>bar or danda: ink in ≥ 85 % of its rows, at least 0.6 × the piece zone tall, no waist narrower than 0.4 × its median width (a visarga's two dots pinch)</td><td>row fill, waist</td></tr>
+    <tr><td>i-matra</td><td>a tall stroke with ≥ 20 px of upper mark touching it: the mark leans right → short-i hook, joins the letter on its <em>right</em>; otherwise long-i, joins <em>left</em></td><td>mean x of the mark vs the stroke's centre</td></tr>
+    <tr><td>Vowel bar (ा ो ौ)</td><td>a tall stroke whose headline crosses into its left neighbour, or whose headline is ≥ 6 px wider than its stem: joins left; no split cut within 12 px before it</td><td>contact across the cut</td></tr>
+    <tr><td>Danda / ॥</td><td>any other tall stroke; two dandas closer than 0.5 × typical width are one double danda</td><td>—</td></tr>
+    <tr><td>Broken stroke</td><td>other narrow pieces join the neighbour they touch most across the cut</td><td>contact rows</td></tr>
+    <tr><td>Hidden i-stem</td><td>a stem at the right end of a letter whose curl (≥ 20 px of mark) arches over half of the next letter moves to that letter, cut at the emptiest column</td><td>curl cover</td></tr>
+    <tr><td>Split wide letters</td><td>a letter wider than 1.4 × the page's typical letter is cut into round(width / typical) parts, each cut at the emptiest body column within 0.3 × typical of its expected place, only where that column has ≤ 15 % of the typical column ink (or always, if wider than 2.2 × typical); every part must keep ≥ 0.45 × typical of body columns</td><td>column ink below 25 % of the main zone</td></tr>
+    <tr><td>Marks and specks</td><td>ink not in any piece goes to the letter it touches most (3 × 3 ring), else the one it overlaps most horizontally, else the nearest</td><td>contact, overlap</td></tr>
+    <tr><td>Verse number</td><td>one or two letters between two dandas, together narrower than 1.5 × typical: kind "digit"</td><td>width</td></tr>
+  </table>
+  <p>The typical letter width is the median of the page's pieces that are not narrow. This cut is used for
+    <strong>handwritten books</strong>, and for printed books unless they choose Tesseract's reading.</p>
+
+  <h2>5a. Printed: cutting by Tesseract's reading</h2>
+  <p>Chosen per book (<em>Pages &amp; capture → Cutting into letters → By Tesseract's reading</em>). Lines are found as above;
+    Tesseract reads each line image and the line is cut into exactly the <strong>aksharas</strong> it read
+    (an akshara is a consonant cluster with its vowel signs and marks, so conjuncts, reph and matras stay together):</p>
+  <ul>
+    <li>between two aksharas, the cut goes to the column with the least ink, <em>leaving out the headline rows</em>, within
+      0.3 × the median akshara width of Tesseract's boundary (its boxes are rough);</li>
+    <li>cuts closer than 0.3 × that width are not made: those aksharas stay one sample with their text together (a "word"
+      sample);</li>
+    <li>each letter keeps the akshara(s) it was cut as, stored as its Tesseract reading;</li>
+    <li>a line Tesseract cannot read, or reads as fewer than half as many aksharas as the shape cut finds letters, keeps the
+      shape cut.</li>
+  </ul>
+
+  <h2>5b. Printed: the ા bar fix</h2>
+  <p>Both cuts sometimes give an aa bar to the next letter (नार as न + ार). A sample starts with a stray bar when, in its
+    mask: the first ink below the headline is a tall stroke (ink in ≥ 75 % of the rows), at most 0.3 × the letter width;
+    then a gap (ink in ≤ 5 % of the rows) and a letter body of ≥ 0.4 × the letter width; and the letter before ends within
+    0.4 × the letter width on the same line, without a bar of its own. The bar then moves back. An i-hook (ि, written
+    <em>before</em> its letter, with a mark arching over) is never moved; the e sign of the next letter is told from it by
+    its shape (its left end stays 0.35 × headline height above) <em>and</em> by Tesseract's reading. Handwriting is left
+    alone.</p>
+
+  <h2>6. What each letter becomes</h2>
+  <ul>
+    <li><strong>Letter image</strong> (<code>letters/&lt;page&gt;/L01_003.png</code>): the crop from the original page with a
+      4 px margin; neighbouring letters' ink inside it is inpainted (Telea, radius 3). Colours are kept.</li>
+    <li><strong>Mask</strong> (<code>L01_003_mask.png</code>): the letter's own ink pixels, black and white. Grouping and the
+      letter reader work on the mask only, never on the colours.</li>
+    <li><strong>Fingerprint</strong>: see <a href="tech-grouping.html#fingerprint">part 2</a>.</li>
+    <li>Pages run in parallel worker processes (up to 6); a page that fails is recorded and never stops the others.</li>
+  </ul>
+
+  <h2>Printed and handwritten: the differences</h2>
+  <table>
+    <tr><th></th><th>Printed</th><th>Handwritten</th></tr>
+    <tr><td>Letters</td><td>by shape, or by Tesseract's reading (recommended)</td><td>by shape</td></tr>
+    <tr><td>ા bar fix</td><td>on</td><td>off (bars and left strokes look alike)</td></tr>
+    <tr><td>Labels at capture</td><td>with Tesseract's cut: groups Tesseract is sure about are labelled (not reviewed)</td><td>none</td></tr>
+    <tr><td>Main suggestions</td><td>reader, then Tesseract, then other books</td><td>reader, then other books, then Tesseract</td></tr>
+    <tr><td>Spaces in the text</td><td>a gap wider than 0.5 × the line's median letter width</td><td>none</td></tr>
+  </table>
+</main>
+</body>
+</html>

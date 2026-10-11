@@ -4,7 +4,7 @@ How to turn a folder of page images into clean letters with clean labels, with a
 
 The same guide is in the app: the **Help** link at the top right opens [docs/help/new-book.html](help/new-book.html). Change both together.
 
-**New here, or lost?** [The steps in order](help/workflow.html) shows the whole route as a flowchart, from creating a book to downloading its text (also linked at the top of the guide in the app).
+**New here, or lost?** [The steps in order](help/workflow.html) shows the whole route as a flowchart, from creating a book to downloading its text (also linked at the top of the guide in the app). [How it works](help/tech.html) explains each step technically: cutting, grouping and labels, training and the reader, reading a book (algorithms, scores, image processing).
 
 ## 1. Before you start
 

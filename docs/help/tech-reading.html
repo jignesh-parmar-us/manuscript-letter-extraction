@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading a book</title>
+<!--
+  Technical help, part 4: Read Book pages (ocr/pdf.py, library.capture_read), conversion (app/texts.py,
+  ocr/convert.py), the language model (ocr/language.py, app/dictionary.py), proofreading and line truth
+  (app/texts.py, app/truth.py), and the image preparation for Tesseract with what could be tried.
+-->
+<link rel="stylesheet" href="tech.css">
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Technical pages">
+    <a href="tech.html">Overview</a>
+    <a href="tech-cutting.html">1 · Cutting</a>
+    <a href="tech-grouping.html">2 · Grouping and labels</a>
+    <a href="tech-training.html">3 · Training and the reader</a>
+    <a class="here" href="tech-reading.html">4 · Reading a book</a>
+  </nav>
+  <h1>4 · Reading a book into text</h1>
+  <p class="lead">Read Book pages are cut like Training Data pages but never grouped. Converting reads every cut letter with
+    up to three readers, decides each letter, and lets the language model correct the uncertain ones.</p>
+
+  <div class="flow">
+    <div class="stage read">
+      <div class="title">Read Book</div>
+      <div class="node"><b>1. Pages</b><span class="small">PDF drawn at 300 dpi (pypdfium2) → JPEG quality 95, page-0001.jpg …; or a folder of images</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>2. Cut</b><span class="small">preparation, lines, letters as in part 1 (the book's cutting method); a few pages at a time in the background; no grouping</span></div>
+      <div class="arrow">↓ Convert</div>
+      <div class="row3">
+        <div class="node"><b>3a. Tesseract</b> (printed)<span class="small">reads each line image; aksharas aligned to the cut letters; letters left over get the characters over them</span></div>
+        <div class="node"><b>3b. Your groups</b><span class="small">nearest labelled group centres (1st and 2nd)</span></div>
+        <div class="node"><b>3c. Your reader</b><span class="small">best 3 labels with probabilities</span></div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>4. Decide each letter</b><span class="small"><code>choose</code> (Tesseract + groups) or <code>vote</code> (with the reader, on letters it was taught) → text, confidence, uncertain</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>5. Language model</b><span class="small">beam search over the line's uncertain letters</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>6. Line text</b><span class="small">spaces at word gaps (printed), Gujarati mapping, stored per page with every letter's readings</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>7. Text view</b><span class="small">"Tesseract only" or "Tesseract + your groups (and reader)"; proofreading; downloads</span></div>
+    </div>
+  </div>
+
+  <h2>3a. Tesseract on each line</h2>
+  <ol>
+    <li>The line image (page colours, other lines inpainted away) is binarised by <strong>Otsu's threshold</strong> on grey
+      values: black ink on white, a 10 px white border, not scaled (letters are about 70 px tall at 300 dpi).</li>
+    <li>Tesseract 5 LSTM, <code>script/Devanagari</code>, <code>--psm 7</code>, hOCR with character boxes and
+      alternatives (lines run in parallel threads).</li>
+    <li>Its aksharas are aligned to the cut letters by the dynamic programming of
+      <a href="tech-grouping.html">part 2</a>; each matched letter gets (text, confidence 0–100).</li>
+    <li><strong>Gap filling:</strong> a letter the alignment left without a reading (or every letter of a line the alignment
+      refused) takes the characters whose box centre lies inside its x span, with the lowest of their confidences.
+      Measured on the printed book: character error rate 13.1 % → 10.8 %.</li>
+  </ol>
+
+  <h2>3b and 3c. Your groups and your reader</h2>
+  <ul>
+    <li><strong>Groups:</strong> the letter's fingerprint against the centres of the book's <em>labelled</em> groups; the
+      nearest (label, distance) is the groups' reading, valid within 0.55.</li>
+    <li><strong>Reader:</strong> the active reader's features and probabilities (part 3): its best 3 labels. It only knows
+      the labels it was trained on.</li>
+  </ul>
+
+  <h2>4. Deciding each letter</h2>
+  <h3>Without a reader: <code>choose(Tesseract, group)</code></h3>
+  <table>
+    <tr><th>Readers</th><th>Text</th><th>Confidence (0–1)</th><th>Uncertain</th></tr>
+    <tr><td>Both agree</td><td>that</td><td class="num">0.99</td><td>no</td></tr>
+    <tr><td>Disagree, group far (&gt; 0.45) and Tesseract ≥ 95</td><td>Tesseract</td><td class="num">0.8 × conf / 100</td><td>below 0.6</td></tr>
+    <tr><td>Disagree otherwise</td><td>Tesseract if ≥ 90, else the group</td><td class="num">0.4</td><td>yes</td></tr>
+    <tr><td>Tesseract only</td><td>Tesseract</td><td class="num">0.8 × conf / 100</td><td>below 0.6 (conf &lt; 75)</td></tr>
+    <tr><td>Group only (within 0.55)</td><td>group</td><td class="num">1 − distance</td><td>below 0.6</td></tr>
+    <tr><td>Neither</td><td>unknown (?), a danda shape stays ।</td><td class="num">0</td><td>yes</td></tr>
+  </table>
+  <p><strong>"Tesseract only"</strong> in the Text view is <code>choose(Tesseract, nothing)</code>: Tesseract's text, uncertain
+    only below confidence 75, which is rare because Tesseract stays confident when it is wrong.</p>
+
+  <h3>With a reader: <code>vote(Tesseract, reader, group)</code></h3>
+  <p>Only for letters the reader was taught: what Tesseract read (or, where it read nothing, the group's label) is one of
+    the reader's labels. Other letters keep <code>choose</code>. "Sure" means the reader's probability is at least
+    <strong>0.95</strong>.</p>
+  <table>
+    <tr><th>Who agrees</th><th>Text</th><th>Uncertain</th></tr>
+    <tr><td>Tesseract and the reader</td><td>that</td><td>no</td></tr>
+    <tr><td>Reader and group, against Tesseract</td><td>reader</td><td>unless the reader is sure</td></tr>
+    <tr><td>Tesseract and group, against the reader</td><td>Tesseract</td><td>if the reader was sure</td></tr>
+    <tr><td>Nobody</td><td>reader if sure, else Tesseract</td><td>yes</td></tr>
+    <tr><td>No Tesseract reading</td><td>reader</td><td>unless sure and no group disagrees</td></tr>
+  </table>
+
+  <h2>5. The language model</h2>
+  <ul>
+    <li><strong>Model:</strong> akshara <strong>trigrams</strong> with <strong>Witten-Bell</strong> smoothing (back-off to
+      bigrams and single aksharas; add-one for an akshara never seen). Learned from the book's Training Data labels in
+      reading order (a stretch ends at an unlabelled letter), its proofread lines and the word lists it uses. Spaces are
+      left out. Rebuilt when any of these changes.</li>
+    <li><strong>Candidates:</strong> a sure letter has only its reading (never changed). An uncertain one gets its reading
+      plus what the readers saw: Tesseract's text weighted by its confidence / 100, the reader's best 3 by probability,
+      the two nearest groups within 0.55 by 0.5 × (1 − distance); normalised to sum to 1.</li>
+    <li><strong>Search:</strong> beam search over the line (20 states, each the last two aksharas) maximising
+      Σ [1.0 × log P(akshara | previous two) + log candidate weight].</li>
+    <li><strong>Safety:</strong> each changed letter is checked alone: the line's score with the change must beat the score
+      without it by at least <strong>3</strong> (log probability, a factor of about 20). A changed letter stays uncertain and
+      keeps what it was (<code>lm_from</code>), shown underlined.</li>
+  </ul>
+
+  <h2>6. Line text and what is stored</h2>
+  <ul>
+    <li>Letters in reading order (x); printed books get a space where the gap to the previous letter is wider than
+      0.5 × the line's median letter width; handwriting gets none.</li>
+    <li>Gujarati by the fixed mapping; downloads write uncertain letters as <code>[?]</code>, <code>[?ક]</code> or the plain
+      guess.</li>
+    <li><code>page_text</code> keeps every letter with its sample, box, text, confidence, source, readings and, separately,
+      Tesseract's own decision (for "Tesseract only"); files in <code>text/read/&lt;page&gt;.txt</code> and
+      <code>.json</code>.</li>
+  </ul>
+
+  <h2>7. Proofreading and line truth</h2>
+  <ul>
+    <li>The text shown is the stored reading brought up to date with the samples: a letter whose sample is in a labelled
+      group shows the label (your correction); letters whose sample was split, joined or deleted give way to the new samples.
+      Correcting a letter labels its sample (an undoable action), which puts it in Training Data.</li>
+    <li>A proofread line keeps its text; converting again keeps its letters.</li>
+    <li><strong>Line truth</strong> is separate: what a whole line says, typed by you from Tesseract's whole-line reading
+      (no cutting at all), kept per line. It is the test set for comparing ways of reading, because it cannot be biased by
+      the cuts.</li>
+  </ul>
+
+  <h2 id="background">Would removing the background help?</h2>
+  <p><strong>The background is already removed before every engine.</strong></p>
+  <table>
+    <tr><th>Engine</th><th>What it gets</th></tr>
+    <tr><td>Grouping, letter reader</td><td>the letter's <em>ink mask</em> only (black and white, from the page's local
+      paper-relative threshold); paper, stains and colour never reach them</td></tr>
+    <tr><td>Tesseract</td><td>the line image with other lines' ink inpainted away, then <em>hard-binarised by Otsu</em>:
+      pure black on white</td></tr>
+  </table>
+  <p>So removing the background in itself would change nothing. What may matter is <em>how</em> the image is cleaned, and
+    these can be measured on your line truth:</p>
+  <ul>
+    <li><strong>Hard binarisation can hurt Tesseract.</strong> Its LSTM models were trained on grey, anti-aliased text. A
+      hard black-and-white image with one global Otsu threshold per line loses faint strokes (broken letters) or fattens
+      thick ones (closed loops). A <em>flattened grey</em> image (the page divided by its local paper tone, as in step 1 of
+      part 1) keeps the background white and the strokes' edges soft.</li>
+    <li><strong>Scale.</strong> Lines go to Tesseract unscaled, with letters about 70 px tall; Tesseract's models often do
+      better on smaller text. Scaling the letter bodies to 30–40 px (<code>ocr_letter_height</code>, already a setting) is a
+      cheap test.</li>
+    <li><strong>The border "|" marks.</strong> Page border rules that survive in a line image are read as "|"; removing
+      them from the line image before Tesseract would help directly.</li>
+    <li><strong>Denoising and stroke repair</strong> (small opening / closing, speck removal at the line level) can help
+      faded print, or hurt fine matras.</li>
+  </ul>
+  <p>All four can be compared on your checked lines, line by line, once enough lines are checked.</p>
+</main>
+</body>
+</html>

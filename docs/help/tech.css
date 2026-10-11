@@ -1,0 +1,66 @@
+/* Shared style of the technical help pages (tech*.html). Same colours as the other help pages. */
+:root {
+  --bg: #f6f4f0; --panel: #ffffff; --text: #22201d; --muted: #6b665e; --line: #e2ddd4;
+  --accent: #8a3b12; --ok: #1f7a3d; --warn: #9a6700; --tip: #eef6f0; --note: #fbf3e2;
+  --train: #8a3b12; --read: #1d5f8a; --data: #5b4a8a; --train-bg: #fbf1ea; --read-bg: #eaf2f8; --data-bg: #f1eef8;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1a18; --panel: #24221f; --text: #eeeae4; --muted: #a39d93; --line: #3a3732;
+    --accent: #e0915f; --ok: #4cc27a; --warn: #e6b450; --tip: #1f2b22; --note: #2e2717;
+    --train: #e0915f; --read: #6fb3e0; --data: #b3a3e6; --train-bg: #2c221c; --read-bg: #1a2730; --data-bg: #241f30;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1a18; --panel: #24221f; --text: #eeeae4; --muted: #a39d93; --line: #3a3732;
+  --accent: #e0915f; --ok: #4cc27a; --warn: #e6b450; --tip: #1f2b22; --note: #2e2717;
+  --train: #e0915f; --read: #6fb3e0; --data: #b3a3e6; --train-bg: #2c221c; --read-bg: #1a2730; --data-bg: #241f30;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+main { max-width: 940px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 4px; }
+h2 { font-size: 21px; margin: 36px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 17px; margin: 22px 0 6px; }
+p, li { max-width: 78ch; }
+.lead { color: var(--muted); margin: 0 0 16px; }
+a { color: var(--accent); }
+code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); border: 1px solid var(--line);
+  padding: 0 4px; border-radius: 4px; }
+nav.top { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; margin: 0 0 18px; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+nav.top a.here { font-weight: 700; color: var(--text); text-decoration: none; }
+table { border-collapse: collapse; width: 100%; background: var(--panel); margin: 10px 0; font-size: 14.5px; }
+th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: var(--bg); }
+td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.box { border-radius: 10px; padding: 10px 14px; margin: 14px 0; border: 1px solid var(--line); }
+.tip { background: var(--tip); }
+.note { background: var(--note); }
+pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto;
+  font: 13.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* flowcharts: boxes joined by arrows */
+.flow { display: flex; flex-direction: column; align-items: stretch; margin: 12px 0; }
+.stage { border: 2px solid var(--c, var(--line)); background: var(--bg-c, var(--panel)); border-radius: 12px;
+  padding: 10px 12px 8px; margin: 0 0 4px; }
+.stage.train { --c: var(--train); --bg-c: var(--train-bg); }
+.stage.read { --c: var(--read); --bg-c: var(--read-bg); }
+.stage.data { --c: var(--data); --bg-c: var(--data-bg); }
+.stage > .title { font-weight: 700; color: var(--c); margin: 0 0 6px; }
+.node { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--accent));
+  border-radius: 8px; padding: 7px 10px; font-size: 15px; }
+.node b { display: block; }
+.node .small { display: block; color: var(--muted); font-size: 13.5px; }
+.arrow { text-align: center; color: var(--muted); font-size: 18px; line-height: 1; padding: 3px 0; user-select: none; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.tag { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px; border: 1px solid currentColor; }
+@media (max-width: 640px) {
+  .row2, .row3 { grid-template-columns: 1fr; }
+  th, td { padding: 5px; }
+}

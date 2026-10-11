@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works</title>
+<!--
+  Technical help, served at /help/tech.html (linked from new-book.html). The overview of the whole route
+  with links to tech-cutting, tech-grouping, tech-training and tech-reading. Written from the code
+  (src/letter_extractor); keep it in step with it. Numbers are the defaults in config.py.
+-->
+<link rel="stylesheet" href="tech.css">
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Technical pages">
+    <a class="here" href="tech.html">Overview</a>
+    <a href="tech-cutting.html">1 · Cutting</a>
+    <a href="tech-grouping.html">2 · Grouping and labels</a>
+    <a href="tech-training.html">3 · Training and the reader</a>
+    <a href="tech-reading.html">4 · Reading a book</a>
+    <a href="new-book.html">Guide</a>
+  </nav>
+  <h1>How it works</h1>
+  <p class="lead">The technical route from page images to text: which algorithm runs at each step, how it scores and
+    decides, what images it works on and what is stored. Every value named here is a setting with its default
+    (<code>config.py</code>); a book can change its own settings.</p>
+
+  <div class="flow" aria-label="The whole route">
+    <div class="stage train">
+      <div class="title">Training Data (a few sample pages)</div>
+      <div class="node"><b>Page preparation</b><span class="small">Lab colour, local paper tone (median filter), black and red ink masks, ruled lines removed, text block</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Lines</b><span class="small">horizontal ink runs → row profile → line pitch by autocorrelation → headline peaks → headline traced in windows → boundaries → every ink blob given to a line</span></div>
+      <div class="arrow">↓</div>
+      <div class="row2">
+        <div class="node"><b>Letters by shape</b> <span class="tag">handwritten · printed</span><span class="small">headline breaks → stroke pieces → join rules (bars, i-hooks, dandas) → split wide letters → attach marks</span></div>
+        <div class="node"><b>Letters by Tesseract's reading</b> <span class="tag">printed, if chosen</span><span class="small">Tesseract reads the line → cut between its aksharas at the emptiest column</span></div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>ા bar fix</b> <span class="tag">printed</span><span class="small">an aa bar cut onto the next letter goes back</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Fingerprint per letter</b><span class="small">48 px normalised ink → 24×24 pixels + HOG (5×5 blocks × 36) + size; unit length, 1,478 numbers</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Automatic grouping</b><span class="small">leader clustering → merge close groups while compact → reassign; far samples → Unsure</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Label suggestions</b><span class="small">Tesseract readings aligned to letters (dynamic programming) · other labelled books (k nearest centres) · the letter reader → group votes</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Review</b><span class="small">you label, move, split, merge; every change is an undoable action</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Letter reader</b><span class="small">40 px features (pixels + HOG + size), varied copies, linear softmax or 1-layer network (NumPy, Adam), test on unseen pages</span></div>
+    </div>
+    <div class="arrow">↓</div>
+    <div class="stage read">
+      <div class="title">Read Book (the whole book)</div>
+      <div class="node"><b>PDF → page images</b><span class="small">pypdfium2 at 300 dpi, JPEG quality 95; or a folder of images</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Same preparation, lines and letters</b><span class="small">never grouped</span></div>
+      <div class="arrow">↓</div>
+      <div class="row3">
+        <div class="node"><b>Tesseract</b><span class="small">each line image, binarised (Otsu), hOCR with a box, confidence and alternatives per character</span></div>
+        <div class="node"><b>Your groups</b><span class="small">nearest labelled group centre (fingerprint distance)</span></div>
+        <div class="node"><b>Your letter reader</b><span class="small">probability per label, on letters it was taught</span></div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Vote per letter</b><span class="small">agreeing readers make a letter sure; disagreements are uncertain</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Language model</b><span class="small">akshara trigrams (Witten-Bell); beam search may change uncertain letters</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>Text, proofreading, downloads</b><span class="small">corrections become labels; proofread lines; line truth (whole lines, no cutting) as the test set</span></div>
+    </div>
+  </div>
+
+  <h2>The four parts</h2>
+  <table>
+    <tr><th>Page</th><th>What it explains</th></tr>
+    <tr><td><a href="tech-cutting.html">1 · Cutting</a></td><td>Page preparation, finding lines, cutting letters by shape (handwritten and printed) and by Tesseract's reading (printed), the ા bar fix, the letter images and masks.</td></tr>
+    <tr><td><a href="tech-grouping.html">2 · Grouping and labels</a></td><td>Fingerprints, the clustering algorithm, Unsure, how Tesseract's readings are matched to letters, suggestions from other books and the reader, the votes, splitting mixed groups, what is stored.</td></tr>
+    <tr><td><a href="tech-training.html">3 · Training and the reader</a></td><td>What counts as training data, the export, the reader's features, augmentation, the two networks, training and early stopping, the test, Check these.</td></tr>
+    <tr><td><a href="tech-reading.html">4 · Reading a book</a></td><td>PDF pages, conversion with Tesseract alone and with your groups and reader, the rules that decide each letter, the language model, uncertain letters, proofreading, line truth, and what removing the background would change.</td></tr>
+  </table>
+
+  <h2>Where things are kept</h2>
+  <p>Everything is in the library folder: one database (<code>library.db</code>, SQLite) and one folder per book.</p>
+  <table>
+    <tr><th>Table</th><th>One row per</th><th>Main columns</th></tr>
+    <tr><td><code>book</code></td><td>book</td><td>name, folder, input folder, <code>settings</code> (JSON overrides of the defaults), <code>writing</code> (printed / handwritten), Read Book folder or PDF, active <code>reader_id</code></td></tr>
+    <tr><td><code>page</code></td><td>page image</td><td>file, <code>part</code> (training / read), size, status, line spacing, sha256</td></tr>
+    <tr><td><code>line</code></td><td>line</td><td>number, box, ink colour, line image path</td></tr>
+    <tr><td><code>sample</code></td><td>cut letter</td><td>page, line, position, box, ink, kind (letter / danda / digit), image and mask paths, <code>fingerprint</code> (1,478 float32), <code>group_id</code>, distance to the group centre, source (auto / cropped / joined / split), deleted</td></tr>
+    <tr><td><code>letter_group</code></td><td>group</td><td>code (g0001…), kind, label (Devanagari and Gujarati), status (auto / reviewed / labelled), locked, rejected suggestion</td></tr>
+    <tr><td><code>ocr_run</code>, <code>ocr_reading</code></td><td>reading run; letter read</td><td>engine (tesseract / books / reader); per letter: text, confidence 0–100, alternatives</td></tr>
+    <tr><td><code>action</code></td><td>review change</td><td>kind, the state of every touched sample and group before and after (undo / redo)</td></tr>
+    <tr><td><code>reader</code></td><td>trained letter reader</td><td>kind, labels, what it learned from, accuracy per label, report; weights in <code>readers/&lt;folder&gt;/reader.npz</code></td></tr>
+    <tr><td><code>page_text</code></td><td>converted page</td><td>text, every letter with its readings (JSON), proofread lines</td></tr>
+    <tr><td><code>line_truth</code></td><td>checked line</td><td>what the line says (Devanagari NFC), what Tesseract read</td></tr>
+    <tr><td><code>word_list</code></td><td>imported text file</td><td>name, size, books that use it; text in <code>dictionaries/</code></td></tr>
+  </table>
+  <p>Labels are always stored in <strong>Devanagari, Unicode NFC</strong>; Gujarati is shown by a fixed character
+    mapping (the Gujarati block is the Devanagari block moved by 0x180, with a few exceptions such as the dandas).</p>
+</main>
+</body>
+</html>

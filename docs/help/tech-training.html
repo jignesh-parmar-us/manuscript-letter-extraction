@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training the reader</title>
+<!--
+  Technical help, part 3: training data, the export (app/export.py), the letter reader's features
+  (ocr/features.py), the networks (ocr/reader.py), training and Check these (app/readers.py).
+-->
+<link rel="stylesheet" href="tech.css">
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Technical pages">
+    <a href="tech.html">Overview</a>
+    <a href="tech-cutting.html">1 · Cutting</a>
+    <a href="tech-grouping.html">2 · Grouping and labels</a>
+    <a class="here" href="tech-training.html">3 · Training and the reader</a>
+    <a href="tech-reading.html">4 · Reading a book</a>
+  </nav>
+  <h1>3 · Training data and the letter reader</h1>
+  <p class="lead">The letter reader is a small neural network trained on your reviewed letters. It is written in NumPy
+    (PyTorch does not install on this computer), and it trains in about a minute.</p>
+
+  <div class="flow">
+    <div class="stage train">
+      <div class="title">Readers → Train</div>
+      <div class="node"><b>1. Training letters</b><span class="small">letters in labelled groups of the chosen books (reviewed only, unless asked); word labels left out unless asked; labels with fewer than N letters left out</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>2. Pages kept aside</b><span class="small">test pages (pages[3::7], about 15 %) and validation pages (pages[5::9], about 10 %)</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>3. Features + varied copies</b><span class="small">1,303 numbers per letter; 3 to 30 varied copies per letter</span></div>
+      <div class="arrow">↓</div>
+      <div class="row2">
+        <div class="node"><b>4a. Linear reader</b><span class="small">softmax regression</span></div>
+        <div class="node"><b>4b. Network</b><span class="small">one hidden layer of 384 ReLU units</span></div>
+      </div>
+      <div class="arrow">↓ the better on the validation pages is kept</div>
+      <div class="node"><b>5. Test</b><span class="small">accuracy on the test pages, per label, confusions</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>6. Check these</b><span class="small">4 folds by page: each letter read by a reader that did not see its page</span></div>
+      <div class="arrow">↓</div>
+      <div class="node"><b>7. Final reader on all pages</b> → saved, made the book's active reader, reads the book</div>
+    </div>
+  </div>
+
+  <h2>What the training data is</h2>
+  <ul>
+    <li>Every <strong>letter in a labelled group</strong> of the books you choose (books of the same writing). By default
+      only groups you <strong>reviewed or labelled</strong>; <em>also groups not reviewed</em> adds labels given by
+      Tesseract or other books.</li>
+    <li>Read Book letters you corrected in the Text view are in groups too, so they count.</li>
+    <li><strong>Word labels</strong> (several aksharas in one box) are left out unless <em>also word labels</em> is
+      ticked.</li>
+    <li>A label needs at least <strong>N letters</strong> (you choose; 5 by default, down to 1). Fewer: left out and
+      listed, and the reader cannot read that letter at all.</li>
+    <li>Nothing is copied: the reader reads the letters' <strong>masks</strong> from the book folder and their labels from
+      the database.</li>
+  </ul>
+  <p><strong>Export dataset</strong> (Training Data → Export) writes the same data for other tools: every letter of each
+    label in <code>dataset/&lt;category&gt;/&lt;letter&gt;/</code> (as cut, black on white, or 64 × 64), each line image with
+    its Gujarati text from the labels in <code>lines/</code> (<code>[?]</code> for an unlabelled letter),
+    <code>letters.csv</code>, <code>samples.csv</code> (traceable to page, line and box) and an overview page.</p>
+
+  <h2>The reader's features</h2>
+  <p>Finer than the grouping fingerprints, and they keep the letter's size, because the reader must tell a dot from a
+    letter and one letter from two. From the <strong>mask</strong>:</p>
+  <ol>
+    <li>crop to the ink, pad to a square (aspect ratio kept), resize to <strong>40 × 40</strong>, Gaussian blur σ = 0.8;</li>
+    <li><strong>pixels:</strong> the image at 20 × 20 = 400 values (0–1);</li>
+    <li><strong>HOG</strong> of the 40 px image: 6 × 6 cells, 9 direction bins, 2 × 2 block normalisation: 900 values;</li>
+    <li><strong>size:</strong> width / height, width / line spacing, height / line spacing: 3 values.</li>
+  </ol>
+  <p>1,303 numbers per letter, standardised (mean 0, spread 1, from the training letters) before the network.</p>
+
+  <h2>Varied copies (augmentation)</h2>
+  <p>Each training letter gets copies that vary as print and hand vary, made from its mask: rotation of up to ±4°, slant
+    (shear) of up to ±0.12, strokes 1 px thicker or thinner (2 × 2 dilation or erosion, each a third of the time), and in
+    30 % of the copies 8 % of the columns trimmed off one side (a cut slightly off). Rare labels get more copies:
+    <code>max(3, min(30, ⌈20 / letters⌉))</code>, so a label with 1 letter gets 20 copies and one with 500 gets 3.
+    Features and copies are computed once per training and reused by its six trainings.</p>
+
+  <h2>The networks and how they learn</h2>
+  <table>
+    <tr><th></th><th>Linear reader</th><th>Network</th></tr>
+    <tr><td>Shape</td><td>features → softmax over the labels</td><td>features → 384 ReLU units (dropout 0.2) → softmax</td></tr>
+    <tr><td>Initial weights</td><td>small random (σ 0.01)</td><td>He initialisation</td></tr>
+    <tr><td>Loss</td><td colspan="2">cross-entropy (the negative log probability of the right label)</td></tr>
+    <tr><td>Optimiser</td><td colspan="2"><strong>Adam</strong>, learning rate 0.002, mini-batches of 128, L2 weight decay 0.0001</td></tr>
+    <tr><td>Stopping</td><td colspan="2">up to 60 epochs; stops when the loss on the validation pages has not improved for 6 epochs; the weights of the best epoch are kept</td></tr>
+  </table>
+  <p>Both are trained; the one with the higher accuracy on the validation pages is kept (on the printed book the linear
+    reader won: 96.1 % against 95.3 % on the test pages).</p>
+
+  <h2>Test and report</h2>
+  <ul>
+    <li>The kept reader reads the <strong>test pages</strong>, which it never learned from: overall accuracy, accuracy for
+      labels with 20 or more letters, accuracy per label ("not measured" when a label has no test letter) and the most
+      confused pairs.</li>
+    <li>A label with no letter outside the kept-aside pages is trained on all its letters (so it can still be read), and
+      shows as "not measured".</li>
+    <li><em>Limits:</em> the test letters are letters of reviewed groups, mostly cleanly cut, so the accuracy describes clean
+      letters, not badly cut ones.</li>
+  </ul>
+
+  <h2>Check these</h2>
+  <p>The pages are split into 4 folds; for each fold a reader of the same kind is trained (12 epochs) on the other three
+    and reads that fold. A letter is listed when that reader reads it as <strong>another label with at least 90 %</strong>
+    probability. Letters of labelled but unreviewed groups are read by the final reader. In Review groups the list shows
+    only letters still where they were (same label, not deleted); <em>It is right</em> hides one (remembered in the
+    browser).</p>
+
+  <h2>The final reader</h2>
+  <ul>
+    <li>Trained on all pages (12 epochs), saved as <code>readers/&lt;folder&gt;/reader.npz</code> (weights, means and
+      spreads) and <code>reader.json</code> (labels, size), recorded in the <code>reader</code> table and made the active
+      reader of the books it learned from.</li>
+    <li>It then <strong>reads every Training Data letter</strong> of the book: one reading per letter (the most probable label,
+      confidence = probability × 100), stored as the book's <code>reader</code> run. It becomes the book's main source of
+      suggestions; it never splits groups by itself.</li>
+    <li>Each training makes a new reader; older ones are kept; <em>Use for this book</em> switches.</li>
+  </ul>
+</main>
+</body>
+</html>
