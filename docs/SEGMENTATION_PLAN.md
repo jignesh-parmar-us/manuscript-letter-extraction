@@ -2,7 +2,7 @@
 
 Plan for reading printed lines with our own data (the labelled groups, the letter reader and the language model) instead of Tesseract, by **sliding along the line and recognising letters as we go**, rather than cutting letters first. Agreed to plan on 2026-10-11; every stage is measured on the user's checked lines and has a stop point.
 
-Status: **stage 1 passed** (2026-10-11): the reader names 94.9% of real windows right at exact boundaries (gate: 90%). Stage 2 is next. Nothing is built into the app yet.
+Status: **stages 1 and 2 passed** (2026-10-11). Stage 1: the reader names 94.9% of real windows right at exact boundaries (gate: 90%). Stage 2: with a *not a letter* class and a tolerance band, 92.4% of real windows right and only 1.4% of wrong windows confidently called a letter (gates: 90%, 5%). Stage 3 is next. Nothing is built into the app yet.
 
 ---
 
@@ -130,6 +130,6 @@ Each stage is an experiment on a copy of the library first (scripts in the scrat
 | Stage | Date | Result | Decision |
 |---|---|---|---|
 | 1 | 2026-10-11 | Windows with the neighbours' ink, exact boundaries: 94.6% right (clean masks 95.3%); shifted by up to 10%: 89.7%. Training variants: 50 per label 94.7% (rare 80.7%, but shifted 87.1%); **balanced weights 94.9%** (common 98.4, middle 97.7, rare 79.5, shifted 89.7). 169 of 1,521 rare test letters had labels only on their own page. Mistakes are mostly top marks (ता→तां, मा→मां, ता→तो). | Passed; stage 2 with balanced weights |
-| 2 | | | |
+| 2 | 2026-10-11 | Negatives (halves, the letter with its neighbour, windows shifted 25–45%): 43,092. With all negatives weighing as much as all letters and no varied copies: real windows 88.6% right, 6.4% called *not a letter*, shifted ≤ 10% only 69.8%; weights 0.5 / 0.25 hardly changed it (89.7 / 89.8%). **With a tolerance band** (windows shifted 3–10% and the varied copies count as the letter; negatives at weight 0.25): exact windows **92.4%** (common 95.9, middle 96.5, rare 74.3), shifted ≤ 10% 87.0%, real letters called *not a letter* 1.6%; negatives called *not a letter* 95.8%, confidently called a letter **1.4%**. | Passed; stage 3 with this reader |
 | 3 | | | |
 | 4 | | | |

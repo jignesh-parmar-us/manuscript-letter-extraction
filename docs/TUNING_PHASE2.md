@@ -164,6 +164,19 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 Bands by the label's letters: common 100+ (4,452 letters), middle 20–99 (2,973), rare 1–19 (1,521; 169 of them have a label found only on their own page, so the fold's reader cannot know it). Commonest window mistakes: ता→तां, मा→मां, ता→तो, अ→अं, र→रे (top marks). Gate (≥ 90% at exact boundaries): passed.
 
+## Segmentation plan, stage 2: a reader that knows "not a letter" (2026-10-11)
+
+Same letters and folds as stage 1. Negatives made from the same lines (43,092): left and right halves, the letter with its right neighbour, windows shifted 25–45% of its width. One extra class *not a letter*; balanced weights per label.
+
+| Training | Exact windows right | Shifted ≤ 10% right | Real called *not a letter* | Negatives called *not a letter* | Negatives called a letter ≥ 0.9 |
+|---|---|---|---|---|---|
+| Negatives weigh as much as all letters; clean masks + exact windows only | 88.6% | 69.8% | 6.4% | 98.7% | 0.6% |
+| Negatives at 0.5 | 89.7% | 71.5% | 5.0% | 98.4% | 0.7% |
+| Negatives at 0.25 | 89.8% | 72.1% | 4.1% | 98.3% | 0.9% |
+| **Negatives at 0.25 + tolerance band** (windows shifted 3–10% and varied copies count as the letter) | **92.4%** | **87.0%** | 1.6% | 95.8% | **1.4%** |
+
+With the band: common 95.9%, middle 96.5%, rare 74.3% (stage 1 without *not a letter*: 79.5%). Labels most often given confidently to wrong windows: व, र, त, प, म, न (simple shapes that halves of wider letters resemble). Gates (≥ 90%, < 5%): passed.
+
 ## Checked lines: every way of reading (2026-10-11)
 
 **Truth:** 73 lines checked by hand in Line truth (8 Read Book pages of the printed 1933 book; 6,677 characters). The pages are also Training Data pages, so for the letter route the groups, the reader and the language model were rebuilt without the tested pages (4 folds of 2 pages) and the user's corrections were not used. CER = edit distance in code points, spaces and the border "|" left out. The truth was typed from Tesseract's whole-line reading, which slightly favours it.
