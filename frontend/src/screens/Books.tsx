@@ -4,6 +4,7 @@ import { api, AppInfo, BookSummary, localTime, Writing } from "../api";
 import WritingChoice from "../components/WritingChoice";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
+import FolderField from "../components/FolderField";
 import { go } from "../route";
 
 interface Props {
@@ -127,34 +128,8 @@ export default function Books({ info, onLibraryChanged }: Props) {
   );
 }
 
-function FolderField(props: { value: string; onChange: (v: string) => void; info: AppInfo | null; label: string }) {
-  async function browse() {
-    const { path } = await api.pickFolder();
-    if (path) props.onChange(path);
-  }
-  return (
-    <label className="field">
-      <span>{props.label}</span>
-      <span className="row">
-        <input
-          value={props.value}
-          onChange={(e) => props.onChange(e.target.value)}
-          placeholder="/path/to/the/page/images"
-          required
-        />
-        {props.info?.can_pick_folder && (
-          <button type="button" onClick={browse}>
-            Browse…
-          </button>
-        )}
-      </span>
-    </label>
-  );
-}
-
 function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void; onError: (e: unknown) => void }) {
   const [name, setName] = useState("");
-  const [folder, setFolder] = useState("");
   const [writing, setWriting] = useState<Writing>("handwritten");
   const [busy, setBusy] = useState(false);
 
@@ -162,7 +137,7 @@ function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void;
     e.preventDefault();
     setBusy(true);
     try {
-      const book = await api.createBook(name.trim(), folder.trim(), writing);
+      const book = await api.createBook(name.trim(), writing);
       props.onCreated(book.id);
     } catch (err) {
       props.onError(err);
@@ -178,10 +153,11 @@ function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void;
         <span>Name</span>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="For example: Vachanamrut, part 1" required />
       </label>
-      <FolderField label="Folder with the page images" value={folder} onChange={setFolder} info={props.info} />
       <WritingChoice value={writing} onChange={setWriting} />
-      <p className="muted small">The page images are only read, never changed.</p>
-      <button className="primary" type="submit" disabled={busy || !name.trim() || !folder.trim()}>
+      <p className="muted small">
+        The page images come next: in Pages &amp; capture for Training Data, in Read Book for the pages to read.
+      </p>
+      <button className="primary" type="submit" disabled={busy || !name.trim()}>
         Create book
       </button>
     </form>

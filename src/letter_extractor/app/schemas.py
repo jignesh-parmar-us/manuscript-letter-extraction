@@ -11,7 +11,7 @@ Writing = Literal["handwritten", "printed"]
 
 class BookCreate(BaseModel):
     name: str
-    input_dir: str
+    input_dir: str = ""                           # Training Data page images; may be chosen later
     settings: Optional[Dict[str, Any]] = None     # overrides of the default Config
     writing: Writing = "handwritten"
 

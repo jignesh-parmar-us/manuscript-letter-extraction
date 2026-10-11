@@ -85,6 +85,18 @@ class BookTests(ApiTestCase):
         self.assertEqual(self.client.delete(f"/api/books/{new['id']}", headers=H).status_code, 204)
         self.assertEqual(self.get(f"/api/books/{new['id']}").status_code, 404)
 
+    def test_book_without_a_folder(self):
+        r = self.post("/api/books", {"name": "Read only", "writing": "printed"})
+        self.assertEqual(r.status_code, 201)
+        bid = r.json()["id"]
+        self.assertEqual(r.json()["input_dir"], "")
+        self.assertEqual(self.get(f"/api/books/{bid}/page-problems").json(), [])
+        self.assertEqual(self.post(f"/api/books/{bid}/capture").status_code, 400)
+        self.assertEqual(self.post(f"/api/books/{bid}/folder", {"path": "/no/such/dir"}).status_code, 400)
+        r = self.post(f"/api/books/{bid}/folder", {"path": str(self.pages)})
+        self.assertEqual(r.json()["input_dir"], str(self.pages.resolve()))
+        self.assertEqual({p["problem"] for p in self.get(f"/api/books/{bid}/page-problems").json()}, {"new"})
+
     def test_writing(self):
         self.assertEqual(self.get(f"/api/books/{self.book}").json()["writing"], "handwritten")
         r = self.post("/api/books", {"name": "Print", "input_dir": str(self.pages), "writing": "printed"})

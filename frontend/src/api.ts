@@ -503,8 +503,8 @@ export const api = {
 
   books: () => get<BookSummary[]>("/api/books"),
   book: (id: number) => get<Book>(`/api/books/${id}`),
-  createBook: (name: string, input_dir: string, writing: Writing) =>
-    post<Book>("/api/books", { name, input_dir, writing }),
+  createBook: (name: string, writing: Writing) => post<Book>("/api/books", { name, writing }),
+  setInputFolder: (id: number, path: string) => post<Book>(`/api/books/${id}/folder`, { path }),
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
   setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
   suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),

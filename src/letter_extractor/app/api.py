@@ -6,7 +6,8 @@ header, or as `?token=` for images (an <img> tag cannot send headers). Other web
 same browser therefore cannot use the API.
 
 Routes (all JSON unless noted):
-  books      GET/POST /api/books, GET/PATCH/DELETE /api/books/{id}, GET /api/books/{id}/page-problems
+  books      GET/POST /api/books (the folder of page images optional), GET/PATCH/DELETE /api/books/{id},
+             POST /api/books/{id}/folder (the Training Data page images), GET /api/books/{id}/page-problems
   jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11) | /fix-cuts (C12b),
              GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
   ocr (C11)  GET /api/tesseract (installed? version, languages); groups carry `suggestion` and `readings`,
@@ -159,8 +160,14 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             cfg = load_config(None, **body.settings) if body.settings else None
         except (ValueError, TypeError) as e:
             raise HTTPException(400, f"Settings: {e}")
-        book = library.create_book(body.name, Path(body.input_dir).expanduser(), cfg, body.writing)
+        book = library.create_book(body.name, Path(body.input_dir) if body.input_dir.strip() else None, cfg,
+                                   body.writing)
         return get_book(book.id)
+
+    @app.post("/api/books/{book_id}/folder", dependencies=auth)
+    def input_folder(book_id: int, body: FolderPath) -> Dict:
+        library.set_input_folder(book_id, Path(body.path))
+        return get_book(book_id)
 
     @app.get("/api/books/{book_id}", dependencies=auth)
     def get_book(book_id: int) -> Dict:

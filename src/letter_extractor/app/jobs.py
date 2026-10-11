@@ -111,7 +111,7 @@ class Jobs:
                 raise LibraryError(f"This book is cut by Tesseract's reading: {e}") from e
 
     def capture(self, book_id: int, force: bool = False) -> Job:
-        self.lib.get_book(book_id)
+        self.lib.part_folder(self.lib.get_book(book_id), "training")      # refused without a folder
         self._check_cutter(book_id)
         if not force and self.lib.has_manual_work(book_id):
             raise BookHasReviewError("This book has groups, labels or other changes made by hand; "
@@ -281,5 +281,5 @@ class Jobs:
     def _images(self, book_id: int):
         from pathlib import Path
         from .. import io_utils
-        folder = Path(self.lib.get_book(book_id).input_dir)
-        return io_utils.scan_folder(folder)[0] if folder.is_dir() else []
+        input_dir = self.lib.get_book(book_id).input_dir
+        return io_utils.scan_folder(Path(input_dir))[0] if input_dir and Path(input_dir).is_dir() else []

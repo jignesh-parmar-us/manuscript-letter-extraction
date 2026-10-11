@@ -34,9 +34,9 @@ describe("Books", () => {
     vi.mocked(api.createBook).mockResolvedValue({ ...book, id: 7, settings: {}, undo: 0, redo: 0, job: null });
     render(<Books info={info} onLibraryChanged={() => {}} />);
     await userEvent.type(screen.getByPlaceholderText(/Vachanamrut, part 1/), "New book");
-    await userEvent.type(screen.getByPlaceholderText("/path/to/the/page/images"), "/pages");
+    expect(screen.queryByPlaceholderText("/path/to/the/page/images")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Create book" }));
-    expect(api.createBook).toHaveBeenCalledWith("New book", "/pages", "handwritten");
+    expect(api.createBook).toHaveBeenCalledWith("New book", "handwritten");
     await waitFor(() => expect(window.location.hash).toBe("#/books/7"));
   });
 
@@ -44,10 +44,9 @@ describe("Books", () => {
     vi.mocked(api.createBook).mockResolvedValue({ ...book, id: 8, writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null, settings: {}, undo: 0, redo: 0, job: null });
     render(<Books info={info} onLibraryChanged={() => {}} />);
     await userEvent.type(screen.getByPlaceholderText(/Vachanamrut, part 1/), "Printed book");
-    await userEvent.type(screen.getByPlaceholderText("/path/to/the/page/images"), "/pages");
     await userEvent.click(screen.getByRole("radio", { name: /Printed/ }));
     await userEvent.click(screen.getByRole("button", { name: "Create book" }));
-    expect(api.createBook).toHaveBeenCalledWith("Printed book", "/pages", "printed");
+    expect(api.createBook).toHaveBeenCalledWith("Printed book", "printed");
   });
 
   it("asks before deleting", async () => {
@@ -69,14 +68,5 @@ describe("Books", () => {
     await userEvent.type(field, "Renamed");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.renameBook).toHaveBeenCalledWith(1, "Renamed");
-  });
-
-  it("offers the folder dialog only in the app window", async () => {
-    const { unmount } = render(<Books info={info} onLibraryChanged={() => {}} />);
-    await screen.findByText("Vachanamrut");
-    expect(screen.queryByRole("button", { name: "Browse…" })).toBeNull();
-    unmount();
-    render(<Books info={{ ...info, mode: "window", can_pick_folder: true }} onLibraryChanged={() => {}} />);
-    expect((await screen.findAllByRole("button", { name: "Browse…" })).length).toBeGreaterThan(0);
   });
 });

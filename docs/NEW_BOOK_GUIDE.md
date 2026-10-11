@@ -17,7 +17,7 @@ The same guide is in the app: the **Help** link at the top right opens [docs/hel
 
 About 10 minutes of waiting for 20 to 25 pages, and a few clicks. Expect about a quarter of the letters to be labelled right after capture, and more after step 4 if you have other labelled books.
 
-1. **Create the book.** **Books** → **New book**: a name, the folder with the page images, and Writing **Printed**.
+1. **Create the book.** **Books** → **New book**: a name and Writing **Printed**. Then **Pages & capture** → **Folder with the page images** → **Use this folder** (only read, never changed; **Change…** points the book at a moved folder).
 2. **Choose the cutting before the first capture.** **Pages & capture** → **Cutting into letters** → **By Tesseract's reading**. Each line is cut into the letters Tesseract reads: about half as many letters left joined as with the shape cut.
 3. **Capture.** **Capture letters**, then wait (about 4 to 5 minutes for 23 pages). ા bars cut onto the next letter (નાર as ન + ાર) are given back to their letter. At the end, every letter has Tesseract's reading, groups that mixed two letters are split, and the groups Tesseract is sure about are labelled, marked *not reviewed*.
 4. **Learn from your other labelled books.** **Review groups** → **Details**: tick the labelled books of the same kind of print, then **Suggest from labelled books** (a few seconds). Each letter gets the label of the closest group you labelled there; where Tesseract and your books agree, the group's suggestion says so.
@@ -31,7 +31,7 @@ About 10 minutes of waiting for 20 to 25 pages, and a few clicks. Expect about a
 
 Tesseract reads handwriting poorly (about a third of the letters wrong), so the labels come from you and from your other handwritten books.
 
-1. **Create the book.** **Books** → **New book**, Writing **Handwritten**. The cutting stays **By the shapes of the ink**.
+1. **Create the book.** **Books** → **New book**, Writing **Handwritten**, then choose the page images folder in **Pages & capture**. The cutting stays **By the shapes of the ink**.
 2. **Capture.** **Capture letters**.
 3. **If you have another labelled handwritten book in the same hand:** **Review groups** → **Suggest from labelled books**, then **Split mixed groups** and **Accept N with ≥ 90 %**.
 4. **Otherwise, label the biggest groups by hand.** Sort the group list **by size** and label the largest 30 to 50 groups: they hold most of the letters. Use **Letters…** or type in Gujarati or Devanagari. These labels are what the letter reader (C14) learns this hand from, and what the next handwritten book will learn from.
@@ -75,6 +75,8 @@ Labels given by Tesseract or by other books are marked *not reviewed*. Check the
 ## 7. Reading the whole book (Read Book)
 
 Every book has two parts in the section menu: **Training Data** (everything above) and **Read Book**, the whole book to turn into text.
+
+> **Tip:** a printed book read only by Tesseract (**Text → Whole lines**) needs no Training Data: create it with just a name, skip Pages & capture, and start here.
 
 1. **Read Book → Upload & capture.** Type the path of the book's **PDF** and click **Use this PDF** (its pages become images in the book folder), or choose a **folder of page images**.
 2. **Cut the pages.** The pages are cut into lines and letters in the background, a few at a time. Stopping keeps the pages already cut; the next **Cut the remaining pages** continues.

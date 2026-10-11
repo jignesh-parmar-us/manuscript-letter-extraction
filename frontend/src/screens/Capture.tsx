@@ -1,9 +1,10 @@
 // "Pages & capture" tab: cut the book's pages into letters (capture), follow the progress,
 // add new pages, cut a single page again, and the settings used for that.
-import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import { api, ApiError, AppInfo, Book, Job, localTime, PageInfo, PageProblem, Writing } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
+import FolderField from "../components/FolderField";
 import { useJob } from "../components/useJob";
 import WritingChoice from "../components/WritingChoice";
 
@@ -28,7 +29,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   use_reader: "Reading with the letter reader",
 };
 
-export default function Capture({ book, onChanged }: Props) {
+export default function Capture({ book, info, onChanged }: Props) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [problems, setProblems] = useState<PageProblem[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -93,11 +94,8 @@ export default function Capture({ book, onChanged }: Props) {
       <ErrorBox error={error} onClose={() => setError(null)} />
 
       <div className="card">
-        <p className="small">
-          Page images: <code>{book.input_dir}</code>
-          <br />
-          Last capture: {localTime(book.captured_at)}
-        </p>
+        <PageFolder book={book} info={info} onChanged={onEnd} onError={setError} />
+        {book.input_dir && <p className="small">Last capture: {localTime(book.captured_at)}</p>}
         <WritingChoice value={book.writing} onChange={changeWriting} />
         {(book.writing === "printed" || cutMethod === "tesseract") && (
           <fieldset className="plain">
@@ -117,7 +115,7 @@ export default function Capture({ book, onChanged }: Props) {
         <div className="row">
           <button
             className="primary"
-            disabled={running}
+            disabled={running || !book.input_dir}
             onClick={() => start((force) => api.capture(book.id, force), "Capture anyway?")}
           >
             {book.captured_at ? "Capture again" : "Capture letters"}
@@ -178,6 +176,69 @@ export default function Capture({ book, onChanged }: Props) {
         </table>
       )}
     </div>
+  );
+}
+
+/** The folder of the Training Data page images: chosen here, not when the book is made, since a book
+ * read only by Tesseract (Read Book) needs none. */
+function PageFolder(props: { book: Book; info: AppInfo | null; onChanged: () => void; onError: (e: unknown) => void }) {
+  const { book } = props;
+  const [editing, setEditing] = useState(false);
+  const [folder, setFolder] = useState(book.input_dir);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await api.setInputFolder(book.id, folder.trim());
+      setEditing(false);
+      props.onChanged();
+    } catch (err) {
+      props.onError(err);
+    }
+  }
+
+  if (book.input_dir && !editing) {
+    return (
+      <p className="small">
+        Page images: <code>{book.input_dir}</code>{" "}
+        <button className="link" onClick={() => setEditing(true)}>
+          Change…
+        </button>
+      </p>
+    );
+  }
+  return (
+    <form onSubmit={save}>
+      {!book.input_dir && (
+        <p className="small muted">
+          Choose the folder with the Training Data page images, to cut them into letters. A book read only by Tesseract
+          (Read Book) needs none.
+        </p>
+      )}
+      <FolderField label="Folder with the page images" value={folder} onChange={setFolder} info={props.info} />
+      {book.input_dir && (
+        <p className="small muted">
+          The pages already captured are looked for in the new folder by their file names.
+        </p>
+      )}
+      <div className="row">
+        <button type="submit" disabled={!folder.trim()}>
+          Use this folder
+        </button>
+        {book.input_dir && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(false);
+              setFolder(book.input_dir);
+            }}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+      <p className="muted small">The page images are only read, never changed.</p>
+    </form>
   );
 }
 

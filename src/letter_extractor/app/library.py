@@ -143,6 +143,9 @@ class Library:
     def part_folder(self, book: Book, part: str) -> Path:
         """The folder of a part's page files: the input folder for Training Data, the read folder."""
         if part == "training":
+            if not book.input_dir:
+                raise LibraryError("This book has no folder of Training Data page images yet: choose one in "
+                                   "Pages & capture.")
             return Path(book.input_dir)
         folder = self.read_folder(book)
         if folder is None:
@@ -159,28 +162,44 @@ class Library:
         Training Data (as before the two parts), read/ for Read Book, so same-named pages never clash."""
         return "" if part == "training" else "read/"
 
-    def create_book(self, name: str, input_dir: Path, cfg: Optional[Config] = None,
-                    writing: str = "handwritten") -> Book:
-        name = name.strip()
-        _check_writing(writing)
-        if not name:
-            raise LibraryError("A book needs a name.")
-        input_dir = Path(input_dir)
+    def _check_input_dir(self, input_dir: Path) -> str:
+        input_dir = Path(input_dir).expanduser()
         if not input_dir.is_dir():
             raise LibraryError(f"Input folder does not exist or is not a folder: {input_dir}")
         if self.root.resolve() in [input_dir.resolve(), *input_dir.resolve().parents]:
             raise LibraryError("The input folder must not be inside the library folder.")
+        return str(input_dir.resolve())
+
+    def create_book(self, name: str, input_dir: Optional[Path] = None, cfg: Optional[Config] = None,
+                    writing: str = "handwritten") -> Book:
+        """A new book. The folder of Training Data page images may come later (`set_input_folder`): a book
+        read only by Tesseract needs none."""
+        name = name.strip()
+        _check_writing(writing)
+        if not name:
+            raise LibraryError("A book needs a name.")
+        folder = self._check_input_dir(input_dir) if input_dir else ""
         settings = json.dumps(dataclasses.asdict(cfg or Config()))
         with self.session() as s:
             if s.scalar(select(Book.id).where(Book.name == name)) is not None:
                 raise LibraryError(f"A book named '{name}' already exists.")
-            book = Book(name=name, folder=uuid.uuid4().hex, input_dir=str(input_dir.resolve()), settings=settings,
+            book = Book(name=name, folder=uuid.uuid4().hex, input_dir=folder, settings=settings,
                         writing=writing)
             s.add(book)
             s.flush()
             book.folder = f"{book.id:04d}-{_slug(name)}"
         self.book_dir(book).mkdir(parents=True, exist_ok=True)
         return book
+
+    def set_input_folder(self, book_id: int, input_dir: Path) -> None:
+        """The folder of the Training Data page images (only read, never changed). Pages captured from an
+        earlier folder are looked for in the new one (Pages & capture lists the ones missing there)."""
+        folder = self._check_input_dir(input_dir)
+        with self.session() as s:
+            b = s.get(Book, book_id)
+            if b is None:
+                raise NotFound(f"No book with id {book_id}.")
+            b.input_dir, b.updated_at = folder, now()
 
     def get_book(self, book_id: int) -> Book:
         with self.session() as s:
@@ -459,7 +478,7 @@ class Library:
         book = self.get_book(book_id)
         with self.session() as s:
             known = set(s.scalars(select(Page.file).where(Page.book_id == book_id, Page.folder == "training")))
-        images, _ = io_utils.scan_folder(Path(book.input_dir))
+        images, _ = io_utils.scan_folder(self.part_folder(book, "training"))
         new = [p.name for p in images if p.name not in known]
         if not new:
             return {"pages": 0, "lines": 0, "samples": 0, "files": []}
@@ -668,7 +687,7 @@ class Library:
     def check_pages(self, book_id: int, part: str = "training") -> List[Dict]:
         """Pages of a part whose file is missing or changed since capture, and new image files."""
         book = self.get_book(book_id)
-        folder = self.read_folder(book) if part == "read" else Path(book.input_dir)
+        folder = self.read_folder(book) if part == "read" else (Path(book.input_dir) if book.input_dir else None)
         problems = []
         if folder is None:
             return problems
