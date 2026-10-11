@@ -37,6 +37,21 @@ describe("TruthView", () => {
     expect(screen.getByRole("button", { name: "✓ નધરા" })).toBeInTheDocument();     // marked in the list
   });
 
+  it("puts letters from the palette at the cursor", async () => {
+    vi.mocked(api.saveTruth).mockResolvedValue({ line_id: 2, truth_dev: "नधरा", truth_guj: "નધરા" });
+    render(<TruthView book={book} pageId={9} />);
+    const input = (await screen.findByLabelText("What the line says")) as HTMLInputElement;
+    await waitFor(() => expect(input).toHaveValue("નબરા"));
+    input.setSelectionRange(1, 2);                                              // the wrong બ selected
+    await userEvent.click(screen.getByRole("button", { name: "ધ" }));
+    expect(input).toHaveValue("નધરા");
+    input.setSelectionRange(4, 4);
+    await userEvent.click(screen.getByRole("button", { name: "Remove last character" }));
+    expect(input).toHaveValue("નધર");
+    await userEvent.click(screen.getByRole("button", { name: "Space" }));
+    expect(input).toHaveValue("નધર ");
+  });
+
   it("shows a checked line's text and can uncheck it", async () => {
     vi.mocked(api.saveTruth).mockResolvedValue({ line_id: 1, truth_dev: null, truth_guj: null });
     render(<TruthView book={book} pageId={9} />);

@@ -1,11 +1,12 @@
 // Read Book → Line truth: what each line really says, checked by hand, as the test set every way of
 // reading is compared on. A line image is shown with Tesseract's reading of the whole line (no letter
 // cutting); correct it to what the line says, in Gujarati or Devanagari, and press Enter to save and go
-// to the next line. The text is kept per line, independent of the letter cuts.
+// to the next line. The text is kept per line, independent of the letter cuts. The on-screen letters
+// insert at the cursor: click where a letter is wrong, remove it (⌫) and click the right one.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, Book, TruthLine, TruthProgress } from "../api";
 import ErrorBox from "../components/ErrorBox";
-import { toGujarati } from "../components/LabelPicker";
+import LetterPalette, { toGujarati } from "../components/LetterPalette";
 import { go } from "../route";
 
 interface Props {
@@ -20,6 +21,7 @@ export default function TruthView({ book, pageId }: Props) {
   const [text, setText] = useState("");
   const [tesseract, setTesseract] = useState<{ dev: string; guj: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showLetters, setShowLetters] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const input = useRef<HTMLInputElement>(null);
 
@@ -65,6 +67,31 @@ export default function TruthView({ book, pageId }: Props) {
       live = false;
     };
   }, [line?.line_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Put `s` in place of the selection (or at the cursor) and keep the cursor after it. */
+  function insert(s: string) {
+    const el = input.current;
+    const a = el?.selectionStart ?? text.length;
+    const b = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, a) + s + text.slice(b);
+    setText(next);
+    window.requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(a + s.length, a + s.length);
+    });
+  }
+  /** Remove the selection, or the character before the cursor. */
+  function backspace() {
+    const el = input.current;
+    const a = el?.selectionStart ?? text.length;
+    const b = el?.selectionEnd ?? text.length;
+    const from = a < b ? a : a - (Array.from(text.slice(0, a)).pop()?.length ?? 0);
+    setText(text.slice(0, from) + text.slice(b));
+    window.requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(from, from);
+    });
+  }
 
   const pages = progress?.pages ?? [];
   const pageAt = pages.findIndex((p) => p.page_id === pageId);
@@ -163,7 +190,21 @@ export default function TruthView({ book, pageId }: Props) {
                 Not checked
               </button>
             )}
+            <button className="link" onClick={() => setShowLetters((v) => !v)}>
+              {showLetters ? "Hide letters" : "Letters…"}
+            </button>
           </div>
+          {showLetters && (
+            <LetterPalette
+              onKey={insert}
+              onBackspace={backspace}
+              extra={
+                <button onClick={() => insert(" ")} aria-label="Space">
+                  Space
+                </button>
+              }
+            />
+          )}
           {tesseract && <p className="small muted">Tesseract read: {tesseract.guj || "nothing"}</p>}
         </div>
       )}
