@@ -126,6 +126,13 @@ class ConvertRequest(BaseModel):
     mode: Literal["letters", "lines"] = "letters"     # "lines": Tesseract reads whole lines, no letter cutting
 
 
+class LineSearchRequest(BaseModel):
+    """The line search's second opinion on pages read whole: the given pages, or every page of a part."""
+    page_ids: Optional[List[int]] = None
+    part: Literal["training", "read"] = "read"
+    retrain: bool = False                         # train the line search reader again first
+
+
 class TrainRequest(BaseModel):
     """Train a letter reader (C14)."""
     books: Optional[List[int]] = None              # the books to learn from (default: this one)

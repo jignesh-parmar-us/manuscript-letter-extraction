@@ -95,6 +95,33 @@ class WholeLineTests(unittest.TestCase):
         with self.lib.session() as s:
             self.assertEqual(s.scalar(select(LineTruth.text_dev).where(LineTruth.line_id == self.lines)), "नारायण भगवान")
 
+    def test_the_line_search_marks_where_it_reads_differently(self):
+        from letter_extractor.app import linesearch
+        from letter_extractor.app.library import LibraryError
+        self.lib.set_book_config(self.book, Config(language_model=False))
+        with self.assertRaises(LibraryError):                                  # nothing read whole yet
+            linesearch.search_book(self.lib, self.book, [self.page])
+        read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)
+        with mock.patch.object(linesearch, "_load", return_value=(None, {"typical_width": 30.0, "widths": {}})), \
+                mock.patch.object(linesearch, "read_line", return_value=("नारायण भग", [], {})) as read, \
+                mock.patch.object(linesearch, "train_line_reader") as train:
+            r = linesearch.search_book(self.lib, self.book, [self.page])
+        train.assert_not_called()                                              # the book has its reader
+        self.assertEqual(r["pages"], 1)
+        self.assertGreater(read.call_count, 0)
+        first = page_whole_lines(self.lib, self.page)["lines"][0]
+        self.assertTrue(first["searched"])
+        marks = [(x["text_dev"], x.get("search_dev")) for x in first["aksharas"] if x["uncertain"]]
+        self.assertEqual(marks, [("व", "ण")])                                  # 60 for व, and the line search read ण
+        self.assertEqual(first["aksharas"][3]["search_guj"], "ણ")
+
+    def test_disagreements(self):
+        from letter_extractor.app.linesearch import disagreements
+        self.assertEqual(disagreements(["ना", "रा", "य"], "नारा य"), [None, None, None])
+        self.assertEqual(disagreements(["ना", "रा", "व"], "नाराण"), [None, None, "ण"])
+        self.assertEqual(disagreements(["ना", "रा", "य"], "ना"), [None, "", ""])          # read nothing there
+        self.assertEqual(disagreements(["ना", "व"], "नाकख"), [None, ""])                  # 1 against 2: no single reading
+
     def test_api_and_downloads(self):
         self.lib.set_book_config(self.book, Config(language_model=False))
         c = TestClient(create_app(self.lib, "t"))

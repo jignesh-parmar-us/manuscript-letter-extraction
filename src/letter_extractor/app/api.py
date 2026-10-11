@@ -51,7 +51,7 @@ from .centres import suggestions
 from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+from .schemas import (AcceptSuggestions, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
@@ -235,6 +235,17 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         """Correct a line read whole and / or mark it reviewed (a reviewed line becomes a checked line)."""
         from .wholelines import set_whole_line
         return set_whole_line(library, line_id, body.text, body.reviewed, body.shown)
+
+    @app.post("/api/books/{book_id}/line-search", dependencies=auth, status_code=202)
+    def line_search(book_id: int, body: LineSearchRequest = LineSearchRequest()) -> Dict:
+        """The line search's second opinion on the pages read whole (a job)."""
+        return jobs.line_search(book_id, body.page_ids, body.part, body.retrain).as_dict()
+
+    @app.get("/api/books/{book_id}/line-search", dependencies=auth)
+    def line_search_reader(book_id: int) -> Dict:
+        """The book's line-search reader: what it was trained on, or {"reader": null}."""
+        from .linesearch import line_reader_info
+        return {"reader": line_reader_info(library, book_id)}
 
     @app.get("/api/books/{book_id}/whole-lines", dependencies=auth)
     def whole_lines_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> List[Dict]:

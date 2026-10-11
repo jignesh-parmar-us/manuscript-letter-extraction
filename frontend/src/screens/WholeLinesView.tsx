@@ -107,13 +107,21 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
     setVersion((v) => v + 1);
     onChanged();
   }, [onChanged]);
-  const [job, setJob] = useJob(book.job?.kind === "convert" ? book.job : null, onEnd);
+  const [job, setJob] = useJob(book.job?.kind === "convert" || book.job?.kind === "line_search" ? book.job : null, onEnd);
   const running = job?.status === "running";
 
   async function readPages(ids?: number[]) {
     setError(null);
     try {
       setJob(await api.convert(book.id, ids, "lines"));
+    } catch (e) {
+      setError(e);
+    }
+  }
+  async function secondOpinion(ids?: number[]) {
+    setError(null);
+    try {
+      setJob(await api.lineSearch(book.id, ids));
     } catch (e) {
       setError(e);
     }
@@ -137,6 +145,7 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
   const cur = lines[Math.min(li, Math.max(0, lines.length - 1))] ?? null;
   const picked = cur && ai !== null && !cur.edited_dev ? cur.aksharas[ai] ?? null : null;
   const changed = lines.reduce((n, ln) => n + ln.aksharas.filter((x) => x.lm_dev).length, 0);
+  const searched = lines.filter((ln) => ln.searched).length;
   const reviewed = lines.filter((ln) => ln.reviewed).length;
 
   // the line's text in the correction box (Line by line) follows the current line
@@ -392,6 +401,13 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
         <span className="small muted">
           {nRead} of {pages.length} read
         </span>
+        <button
+          disabled={running || !nRead}
+          onClick={() => secondOpinion()}
+          title="The line search reads the pages read whole again, without Tesseract, using this book's reviewed letters; the aksharas where it reads differently are marked uncertain. The first time, it learns the letters first (a few minutes)."
+        >
+          Second opinion
+        </button>
         <span className="spacer" />
         <label className="row small" title="Tesseract's reading corrected by the book's language model (Read Book → Dictionary)">
           <input type="checkbox" checked={lm} onChange={(e) => chooseLm(e.target.checked)} />
@@ -454,6 +470,7 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
             <>
               <p className="small muted">
                 Tesseract read each line whole · {text.uncertain} uncertain aksharas (highlighted)
+                {searched > 0 && ` · second opinion on ${searched} of ${lines.length} lines`}
                 {lm && ` · ${changed} changed by the language model (underlined)`} · {reviewed} of {lines.length} lines reviewed ·
                 ← → aksharas, ↑ ↓ lines
               </p>
@@ -576,6 +593,8 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
                 <p className="small text-letter-info" aria-live="polite">
                   <strong>{aksharaText(picked, script, lm)}</strong> · Tesseract: {script === "gujarati" ? picked.text_guj : picked.text_dev} (
                   {Math.round(picked.conf)}){picked.lm_dev && ` · the language model: ${script === "gujarati" ? picked.lm_guj : picked.lm_dev}`}
+                  {picked.search_dev !== undefined &&
+                    ` · the line search: ${picked.search_dev ? (script === "gujarati" ? picked.search_guj : picked.search_dev) : "nothing here"}`}
                 </p>
               )}
             </>

@@ -115,7 +115,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "convert" | "train" | "use_reader";
+    | "convert" | "line_search" | "train" | "use_reader";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -208,6 +208,8 @@ export interface WholeAkshara {
   uncertain: boolean;
   lm_dev?: string; // the language model's reading, where it differs
   lm_guj?: string;
+  search_dev?: string; // the line search's reading, where it differs ("" where it read nothing)
+  search_guj?: string;
   box?: [number, number, number, number] | null; // on the page
 }
 
@@ -221,6 +223,7 @@ export interface WholeLine {
   edited_dev?: string; // your correction ("" when none)
   edited_guj?: string;
   reviewed?: boolean;
+  searched?: boolean; // the line search gave its second opinion
 }
 
 export interface WholeLines {
@@ -533,6 +536,10 @@ export const api = {
   checkThese: (id: number) => get<CheckItem[]>(`/api/books/${id}/check`),
   convert: (id: number, pageIds?: number[], mode: "letters" | "lines" = "letters") =>
     post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read", mode }),
+  lineSearch: (id: number, pageIds?: number[], retrain = false) =>
+    post<Job>(`/api/books/${id}/line-search`, { page_ids: pageIds ?? null, part: "read", retrain }),
+  lineSearchReader: (id: number) =>
+    get<{ reader: { letters: number; labels: number; trained_at: string; seconds: number } | null }>(`/api/books/${id}/line-search`),
   wholeLines: (pageId: number) => get<WholeLines>(`/api/pages/${pageId}/whole-lines`),
   saveWholeLine: (lineId: number, change: { text?: string; reviewed?: boolean; shown?: string }) =>
     put<{ line_id: number; edited_dev: string; edited_guj: string; reviewed: boolean }>(`/api/lines/${lineId}/whole`, change),

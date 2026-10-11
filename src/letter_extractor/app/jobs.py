@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | train | use_reader
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | line_search | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -188,6 +188,23 @@ class Jobs:
                 self.lib, book_id, page_ids, part, progress, cancel, tesseract_path=tesseract_path), total=total)
         return self.start(book_id, "convert", lambda progress, cancel: convert_book(
             self.lib, book_id, page_ids, part, progress, cancel, tesseract_path=tesseract_path), total=total)
+
+    def line_search(self, book_id: int, page_ids=None, part: str = "read", retrain: bool = False) -> Job:
+        """The line search's second opinion on the pages read whole (linesearch.py), training its reader
+        first when the book has none."""
+        from sqlalchemy import func, select
+        from .db import Line, Page, WholeLine
+        from .linesearch import search_book
+        self.lib.get_book(book_id)
+        with self.lib.session() as s:
+            q = (select(func.count(func.distinct(Page.id))).join(Line, Line.page_id == Page.id)
+                 .join(WholeLine, WholeLine.line_id == Line.id).where(Page.book_id == book_id))
+            q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
+            total = s.scalar(q) or 0
+        if not total:
+            raise LibraryError("No pages read whole yet: read the pages first (Read all pages).")
+        return self.start(book_id, "line_search", lambda progress, cancel: search_book(
+            self.lib, book_id, page_ids, part, retrain, progress, cancel), total=total)
 
     def train(self, book_id: int, books=None, min_samples: int = 5, include_unreviewed: bool = False,
               include_words: bool = False, name: str = "") -> Job:

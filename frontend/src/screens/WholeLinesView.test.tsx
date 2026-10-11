@@ -7,7 +7,8 @@ import TextView from "./TextView";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { ...real.api, pages: vi.fn(), bookWholeLines: vi.fn(), wholeLines: vi.fn(), convert: vi.fn(),
-    job: vi.fn(), cancelJob: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), proofreadStats: vi.fn(), saveWholeLine: vi.fn() } };
+    job: vi.fn(), cancelJob: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), proofreadStats: vi.fn(), saveWholeLine: vi.fn(),
+    lineSearch: vi.fn() } };
 });
 
 const book = { id: 4, job: null } as unknown as Book;
@@ -113,6 +114,24 @@ describe("Whole lines", () => {
     expect(screen.queryByRole("button", { name: "As a page" })).toBeNull();
     expect(document.querySelectorAll(".aligned-text")).toHaveLength(0);           // aligned text still off
     expect(screen.getByLabelText("Correct the line")).toBeInTheDocument();
+  });
+
+  it("asks the line search for a second opinion and shows what it read", async () => {
+    const t = text();
+    t.lines[0].searched = true;
+    t.lines[0].aksharas[1] = { ...t.lines[0].aksharas[1], uncertain: true, search_dev: "य", search_guj: "ય" };
+    vi.mocked(api.wholeLines).mockResolvedValue(t);
+    vi.mocked(api.lineSearch).mockResolvedValue({ id: "j", book_id: 4, kind: "line_search", status: "running", done: 0,
+      total: 1, current: "", pages: [], result: null, error: "", seconds: 0 });
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    const pane = await screen.findByLabelText("Lines");
+    await waitFor(() => expect(within(pane).getByText("રા")).toHaveClass("uncertain"));
+    expect(screen.getByText(/second opinion on 1 of 2 lines/)).toBeInTheDocument();
+    await userEvent.click(within(pane).getByText("રા"));
+    expect(screen.getByText(/the line search: ય/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Second opinion" }));
+    expect(api.lineSearch).toHaveBeenCalledWith(4, undefined);
+    expect(await screen.findByText(/Second opinion \(line search\)/)).toBeInTheDocument();
   });
 
   it("reads a page whole and switches to the cut-letter view", async () => {

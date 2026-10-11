@@ -25,6 +25,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   capture_read: "Cutting the Read Book pages",
   import_pdf: "Turning the PDF into page images",
   convert: "Converting pages into text",
+  line_search: "Second opinion (line search)",
   train: "Training a letter reader",
   use_reader: "Reading with the letter reader",
 };
@@ -277,7 +278,13 @@ export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) 
           {result.pages} pages converted: {result.letters} letters, {result.uncertain} uncertain
         </p>
       )}
-      {job.status === "done" && result && job.kind !== "convert" && (
+      {job.status === "done" && result && job.kind === "line_search" && (
+        <p className="small">
+          {result.pages} pages, {result.lines} lines read again by the line search; where it reads an akshara differently,
+          the akshara is marked uncertain
+        </p>
+      )}
+      {job.status === "done" && result && job.kind !== "convert" && job.kind !== "line_search" && (
         <p className="small">
           {result.pages} pages, {result.lines} lines, {result.samples} letters
           {"groups" in result && `, ${result.groups} groups, ${result.unsure} unsure`}

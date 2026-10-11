@@ -164,6 +164,18 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 Bands by the label's letters: common 100+ (4,452 letters), middle 20–99 (2,973), rare 1–19 (1,521; 169 of them have a label found only on their own page, so the fold's reader cannot know it). Commonest window mistakes: ता→तां, मा→मां, ता→तो, अ→अं, र→रे (top marks). Gate (≥ 90% at exact boundaries): passed.
 
+## Segmentation plan, stage 5: the second opinion in the app (2026-10-11)
+
+Text → Whole lines → **Second opinion** (`app/linesearch.py`), on a copy of the library, book 6, page Untitled-15.jpg (13 lines, no checked lines on it):
+
+| Step | Result |
+|---|---|
+| Learning the letters (first time) | 8,946 reviewed letters, 412 labels, 412 s (the test suite ran at the same time) |
+| Reading the page | 84 s for 13 lines (6.5 s per line) |
+| Marked uncertain | 73 of 651 aksharas (11.2%); on the 73 checked lines 19.4% |
+
+Seen in the first three lines: marks on Tesseract's stray signs and doubled viramas (पोा, वार््ती) and on likely misreadings (दत्तांत, साहित, रहे, ते, थो); some marks are the line search's own mistakes (मां→ना, री→ले); a mistake both make is not marked (करयो). Next: check Read Book lines in Whole lines (✓ makes them checked lines) to measure the marks on Read Book pages.
+
 ## Segmentation plan, stage 5: a faster line search (2026-10-11)
 
 `ocr/segment.py`, the stage-3 search as a module; the window features in one batch (`features_batch`, the same numbers, 0.76 -> 0.48 ms per window). Readers retrained per fold as in stage 3; settings bonus 4, language model 0.5, width 1.

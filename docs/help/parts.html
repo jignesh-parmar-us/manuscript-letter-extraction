@@ -126,6 +126,7 @@
     <tr><td>Review groups: suggestions</td><td>yes</td><td>—</td><td>yes (once trained)</td><td>—</td></tr>
     <tr><td>Review groups: Check these</td><td>—</td><td>—</td><td>yes</td><td>—</td></tr>
     <tr><td>Text → <strong>Whole lines</strong></td><td>yes, on the whole line</td><td>—</td><td>—</td><td>yes, if "With the language model" is ticked</td></tr>
+    <tr><td>Text → Whole lines, <strong>Second opinion</strong></td><td>—</td><td>yes: the reviewed letters teach the line search</td><td>its own (learns "not a letter" too)</td><td>yes</td></tr>
     <tr><td>Text → Cut letters, "Tesseract only"</td><td>yes, per letter</td><td>—</td><td>—</td><td>—</td></tr>
     <tr><td>Text → Cut letters, "Tesseract + your groups (and reader)"</td><td>yes, per letter</td><td>yes</td><td>yes, if trained</td><td>yes, if on in Dictionary</td></tr>
     <tr><td>Line truth</td><td>yes (to fill in the line for you to correct)</td><td>—</td><td>—</td><td>—</td></tr>
@@ -141,6 +142,10 @@
     <tr><td>Cut letters: + letter reader + language model</td><td class="num">7.5%</td><td>the letter reader makes the text worse on badly cut letters</td></tr>
     <tr><td>No Tesseract: groups + reader + language model</td><td class="num">27.7%</td><td>for printed books Tesseract is needed</td></tr>
   </table>
+  <p>The <strong>line search</strong> (no Tesseract; it tries every place a letter could start and end along the line and
+    keeps the best-reading path) gets 10.2% wrong alone: too many to replace Tesseract, but where it disagrees with
+    Tesseract it points at 88% of the remaining mistakes while marking a fifth of the aksharas. That is the
+    <em>Second opinion</em> in Whole lines.</p>
   <p>In short: <strong>Tesseract reads, the language model corrects</strong>. Groups and labels are how you teach the app
     your book; the letter reader is useful for finding wrongly grouped letters (Check these), but not for reading the
     text.</p>

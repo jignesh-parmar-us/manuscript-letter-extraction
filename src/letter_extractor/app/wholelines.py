@@ -12,6 +12,9 @@ become one of Tesseract's own alternatives for it when the line gets much more l
 `lm_min_gain`); the corrected reading is kept beside Tesseract's. Measured on the same lines with the
 user's word list: 5.06% -> 4.45%.
 
+With the line search's second opinion (linesearch.py, `search_dev`), the aksharas where it reads the
+line differently are also uncertain (and say what it read).
+
 A line can be corrected (`edited_dev`, shown and downloaded instead of the reading) and marked reviewed;
 a reviewed line is also kept as a checked line (Line truth), so every reviewed line joins the test set.
 Each akshara keeps its box on the page (Tesseract's character boxes), so the Text view can show it.
@@ -32,6 +35,7 @@ from ..ocr.aksharas import group_chars
 from ..ocr.language import correct_line, tesseract_options
 from .db import Book, Line, Page, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
+from .linesearch import disagreements
 from .suggest import LineDone, _workers, tesseract_reader
 
 
@@ -139,10 +143,13 @@ def page_whole_lines(lib: Library, page_id: int) -> Optional[Dict]:
         lines, low, read_at = [], 0, None
         for ln, w in rows:
             aks = json.loads(w.aksharas) if w is not None else []
+            other = disagreements([a[0] for a in aks], w.search_dev) if w is not None and w.search_dev \
+                else [None] * len(aks)
             items = [{"text_dev": a[0], "text_guj": mapping.gujarati(a[0]), "conf": a[1], "space": a[2],
-                      "uncertain": _uncertain(a[1], cfg), "box": a[4] if len(a) > 4 else None,
-                      **({"lm_dev": a[3], "lm_guj": mapping.gujarati(a[3])} if len(a) > 3 and a[3] else {})}
-                     for a in aks]
+                      "uncertain": _uncertain(a[1], cfg) or o is not None, "box": a[4] if len(a) > 4 else None,
+                      **({"lm_dev": a[3], "lm_guj": mapping.gujarati(a[3])} if len(a) > 3 and a[3] else {}),
+                      **({"search_dev": o, "search_guj": mapping.gujarati(o)} if o is not None else {})}
+                     for a, o in zip(aks, other)]
             low += sum(x["uncertain"] for x in items)
             if w is not None and (read_at is None or w.read_at > read_at):
                 read_at = w.read_at
@@ -151,7 +158,8 @@ def page_whole_lines(lib: Library, page_id: int) -> Optional[Dict]:
                           "text_dev": w.text_dev if w is not None else "",
                           "text_guj": mapping.gujarati(w.text_dev) if w is not None else "", "aksharas": items,
                           "edited_dev": edited, "edited_guj": mapping.gujarati(edited) if edited else "",
-                          "reviewed": bool(w.reviewed) if w is not None else False})
+                          "reviewed": bool(w.reviewed) if w is not None else False,
+                          "searched": bool(w is not None and w.search_dev)})
         return {"page_id": page_id, "lines": lines, "uncertain": low,
                 "read_at": read_at.isoformat() if read_at else None}
 
