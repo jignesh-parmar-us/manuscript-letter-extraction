@@ -164,6 +164,30 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 Bands by the label's letters: common 100+ (4,452 letters), middle 20–99 (2,973), rare 1–19 (1,521; 169 of them have a label found only on their own page, so the fold's reader cannot know it). Commonest window mistakes: ता→तां, मा→मां, ता→तो, अ→अं, र→रे (top marks). Gate (≥ 90% at exact boundaries): passed.
 
+## Segmentation plan, stage 4: the line search as a second opinion (2026-10-11)
+
+The 73 checked lines; Tesseract's whole-line reading (aksharas, confidences, alternatives) aligned with the stage-3 reading (settings from the other half of the pages) by akshara (difflib); the language model as in stage 3.
+
+| | Characters wrong |
+|---|---|
+| Tesseract alone | 5.06% |
+| Tesseract + language model | **4.45%** |
+| Line search alone | 11.11% |
+| Vote: the differing aligned stage-3 akshara as one more candidate (weight 0.25 / 0.5 / 1 / 2) | 5.78 / 6.25 / 6.62 / 7.01% |
+
+**Uncertain marks** where the line search disagrees with Tesseract + language model: 19.4% of the aksharas marked, and 244 of the 277 aksharas still wrong (88%) among them. Tesseract alone marks 0.2% (its confidence stays high when it is wrong).
+
+## Segmentation plan, stage 3: reading lines without Tesseract (2026-10-11)
+
+The 73 checked lines; each line's ink is its Read Book samples pasted together (used only as ink). Windows between candidate boundaries, 0.2–2.4 × the typical letter width (54 px), read by the stage-2 reader (linear, labels + *not a letter*); beam search (beam 10, best 4 labels per window) scoring log p(label) + a bonus per letter (4) − a width penalty (log of width / the label's median width, σ 0.3) + 0.5 × the language model (word list + labels of the other pages). Folds of 2 pages; settings chosen on one half of the pages, scored on the other.
+
+| Candidate boundaries | Characters wrong |
+|---|---|
+| Gaps and thin points below the headline only | 30.1% (197 unreadable stretches where letters touch) |
+| **Every 6 px + gaps and thin points** | **11.1%** (halves: 10.2%, 11.7%) |
+
+For comparison: Tesseract on whole lines 5.06%, + language model 4.45%; the letter route without Tesseract 27.7%.
+
 ## Segmentation plan, stage 2: a reader that knows "not a letter" (2026-10-11)
 
 Same letters and folds as stage 1. Negatives made from the same lines (43,092): left and right halves, the letter with its right neighbour, windows shifted 25–45% of its width. One extra class *not a letter*; balanced weights per label.
