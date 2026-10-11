@@ -688,7 +688,7 @@ Rules that carry over from Phase 1:
 
 **Built:** Read Book → Text opens with **Whole lines (Tesseract)** / **Cut letters**. Whole lines: each line image goes to Tesseract as it is (no letters cut), kept per line with its aksharas and confidences (`WholeLine`, migration 0011, `app/wholelines.py`), with the language model's corrections beside it (`ocr.language.tesseract_options`); *With the language model* switches the view and the downloads (`readers=lines|lines_lm`). Cut letters is the earlier view, with proofreading.
 
-**Next:** decide whether the letter route keeps the reader in conversion (it hurts on the checked lines); fine-tune Tesseract on the book (needs Tesseract's training tools and more checked lines); other engines if the user agrees.
+**Next:** decide whether the letter route keeps the reader in conversion (it hurts on the checked lines); fine-tune Tesseract on the book (needs Tesseract's training tools and more checked lines); other engines if the user agrees. **Reading lines without Tesseract** by segmentation by recognition (the user's idea): planned in stages with stop points in `docs/SEGMENTATION_PLAN.md` (2026-10-11).
 
 ### Part E: line recognizer (optional, later)
 
