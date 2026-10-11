@@ -1,7 +1,8 @@
 // The on-screen letters (consonants, conjuncts, joined letters, vowel signs, marks, digits, punctuation)
 // in Gujarati or Devanagari: the label picker builds labels with it, the line truth screen corrects lines.
 // A key gives its text in the palette's script; vowel signs and marks attach to the letter before them.
-import { useState } from "react";
+import { ReactNode, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type Script = "gujarati" | "devanagari";
 
@@ -42,11 +43,23 @@ interface Props {
   onKey: (text: string) => void; // a key's text, in the palette's script
   onBackspace: () => void;
   onEmpty?: () => void;
-  extra?: React.ReactNode; // more keys on the first row (a space, for a line)
+  extra?: ReactNode; // more keys on the first row (a space, for a line)
   initialScript?: Script;
+  overlay?: boolean; // shown on top of the screen (bottom), not inside a scrolling panel
+  onClose?: () => void;
 }
 
-export default function LetterPalette({ onKey, onBackspace, onEmpty, extra, initialScript = "gujarati" }: Props) {
+export default function LetterPalette(props: Props) {
+  if (!props.overlay) return <Palette {...props} />;
+  return createPortal(
+    <div className="palette-overlay">
+      <Palette {...props} />
+    </div>,
+    document.body,
+  );
+}
+
+function Palette({ onKey, onBackspace, onEmpty, extra, initialScript = "gujarati", overlay, onClose }: Props) {
   const [script, setScript] = useState<Script>(initialScript);
   return (
     <div className="palette" role="group" aria-label="Letters">
@@ -63,6 +76,11 @@ export default function LetterPalette({ onKey, onBackspace, onEmpty, extra, init
           ⌫
         </button>
         {onEmpty && <button onClick={onEmpty}>Empty</button>}
+        {overlay && onClose && (
+          <button className="palette-close" onClick={onClose}>
+            Close
+          </button>
+        )}
       </div>
       {SECTIONS.map((sec) => (
         <div key={sec.key} className="palette-row">

@@ -63,6 +63,38 @@ class WholeLineTests(unittest.TestCase):
         x = page_whole_lines(self.lib, self.page)["lines"][0]["aksharas"][3]
         self.assertEqual((x["text_dev"], x["lm_dev"]), ("व", "ण"))              # Tesseract's reading is kept beside it
 
+    def test_aksharas_keep_their_box_on_the_page(self):
+        self.lib.set_book_config(self.book, Config(language_model=False))
+        read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)
+        with self.lib.session() as s:
+            ln = s.get(Line, self.lines)
+            ox, oy = max(0, ln.x - 6), max(0, ln.y - 6)                       # the line image's corner on the page
+        x = page_whole_lines(self.lib, self.page)["lines"][0]["aksharas"][0]
+        self.assertEqual(x["box"], [ox, oy, 10, 10])
+
+    def test_a_line_is_corrected_and_reviewed_and_becomes_a_checked_line(self):
+        from letter_extractor.app.db import LineTruth
+        from letter_extractor.app.wholelines import set_whole_line
+        self.lib.set_book_config(self.book, Config(language_model=False))
+        read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)
+        got = set_whole_line(self.lib, self.lines, text="નારાયણ ભગ")
+        self.assertEqual((got["edited_dev"], got["reviewed"]), ("नारायण भग", False))
+        with self.lib.session() as s:
+            self.assertIsNone(s.scalar(select(LineTruth).where(LineTruth.line_id == self.lines)))
+        set_whole_line(self.lib, self.lines, reviewed=True)
+        with self.lib.session() as s:
+            self.assertEqual(s.scalar(select(LineTruth.text_dev).where(LineTruth.line_id == self.lines)), "नारायण भग")
+        line = page_whole_lines(self.lib, self.page)["lines"][0]
+        self.assertEqual((line["edited_dev"], line["reviewed"]), ("नारायण भग", True))
+        read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)    # reading again keeps them
+        self.assertTrue(page_whole_lines(self.lib, self.page)["lines"][0]["reviewed"])
+        set_whole_line(self.lib, self.lines, reviewed=False)
+        with self.lib.session() as s:
+            self.assertIsNone(s.scalar(select(LineTruth).where(LineTruth.line_id == self.lines)))
+        set_whole_line(self.lib, self.lines, text="", reviewed=True, shown="नारायण भगवान")   # as shown
+        with self.lib.session() as s:
+            self.assertEqual(s.scalar(select(LineTruth.text_dev).where(LineTruth.line_id == self.lines)), "नारायण भगवान")
+
     def test_api_and_downloads(self):
         self.lib.set_book_config(self.book, Config(language_model=False))
         c = TestClient(create_app(self.lib, "t"))
@@ -82,6 +114,11 @@ class WholeLineTests(unittest.TestCase):
         self.assertIn("नारायव भग", txt)
         marked = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&page_id={self.page}&token=t").text
         self.assertIn("નારાય[?] ભગ", marked)
+        r = c.put(f"/api/lines/{self.lines}/whole", json={"text": "नारायण भग", "reviewed": True}, headers=h).json()
+        self.assertTrue(r["reviewed"])
+        txt = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&script=devanagari"
+                    f"&page_id={self.page}&token=t").text
+        self.assertIn("नारायण भग", txt)                                             # the correction is downloaded
         c.close()
 
 

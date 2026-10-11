@@ -51,7 +51,7 @@ from .db import Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
-                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText,
+                      ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
@@ -223,6 +223,12 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             raise HTTPException(404, "This page's lines are not read yet.")
         return got
 
+    @app.put("/api/lines/{line_id}/whole", dependencies=auth)
+    def edit_whole_line(line_id: int, body: WholeLineEdit) -> Dict:
+        """Correct a line read whole and / or mark it reviewed (a reviewed line becomes a checked line)."""
+        from .wholelines import set_whole_line
+        return set_whole_line(library, line_id, body.text, body.reviewed, body.shown)
+
     @app.get("/api/books/{book_id}/whole-lines", dependencies=auth)
     def whole_lines_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> List[Dict]:
         from .wholelines import book_whole_lines
@@ -289,6 +295,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             mark = marker or cfg.uncertain_marker
 
             def line_of(ln):
+                if ln.get("edited_dev"):                     # the user's correction wins
+                    return ln["edited_guj"] if script == "gujarati" else ln["edited_dev"]
                 out = ""
                 for x in ln["aksharas"]:
                     t = x.get("lm_dev", x["text_dev"]) if readers == "lines_lm" else x["text_dev"]

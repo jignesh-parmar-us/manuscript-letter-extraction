@@ -1,16 +1,21 @@
 // Read Book → Text → Whole lines: each line image read by Tesseract as it is, without cutting letters
 // (measured best on the hand-checked lines: 5.1% of the characters wrong; 4.5% with the language model).
-// The page and its text side by side or one above the other; clicking a line shows it on the page and
-// clicking an akshara shows what Tesseract and the language model read. "With the language model" shows
-// the corrected reading (changed aksharas underlined); downloads follow the choice.
-import { useCallback, useEffect, useState } from "react";
-import { api, Book, Marker, PageInfo, TextSource, WholeAkshara, WholeLines } from "../api";
+//
+// Two layouts: "Whole page" (the page above its text) and "Line by line" (one line cropped from the page,
+// its text and its correction below, ◀ ▶ between lines). Clicking an akshara shows it on the page; the arrow
+// keys move between aksharas (← →) and lines (↑ ↓). A line can be corrected (✎, or the box in Line by line)
+// and marked reviewed (✓): a reviewed line is also kept as a checked line (Line truth). "With the language
+// model" shows the corrected reading (changed aksharas underlined); downloads follow it and the corrections.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, Book, Marker, PageInfo, TextSource, WholeAkshara, WholeLine, WholeLines } from "../api";
 import ErrorBox from "../components/ErrorBox";
+import LetterPalette from "../components/LetterPalette";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
+import LineCrop, { AlignedText } from "./LineCrop";
+import type { Layout } from "./TextView";
 
-type Layout = "side" | "stacked";
 type Script = "gujarati" | "devanagari";
 const FONT = `"Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif`;
 
@@ -18,6 +23,7 @@ interface Props {
   book: Book;
   pageId: number | null;
   onChanged: () => void;
+  layout: Layout;
 }
 
 function aksharaText(x: WholeAkshara, script: Script, lm: boolean): string {
@@ -25,9 +31,15 @@ function aksharaText(x: WholeAkshara, script: Script, lm: boolean): string {
   return script === "gujarati" ? x.text_guj : x.text_dev;
 }
 
+/** A line as shown: your correction, or the reading (with or without the language model). */
+function lineText(ln: WholeLine, script: Script, lm: boolean): string {
+  if (ln.edited_dev) return script === "gujarati" ? ln.edited_guj ?? "" : ln.edited_dev;
+  return ln.aksharas.map((x) => (x.space ? " " : "") + aksharaText(x, script, lm)).join("");
+}
+
 /** A page's lines as plain text (no markers), for the picture and the PDF. */
 export function wholePlainLines(t: WholeLines, script: Script, lm: boolean): string[] {
-  return t.lines.map((ln) => ln.aksharas.map((x) => (x.space ? " " : "") + aksharaText(x, script, lm)).join(""));
+  return t.lines.map((ln) => lineText(ln, script, lm));
 }
 
 function storedLm(): boolean {
@@ -38,19 +50,39 @@ function storedLm(): boolean {
   }
 }
 
-export default function WholeLinesView({ book, pageId, onChanged }: Props) {
+/** Arrow keys outside text boxes: ← → by `step` letters, ↑ ↓ by `line` lines. */
+export function useArrowKeys(onMove: (step: number, line: number) => void) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      const move = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] }[e.key];
+      if (!move) return;
+      e.preventDefault();
+      onMove(move[0], move[1]);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onMove]);
+}
+
+export default function WholeLinesView({ book, pageId, onChanged, layout }: Props) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [read, setRead] = useState<Map<number, number>>(new Map()); // page id -> lines read
   const [text, setText] = useState<WholeLines | null>(null);
-  const [layout, setLayout] = useState<Layout>("side");
   const [script, setScript] = useState<Script>("gujarati");
   const [marker, setMarker] = useState<Marker>("none");
   const [lm, setLm] = useState(storedLm);
-  const [line, setLine] = useState<number | null>(null); // a line id
-  const [picked, setPicked] = useState<WholeAkshara | null>(null);
+  const [li, setLi] = useState(0); // the current line
+  const [ai, setAi] = useState<number | null>(null); // the selected akshara of that line
+  const [editing, setEditing] = useState<number | null>(null); // a line id (Whole page)
+  const [draft, setDraft] = useState("");
+  const [letters, setLetters] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [printing, setPrinting] = useState<WholeLines[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.pages(book.id, "read").then(setPages, setError);
@@ -62,11 +94,12 @@ export default function WholeLinesView({ book, pageId, onChanged }: Props) {
   const isRead = pageId !== null && read.has(pageId);
   useEffect(() => {
     setText(null);
-    setLine(null);
-    setPicked(null);
+    setAi(null);
+    setEditing(null);
     if (pageId === null || !isRead) return;
     api.wholeLines(pageId).then(setText, setError);
   }, [pageId, isRead, version]);
+  useEffect(() => setLi(0), [pageId]);
 
   const onEnd = useCallback(() => {
     setVersion((v) => v + 1);
@@ -98,25 +131,98 @@ export default function WholeLinesView({ book, pageId, onChanged }: Props) {
   const next = at >= 0 && at < pages.length - 1 ? pages[at + 1] : undefined;
   const nRead = pages.filter((p) => read.has(p.id)).length;
   const source: TextSource = lm ? "lines_lm" : "lines";
-  const changed = text ? text.lines.reduce((n, ln) => n + ln.aksharas.filter((x) => x.lm_dev).length, 0) : 0;
-  const selLine = text?.lines.find((l) => l.line_id === line) ?? null;
+  const lines = text?.lines ?? [];
+  const cur = lines[Math.min(li, Math.max(0, lines.length - 1))] ?? null;
+  const picked = cur && ai !== null && !cur.edited_dev ? cur.aksharas[ai] ?? null : null;
+  const changed = lines.reduce((n, ln) => n + ln.aksharas.filter((x) => x.lm_dev).length, 0);
+  const reviewed = lines.filter((ln) => ln.reviewed).length;
+
+  // the line's text in the correction box (Line by line) follows the current line
+  useEffect(() => {
+    if (cur) setDraft(lineText(cur, script, lm));
+    setLetters(false);
+  }, [cur?.line_id, cur?.edited_dev, script, lm]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ← → between aksharas (and on to the next line), ↑ ↓ between lines
+  const onMove = useCallback(
+    (step: number, line: number) => {
+      if (!lines.length) return;
+      if (line) {
+        setLi((i) => Math.max(0, Math.min(lines.length - 1, i + line)));
+        setAi(0);
+        return;
+      }
+      const n = cur && !cur.edited_dev ? cur.aksharas.length : 0;
+      const nextAi = (ai ?? (step > 0 ? -1 : n)) + step;
+      if (nextAi >= 0 && nextAi < n) setAi(nextAi);
+      else if (nextAi >= n && li < lines.length - 1) {
+        setLi(li + 1);
+        setAi(0);
+      } else if (nextAi < 0 && li > 0) {
+        const p = lines[li - 1];
+        setLi(li - 1);
+        setAi(p.edited_dev ? null : p.aksharas.length - 1);
+      }
+    },
+    [lines, cur, ai, li],
+  );
+  useArrowKeys(onMove);
+
+  async function saveLine(ln: WholeLine, change: { text?: string; reviewed?: boolean }) {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.saveWholeLine(ln.line_id, { ...change, shown: lineText(ln, "devanagari", lm) });
+      setText((t) => t && { ...t, lines: t.lines.map((l) => (l.line_id === ln.line_id ? { ...l, ...r } : l)) });
+      setEditing(null);
+      return true;
+    } catch (e) {
+      setError(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Put `s` in place of the selection of the correction box and keep the cursor after it. */
+  function insert(s: string) {
+    const el = input.current;
+    const a = el?.selectionStart ?? draft.length;
+    const b = el?.selectionEnd ?? draft.length;
+    setDraft(draft.slice(0, a) + s + draft.slice(b));
+    window.setTimeout(() => {
+      el?.focus();
+      el?.setSelectionRange(a + s.length, a + s.length);
+    }, 0);
+  }
+  function backspace() {
+    const el = input.current;
+    const a = el?.selectionStart ?? draft.length;
+    const b = el?.selectionEnd ?? draft.length;
+    const from = a < b ? a : a - (Array.from(draft.slice(0, a)).pop()?.length ?? 0);
+    setDraft(draft.slice(0, from) + draft.slice(b));
+    window.setTimeout(() => {
+      el?.focus();
+      el?.setSelectionRange(from, from);
+    }, 0);
+  }
 
   function downloadPicture() {
     if (!text || !page) return;
-    const lines = wholePlainLines(text, script, lm);
+    const plain = wholePlainLines(text, script, lm);
     const size = 30;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.font = `${size}px ${FONT}`;
-    canvas.width = Math.ceil(Math.max(200, ...lines.map((l) => ctx.measureText(l).width))) + 2 * size;
-    canvas.height = lines.length * size * 1.7 + size;
+    canvas.width = Math.ceil(Math.max(200, ...plain.map((l) => ctx.measureText(l).width))) + 2 * size;
+    canvas.height = plain.length * size * 1.7 + size;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#111";
     ctx.font = `${size}px ${FONT}`;
     ctx.textBaseline = "top";
-    lines.forEach((l, i) => ctx.fillText(l, size, size / 2 + i * size * 1.7));
+    plain.forEach((l, i) => ctx.fillText(l, size, size / 2 + i * size * 1.7));
     canvas.toBlob((blob) => {
       if (!blob) return;
       const a = document.createElement("a");
@@ -141,6 +247,120 @@ export default function WholeLinesView({ book, pageId, onChanged }: Props) {
     window.setTimeout(() => window.print(), 50);
     return () => window.removeEventListener("afterprint", done);
   }, [printing]);
+
+  /** One line's aksharas, clickable (or its correction, as plain text). */
+  function lineSpans(ln: WholeLine, i: number) {
+    if (ln.edited_dev)
+      return (
+        <span className="edited" title="Your correction">
+          {script === "gujarati" ? ln.edited_guj : ln.edited_dev}
+        </span>
+      );
+    return ln.aksharas.map((x, k) => (
+      <span key={k}>
+        {x.space && " "}
+        <span
+          className={`text-letter${x.uncertain ? " uncertain" : ""}${lm && x.lm_dev ? " lm" : ""}${i === li && k === ai ? " selected" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setLi(i);
+            setAi(k);
+          }}
+        >
+          {aksharaText(x, script, lm)}
+        </span>
+      </span>
+    ));
+  }
+
+  function reviewButton(ln: WholeLine, i: number) {
+    return (
+      <button
+        className={`proofread-mark${ln.reviewed ? " done" : ""}`}
+        disabled={busy}
+        aria-label={`Line ${i + 1} ${ln.reviewed ? "reviewed" : "not reviewed"}`}
+        title={ln.reviewed ? "Reviewed (also a checked line in Line truth): click to undo" : "Mark this line reviewed: its text is right"}
+        onClick={(e) => {
+          e.stopPropagation();
+          saveLine(ln, { reviewed: !ln.reviewed });
+        }}
+      >
+        ✓
+      </button>
+    );
+  }
+
+  /** A line's text under its strip: each akshara under its letter, or plain text for a corrected line. */
+  function lineTextRow(ln: WholeLine, i: number) {
+    if (page && !ln.edited_dev && ln.aksharas.length > 0 && ln.aksharas.every((x) => x.box))
+      return (
+        <AlignedText
+          page={page}
+          box={ln.box}
+          items={ln.aksharas.map((x, k) => ({
+            key: k,
+            box: x.box!,
+            text: aksharaText(x, script, lm),
+            className: `${x.uncertain ? "uncertain " : ""}${lm && x.lm_dev ? "lm " : ""}${i === li && k === ai ? "selected" : ""}`.trim(),
+            onClick: () => {
+              setLi(i);
+              setAi(k);
+            },
+          }))}
+        />
+      );
+    return (
+      <div className={`text-lines ${script}`} lang={script === "gujarati" ? "gu" : "sa"}>
+        <div className={`text-line${ln.reviewed ? " reviewed" : ""}`}>{lineSpans(ln, i)}</div>
+      </div>
+    );
+  }
+
+  // the current line in view when moving with the keys
+  const lineRefs = useRef(new Map<number, HTMLElement>());
+  useEffect(() => {
+    if (layout === "page") lineRefs.current.get(li)?.scrollIntoView?.({ block: "nearest" });
+  }, [li, layout]);
+
+  const correctionBox = (ln: WholeLine, onCancel?: () => void) => (
+    <>
+      <div className="line-edit">
+        <input
+          ref={input}
+          aria-label="Correct the line"
+          lang="gu"
+          value={draft}
+          disabled={busy}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") saveLine(ln, { text: draft });
+            if (e.key === "Escape") onCancel?.();
+          }}
+        />
+        <button className="primary" disabled={busy} onClick={() => saveLine(ln, { text: draft })}>
+          Save
+        </button>
+        {ln.edited_dev && (
+          <button className="link" disabled={busy} onClick={() => saveLine(ln, { text: "" })}
+            title="Remove your correction: show what was read">
+            Use the reading
+          </button>
+        )}
+        <button className="link" onClick={() => setLetters((v) => !v)}>
+          {letters ? "Hide letters" : "Letters…"}
+        </button>
+        {onCancel && (
+          <button className="link" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+      {letters && (
+        <LetterPalette overlay onClose={() => setLetters(false)} onKey={insert} onBackspace={backspace}
+          extra={<button onClick={() => insert(" ")}>Space</button>} />
+      )}
+    </>
+  );
 
   return (
     <div className={`text-view ${layout}`}>
@@ -174,14 +394,6 @@ export default function WholeLinesView({ book, pageId, onChanged }: Props) {
           <input type="checkbox" checked={lm} onChange={(e) => chooseLm(e.target.checked)} />
           With the language model
         </label>
-        <div className="row" role="group" aria-label="Layout">
-          <button className={layout === "side" ? "tab active" : "tab"} onClick={() => setLayout("side")}>
-            Side by side
-          </button>
-          <button className={layout === "stacked" ? "tab active" : "tab"} onClick={() => setLayout("stacked")}>
-            One above the other
-          </button>
-        </div>
         <div className="row" role="group" aria-label="Script">
           <button className={script === "gujarati" ? "tab active" : "tab"} onClick={() => setScript("gujarati")}>
             ગુજરાતી
@@ -231,64 +443,89 @@ export default function WholeLinesView({ book, pageId, onChanged }: Props) {
               PDF
             </button>
           </div>
-          <div className="text-panes">
-            <div className="text-page" aria-label="Page">
-              {page && (
-                <div className="text-page-image" style={{ aspectRatio: `${page.width} / ${page.height}` }}>
-                  <img src={page.image} alt={page.file} />
-                  {selLine && (
-                    <span
-                      className="text-box selected"
-                      style={{
-                        left: `${(100 * selLine.box[0]) / page.width}%`,
-                        top: `${(100 * selLine.box[1]) / page.height}%`,
-                        width: `${(100 * selLine.box[2]) / page.width}%`,
-                        height: `${(100 * selLine.box[3]) / page.height}%`,
-                      }}
-                    />
-                  )}
+          {!text ? (
+            <p className="muted">
+              {isRead ? "Loading…" : "This page is not read yet: Read this page (Tesseract reads each line whole, no letters are cut)."}
+            </p>
+          ) : (
+            <>
+              <p className="small muted">
+                Tesseract read each line whole · {text.uncertain} uncertain aksharas (highlighted)
+                {lm && ` · ${changed} changed by the language model (underlined)`} · {reviewed} of {lines.length} lines reviewed ·
+                ← → aksharas, ↑ ↓ lines
+              </p>
+              {layout === "line" && cur && page ? (
+                <div className="line-by-line" aria-label="Line by line">
+                  <div className="row line-nav">
+                    <button disabled={li === 0} onClick={() => { setLi(li - 1); setAi(null); }} aria-label="Previous line">
+                      ◀ Previous line
+                    </button>
+                    <span className="small muted">
+                      Line {li + 1} of {lines.length}
+                    </span>
+                    <button disabled={li >= lines.length - 1} onClick={() => { setLi(li + 1); setAi(null); }} aria-label="Next line">
+                      Next line ▶
+                    </button>
+                    {reviewButton(cur, li)}
+                    <span className="small muted">{cur.reviewed ? "reviewed" : "not reviewed"}</span>
+                  </div>
+                  <LineCrop
+                    page={page}
+                    box={cur.box}
+                    marks={cur.edited_dev ? [] : cur.aksharas.flatMap((x, k) =>
+                      x.box && (x.uncertain || k === ai)
+                        ? [{ key: k, box: x.box, className: `${x.uncertain ? "uncertain " : ""}${k === ai ? "selected" : ""}`.trim(),
+                            onClick: () => setAi(k) }]
+                        : [])}
+                  />
+                  {lineTextRow(cur, li)}
+                  {correctionBox(cur)}
+                </div>
+              ) : (
+                <div className="interlinear" aria-label="Lines">
+                  {page && lines.map((ln, i) => (
+                    <div key={ln.line_id} ref={(el) => { if (el) lineRefs.current.set(i, el); }}
+                      className={`interlinear-line${i === li ? " selected" : ""}${ln.reviewed ? " reviewed" : ""}`}
+                      onClick={() => setLi(i)}>
+                      <LineCrop
+                        page={page}
+                        box={ln.box}
+                        marks={ln.edited_dev ? [] : ln.aksharas.flatMap((x, k) =>
+                          x.box && (x.uncertain || (i === li && k === ai))
+                            ? [{ key: k, box: x.box, className: `${x.uncertain ? "uncertain " : ""}${i === li && k === ai ? "selected" : ""}`.trim(),
+                                onClick: () => { setLi(i); setAi(k); } }]
+                            : [])}
+                      />
+                      {lineTextRow(ln, i)}
+                      {editing === ln.line_id ? (
+                        correctionBox(ln, () => setEditing(null))
+                      ) : (
+                        <div className="row line-tools-row">
+                          <span className="small muted">Line {i + 1}</span>
+                          <button aria-label={`Correct line ${i + 1}`} title="Correct this line" disabled={busy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLi(i);
+                              setDraft(lineText(ln, script, lm));
+                              setEditing(ln.line_id);
+                            }}>
+                            ✎ Correct
+                          </button>
+                          {reviewButton(ln, i)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
-            <div className="text-text" aria-label="Text">
-              {!text ? (
-                <p className="muted">
-                  {isRead ? "Loading…" : "This page is not read yet: Read this page (Tesseract reads each line whole, no letters are cut)."}
+              {picked && (
+                <p className="small text-letter-info" aria-live="polite">
+                  <strong>{aksharaText(picked, script, lm)}</strong> · Tesseract: {script === "gujarati" ? picked.text_guj : picked.text_dev} (
+                  {Math.round(picked.conf)}){picked.lm_dev && ` · the language model: ${script === "gujarati" ? picked.lm_guj : picked.lm_dev}`}
                 </p>
-              ) : (
-                <>
-                  <p className="small muted">
-                    Tesseract read each line whole · {text.uncertain} uncertain aksharas (highlighted)
-                    {lm && ` · ${changed} changed by the language model (underlined)`}
-                  </p>
-                  <div className={`text-lines ${script}`} lang={script === "gujarati" ? "gu" : "sa"}>
-                    {text.lines.map((ln) => (
-                      <div key={ln.line_id} className={`text-line whole${ln.line_id === line ? " selected" : ""}`}
-                        onClick={() => setLine(ln.line_id)}>
-                        {ln.aksharas.map((x, i) => (
-                          <span key={i}>
-                            {x.space && " "}
-                            <span
-                              className={`text-letter${x.uncertain ? " uncertain" : ""}${lm && x.lm_dev ? " lm" : ""}${picked === x ? " selected" : ""}`}
-                              onClick={() => setPicked(x)}
-                            >
-                              {aksharaText(x, script, lm)}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                  {picked && (
-                    <p className="small text-letter-info" aria-live="polite">
-                      <strong>{aksharaText(picked, script, lm)}</strong> · Tesseract: {script === "gujarati" ? picked.text_guj : picked.text_dev} (
-                      {Math.round(picked.conf)}){picked.lm_dev && ` · the language model: ${script === "gujarati" ? picked.lm_guj : picked.lm_dev}`}
-                    </p>
-                  )}
-                </>
               )}
-            </div>
-          </div>
+            </>
+          )}
         </>
       )}
       {printing && (

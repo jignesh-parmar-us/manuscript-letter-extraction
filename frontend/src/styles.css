@@ -1051,16 +1051,8 @@ a.button.disabled {
   display: grid;
   gap: 12px;
 }
-.text-view.side .text-panes {
-  grid-template-columns: 1fr 1fr;
-}
-.text-view.stacked .text-panes {
+.text-panes {
   grid-template-columns: 1fr;
-}
-@media (max-width: 860px) {
-  .text-view.side .text-panes {
-    grid-template-columns: 1fr;
-  }
 }
 .text-page,
 .text-text {
@@ -1072,9 +1064,16 @@ a.button.disabled {
   border-radius: 6px;
   background: var(--panel);
 }
-.text-view.stacked .text-page,
-.text-view.stacked .text-text {
+.text-view.page .text-page,
+.text-view.page .text-text {
   max-height: 48vh;
+}
+.text-box.line-mark {
+  outline: 1px dashed var(--accent);
+  pointer-events: none;
+}
+.mode-note {
+  flex: 1 1 100%;
 }
 .text-page-image {
   position: relative;
@@ -1304,4 +1303,135 @@ a.button.disabled {
 }
 .truth-lines li.current button {
   font-weight: 700;
+}
+/* the Letters palette on top of the screen (Text view, Pages selection), not inside a scrolling panel */
+.palette-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+.palette-overlay .palette {
+  pointer-events: auto;
+  width: min(920px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  margin: 0;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}
+.palette-close {
+  margin-left: auto;
+}
+/* Line by line: one line cropped from the page */
+.line-crop {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.line-crop img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+.line-by-line {
+  display: grid;
+  gap: 10px;
+}
+.line-by-line .text-lines {
+  font-size: 26px;
+}
+.line-nav {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.line-edit {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.line-edit input {
+  flex: 1 1 420px;
+  min-width: 0;
+  font: 22px/1.5 "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif;
+  padding: 6px 8px;
+}
+.text-line .edited {
+  color: var(--text);
+  border-bottom: 2px solid color-mix(in srgb, var(--ok) 60%, transparent);
+}
+.line-tools {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.line-tools button {
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.text-line.reviewed {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+/* Line by line: the text under the line image, each akshara under its own letter */
+.aligned-wrap {
+  container-type: inline-size;
+  width: 100%;
+}
+.aligned-text {
+  position: relative;
+  height: calc(var(--fs, 2cqw) * 2.1);
+  font: var(--fs, 2cqw) / 1.6 "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.aligned-akshara {
+  position: absolute;
+  top: 0.15em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
+}
+/* Whole page: every line as its strip of the page with its text aligned under it */
+.interlinear {
+  display: grid;
+  gap: 14px;
+}
+.interlinear-line {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.interlinear-line.selected {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.interlinear-line.reviewed,
+.interlinear-line.proofread {
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
+}
+.interlinear-line.changed {
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+}
+.line-tools-row {
+  gap: 8px;
+  align-items: center;
+}
+.aligned-akshara.selected {
+  outline: 2px solid var(--accent);
+  border-radius: 3px;
 }

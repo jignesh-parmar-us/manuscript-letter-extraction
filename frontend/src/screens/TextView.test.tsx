@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, Book, PageText } from "../api";
@@ -27,8 +27,9 @@ const text: PageText = {
   ],
 };
 
-/** The text's lines only (the letter editor below them shows the selected letter too). */
-const textLines = () => document.querySelector(".text-lines") as HTMLElement;
+/** A letter of the text, aligned under its line (not the copy in the letter editor). */
+const letterEl = (t: string) =>
+  [...document.querySelectorAll(".aligned-akshara")].find((e) => e.textContent === t) as HTMLElement;
 
 describe("TextView", () => {
   beforeEach(() => {
@@ -48,14 +49,14 @@ describe("TextView", () => {
   it("shows the text beside the page, uncertain letters marked on both", async () => {
     localStorage.setItem("text-readers", "both");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
-    const lines = await screen.findByLabelText("Text");
+    const lines = await screen.findByLabelText("Lines");
     await waitFor(() => expect(within(lines).getByText("ર")).toBeInTheDocument());
     expect(within(lines).getByText("ર")).toHaveClass("uncertain");
     expect(within(lines).getByText("?")).toHaveClass("unknown");
-    expect(screen.getByLabelText("Page").querySelectorAll(".text-box.uncertain")).toHaveLength(2);
+    expect(document.querySelectorAll(".line-crop .text-box.uncertain")).toHaveLength(2);
     await userEvent.click(within(lines).getByText("ર"));
     expect(screen.getByText(/Tesseract: र \(92\) · your groups: व \(0.3\)/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Page").querySelector(".text-box.selected")).not.toBeNull();
+    expect(document.querySelector(".line-crop .text-box.selected")).not.toBeNull();
     expect(screen.getByText("1 of 2 converted")).toBeInTheDocument();
   });
 
@@ -63,8 +64,13 @@ describe("TextView", () => {
     localStorage.removeItem("text-readers");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     await screen.findByText("ર");
-    await userEvent.click(screen.getByRole("button", { name: "One above the other" }));
-    expect(document.querySelector(".text-view")).toHaveClass("stacked");
+    await userEvent.click(screen.getByRole("button", { name: "Line by line" }));
+    expect(document.querySelector(".text-view")).toHaveClass("line");
+    expect(screen.getByLabelText("Line on the page")).toBeInTheDocument();
+    expect(screen.getByText("Line 1 of 2")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next line" }));
+    expect(screen.getByText("Line 2 of 2")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Whole page" }));
     await userEvent.click(screen.getByRole("button", { name: "देवनागरी" }));
     expect(screen.getByText("र")).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Uncertain letters in downloads"), "guess");
@@ -76,7 +82,7 @@ describe("TextView", () => {
   it("shows Tesseract alone, or with the groups' second opinion", async () => {
     localStorage.removeItem("text-readers");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
-    const lines = await screen.findByLabelText("Text");
+    const lines = await screen.findByLabelText("Lines");
     await waitFor(() => expect(within(lines).getByText("ર")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Tesseract only" })).toHaveClass("active");      // the default
     expect(within(lines).getByText("ર")).not.toHaveClass("uncertain");                        // Tesseract was sure
@@ -105,7 +111,7 @@ describe("TextView", () => {
     corrected.lines[0][1] = { ...corrected.lines[0][1], text_dev: "ळ", text_guj: "ળ", source: "label", uncertain: false, read_dev: "र" };
     corrected.corrected = 1;
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
-    const lines = await screen.findByLabelText("Text");
+    const lines = await screen.findByLabelText("Lines");
     await waitFor(() => expect(within(lines).getByText("ર")).toBeInTheDocument());
     await userEvent.click(within(lines).getByText("ર"));
     vi.mocked(api.pageText).mockResolvedValue(corrected);
@@ -116,7 +122,7 @@ describe("TextView", () => {
     await waitFor(() => expect(within(editor).getByRole("button", { name: "Correct" })).toBeEnabled());
     await userEvent.click(within(editor).getByRole("button", { name: "Correct" }));
     expect(api.labelSamples).toHaveBeenCalledWith(4, [2], "ળ");
-    await waitFor(() => expect(within(textLines()).getByText("ળ")).toBeInTheDocument());
+    await waitFor(() => expect(letterEl("ળ")).toBeInTheDocument());
     expect(screen.getByText(/corrected by you \(read as र\)/)).toBeInTheDocument();
     expect(screen.getByText(/1 letters corrected/)).toBeInTheDocument();
     await userEvent.click(within(editor).getByRole("button", { name: "Not a letter" }));
@@ -141,13 +147,13 @@ describe("TextView", () => {
     vi.mocked(api.join).mockResolvedValue({ action_id: 2, kind: "join", undo: 1, redo: 0, sample: { id: 7, page_id: 9, box: [], source: "joined" } } as never);
     localStorage.setItem("text-readers", "both");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
-    const lines = await screen.findByLabelText("Text");
+    const lines = await screen.findByLabelText("Lines");
     await waitFor(() => expect(within(lines).getByText("ના")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Next uncertain ▶" }));
-    expect(within(textLines()).getByText("ર")).toHaveClass("selected");
+    expect(letterEl("ર")).toHaveClass("selected");
     await userEvent.click(screen.getByRole("button", { name: "Next uncertain ▶" }));
-    expect(within(textLines()).getByText("?")).toHaveClass("selected");
-    await userEvent.click(within(textLines()).getByText("ના"));
+    expect(letterEl("?")).toHaveClass("selected");
+    await userEvent.click(letterEl("ના"));
     await userEvent.click(screen.getByRole("button", { name: "Join with the next" }));
     expect(api.join).toHaveBeenCalledWith(4, [1, 2]);
   });
@@ -159,11 +165,25 @@ describe("TextView", () => {
     withReader.lines[0][1].readings = [["tesseract", "र", 92], ["reader", "व", 0.97], ["groups", "व", 0.3]];
     vi.mocked(api.pageText).mockResolvedValue(withReader);
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
-    await waitFor(() => expect(within(textLines()).getByText("ર")).toBeInTheDocument());
+    await waitFor(() => expect(letterEl("ર")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Tesseract + your reader and groups" })).toHaveClass("active");
     expect(screen.getByText(/read by Tesseract, your letter reader and your groups/)).toBeInTheDocument();
-    await userEvent.click(within(textLines()).getByText("ર"));
+    await userEvent.click(letterEl("ર"));
     expect(screen.getByText(/Tesseract: र \(92\) · your letter reader: व \(97%\) · your groups: व \(0.3\)/)).toBeInTheDocument();
+  });
+
+  it("moves between letters and lines with the arrow keys", async () => {
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await waitFor(() => expect(letterEl("ના")).toBeInTheDocument());
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(letterEl("ના")).toHaveClass("selected");
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(letterEl("ર")).toHaveClass("selected");
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(letterEl("કા")).toHaveClass("selected");          // the first letter of line 2
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(letterEl("ના")).toHaveClass("selected");
+    await waitFor(() => expect(api.checkLabel).toHaveBeenCalled());               // the editor's label check is done
   });
 
   it("writes plain lines for the picture and the PDF", () => {

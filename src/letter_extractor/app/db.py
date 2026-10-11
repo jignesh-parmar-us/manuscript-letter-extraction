@@ -226,6 +226,9 @@ class WholeLine(Base):
     text_dev: Mapped[str] = mapped_column(Text, default="")
     aksharas: Mapped[str] = mapped_column(Text, default="[]")
     read_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    edited_dev: Mapped[str] = mapped_column(Text, default="", server_default="")   # the user's correction, if any
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class LineTruth(Base):

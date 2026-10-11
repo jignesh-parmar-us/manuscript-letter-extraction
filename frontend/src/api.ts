@@ -208,6 +208,7 @@ export interface WholeAkshara {
   uncertain: boolean;
   lm_dev?: string; // the language model's reading, where it differs
   lm_guj?: string;
+  box?: [number, number, number, number] | null; // on the page
 }
 
 export interface WholeLine {
@@ -217,6 +218,9 @@ export interface WholeLine {
   text_dev: string;
   text_guj: string;
   aksharas: WholeAkshara[];
+  edited_dev?: string; // your correction ("" when none)
+  edited_guj?: string;
+  reviewed?: boolean;
 }
 
 export interface WholeLines {
@@ -530,6 +534,8 @@ export const api = {
   convert: (id: number, pageIds?: number[], mode: "letters" | "lines" = "letters") =>
     post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read", mode }),
   wholeLines: (pageId: number) => get<WholeLines>(`/api/pages/${pageId}/whole-lines`),
+  saveWholeLine: (lineId: number, change: { text?: string; reviewed?: boolean; shown?: string }) =>
+    put<{ line_id: number; edited_dev: string; edited_guj: string; reviewed: boolean }>(`/api/lines/${lineId}/whole`, change),
   bookWholeLines: (id: number) => get<{ page_id: number; lines: number }[]>(`/api/books/${id}/whole-lines`),
   pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
   bookTexts: (id: number) => get<TextSummary[]>(`/api/books/${id}/texts`),

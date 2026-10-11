@@ -159,7 +159,10 @@ export default function LabelPicker(props: Props) {
           )}
         </div>
       )}
-      {open && <LetterPalette onKey={add} onBackspace={backspace} onEmpty={() => setText("")} />}
+      {open && (
+        <LetterPalette onKey={add} onBackspace={backspace} onEmpty={() => setText("")} overlay={compact}
+          onClose={() => setOpen(false)} />
+      )}
     </div>
   );
 }

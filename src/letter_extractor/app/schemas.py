@@ -135,6 +135,14 @@ class TrainRequest(BaseModel):
     name: str = ""
 
 
+class WholeLineEdit(BaseModel):
+    """A line read whole: its correction (None: unchanged; "": removed) and / or reviewed; `shown` is the text
+    the user saw (kept as the checked line when it is marked reviewed without a correction)."""
+    text: Optional[str] = None
+    reviewed: Optional[bool] = None
+    shown: str = ""
+
+
 class LineTruthText(BaseModel):
     """The checked text of a line (Gujarati or Devanagari; empty: not checked) and what Tesseract read."""
     text: str = ""
