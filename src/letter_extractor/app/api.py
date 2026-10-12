@@ -27,7 +27,8 @@ Routes (all JSON unless noted):
   samples    POST /api/books/{id}/samples/{crop|join|split|upload}   (C5f)
   generated  POST /api/books/{id}/generate-letters (a job, printed books): the missing letters of the letter
              table made from the book's own letters (generate.py); groups carry `generated`, how many of
-             their letters were made so
+             their letters were made so; POST /api/books/{id}/actions/variants {"group_id"} (more letters for
+             one group), POST /api/books/{id}/top-up (a job: every small group)
   export     POST /api/books/{id}/export (a job), POST /api/app/open-folder   (C5g)
   app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
              PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it;
@@ -598,6 +599,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             raise HTTPException(400, "Generating missing letters is for printed books for now.")
         return jobs.generate_letters(book_id).as_dict()
 
+    @app.post("/api/books/{book_id}/top-up", dependencies=auth, status_code=202)
+    def top_up(book_id: int) -> Dict:
+        library.get_book(book_id)
+        return jobs.top_up(book_id).as_dict()
+
     @app.get("/api/books/{book_id}/groups", dependencies=auth)
     def groups(book_id: int) -> List[Dict]:
         with library.session() as s:
@@ -713,6 +719,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/actions/status", dependencies=auth)
     def a_status(book_id: int, body: Status) -> Dict:
         return after(book_id, actions.set_status(library, book_id, body.group_id, body.reviewed, body.locked))
+
+    @app.post("/api/books/{book_id}/actions/variants", dependencies=auth)
+    def a_variants(book_id: int, body: GroupRef) -> Dict:
+        from .generate import variants
+        return after(book_id, variants(library, book_id, body.group_id))
 
     @app.post("/api/books/{book_id}/actions/delete", dependencies=auth)
     def a_delete(book_id: int, body: SampleIds) -> Dict:

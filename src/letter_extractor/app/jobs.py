@@ -308,6 +308,17 @@ class Jobs:
         return self.start(book_id, "generate_letters",
                           lambda progress, cancel: generate(self.lib, book_id, progress, cancel))
 
+    def top_up(self, book_id: int) -> Job:
+        """Variants for every small labelled group of the book, as one action (generate.top_up)."""
+        from sqlalchemy import func, select
+        from .db import LetterGroup
+        from .generate import top_up
+        with self.lib.session() as s:
+            total = s.scalar(select(func.count(LetterGroup.id)).where(LetterGroup.book_id == book_id,
+                                                                      LetterGroup.label_dev != "")) or 0
+        return self.start(book_id, "top_up", lambda progress, cancel: top_up(self.lib, book_id, progress, cancel),
+                          total=total)
+
     def _images(self, book_id: int):
         from pathlib import Path
         from .. import io_utils

@@ -30,6 +30,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   train: "Training a letter reader",
   use_reader: "Reading with the letter reader",
   generate_letters: "Making the missing letters",
+  top_up: "Making variants for small groups",
 };
 
 export default function Capture({ book, info, onChanged }: Props) {

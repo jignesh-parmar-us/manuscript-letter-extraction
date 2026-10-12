@@ -116,6 +116,56 @@ class GenerateTests(unittest.TestCase):
         self.assertGreaterEqual(r["labels"], 4)                       # न ता तं + the made ones
         self.assertTrue(np.isfinite(r["seconds"]))
 
+    def test_variants_fill_a_small_group_and_send_it_back_to_review(self):
+        g, real = self.group("न")
+        self.assertEqual((g.status, len(real)), ("labelled", 6))
+        r = G.variants(self.lib, self.book, g.id)
+        self.assertEqual(r["made"], G.TOP_UP - 6)                 # filled up to 10
+        self.assertEqual(r["built"], 0)                           # a consonant alone: changed copies only
+        g2, now = self.group("न")
+        self.assertEqual(g2.status, "auto", "to be looked at again")
+        made = [x for x in now if x.source == GENERATED]
+        self.assertEqual(len(made), 4)
+        real_ids = {x.id for x in real}
+        for x in made:
+            self.assertRegex(x.rules, r"^generated: a varied copy of #\d+$")
+            self.assertIn(int(x.rules.rsplit("#", 1)[1]), real_ids)
+        with self.assertRaises(A.ActionError):                    # full now
+            G.variants(self.lib, self.book, g.id)
+        A.undo(self.lib, self.book)
+        g3, back = self.group("न")
+        self.assertEqual((g3.status, len(back)), ("labelled", 6))
+
+    def test_variants_need_a_label_a_real_letter_and_an_open_group(self):
+        G.generate(self.lib, self.book, **QUIET)
+        made_only = self.group("ना")[0]
+        with self.assertRaises(A.ActionError):                    # System generated: no real letter
+            G.variants(self.lib, self.book, made_only.id)
+        g = self.group("न")[0]
+        A.set_status(self.lib, self.book, g.id, locked=True)
+        with self.assertRaises(A.ActionError):
+            G.variants(self.lib, self.book, g.id)
+
+    def test_top_up_every_small_group_in_one_action(self):
+        G.generate(self.lib, self.book, **QUIET)                  # System generated groups are left alone
+        r = G.top_up(self.lib, self.book, **QUIET)
+        self.assertEqual(sorted(d["label_guj"] for d in r["topped"]), sorted(["ન", "તા", "તં"]))
+        self.assertEqual(r["samples"], 3 * 4)
+        self.assertEqual(len(self.group("ना")[1]), len([x for x in self.group("ना")[1] if x.source == GENERATED]))
+        self.assertEqual(G.top_up(self.lib, self.book, **QUIET)["groups"], 0)
+        A.undo(self.lib, self.book)
+        self.assertEqual(len(self.group("न")[1]), 6)
+
+    def test_the_reader_makes_no_hidden_copies_of_variants(self):
+        g = self.group("न")[0]
+        G.variants(self.lib, self.book, g.id)
+        A.set_status(self.lib, self.book, g.id, reviewed=True)
+        items = [it for it in R._letters(self.lib, [self.book], False, False) if it[3] == "न"]
+        self.assertEqual(len(items), 10)
+        feats = R._Features(items, {"न": 0}, {"न": 3}, np.random.default_rng(0))
+        extra = {it[7]: len(feats.extra[it[0]]) for it in items}
+        self.assertEqual(extra, {"auto": 3, GENERATED: 0})
+
     def test_the_api_refuses_handwritten_books(self):
         c = TestClient(create_app(self.lib, "t"))
         h = {"X-Token": "t"}

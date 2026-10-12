@@ -6,7 +6,8 @@
 //   letters and joins letters cut in pieces (C12b), as one undoable step; "Fix ા bars" gives aa bars
 //   cut onto the next letter (નાર as ન + ાર) back to their letter, by shape only (bars.py, barfix.py);
 //   "Generate missing letters" makes the letters of the letter table the book has no group for, from the
-//   book's own letters (generate.py): system generated groups, to be reviewed one by one.
+//   book's own letters (generate.py): system generated groups, to be reviewed one by one; "Top up small
+//   groups" adds variants to every labelled group with few letters (as "Make variants" in a group does).
 // - SuggestionChip (on a group): accept, change or reject its suggestion; or merge into the group
 //   that already has the suggested label.
 // - ReadingsLine (on a group): what its samples were read as; select the samples of one reading to
@@ -57,7 +58,7 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
   );
   const [job, setJob] = useJob(
     book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" || book.job?.kind === "fix_bars" ||
-      book.job?.kind === "generate_letters"
+      book.job?.kind === "generate_letters" || book.job?.kind === "top_up"
       ? book.job
       : null,
     onEnd,
@@ -158,6 +159,24 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     }
   }
 
+  async function topUp() {
+    const ok = await confirm(
+      "Make more letters for every labelled group with fewer than 10 (at most 3 per real letter): built from " +
+        "other letters of the book with the same vowel sign where it can (printed books), otherwise slightly " +
+        "changed copies of the group's real letters. They are marked gen. Each topped-up group goes back to not " +
+        "reviewed, so its new letters are looked at before they are used for training and reading. Undo takes " +
+        "all of it back in one step.",
+      "Top up",
+    );
+    if (!ok) return;
+    setError(null);
+    try {
+      setJob(await api.topUp(book.id));
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   const [splitNote, setSplitNote] = useState("");
   async function splitMixed() {
     setSplitNote("");
@@ -249,6 +268,13 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
             Generate missing letters
           </button>
         )}
+        <button
+          disabled={running}
+          onClick={topUp}
+          title="Make more letters for every labelled group with fewer than 10, to review"
+        >
+          Top up small groups
+        </button>
         {anyRun && (
           <button
             disabled={running}
@@ -294,7 +320,9 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
                 ? "Checking pages"
                 : job!.kind === "generate_letters"
                   ? "Making letters"
-                  : "Reading"}
+                  : job!.kind === "top_up"
+                    ? "Topping up groups"
+                    : "Reading"}
             :{" "}
             {job!.done} of {job!.total}
           </span>
@@ -322,6 +350,14 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         )}
         {job?.kind === "generate_letters" && job.status === "done" && job.result && (
           <GenerateResult result={job.result} />
+        )}
+        {job?.kind === "top_up" && job.status === "done" && job.result && (
+          <span>
+            {Number(job.result.groups)
+              ? `${String(job.result.groups)} small groups topped up with ${String(job.result.samples)} letters marked gen; ` +
+                'they are not reviewed now: choose "Not reviewed" in the group list to look at them. Undo takes it all back.'
+              : "No small labelled group to top up."}
+          </span>
         )}
         {splitNote && <span>{splitNote}</span>}
         {!running && (

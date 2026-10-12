@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), fixBars: vi.fn(), generateLetters: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), fixBars: vi.fn(), generateLetters: vi.fn(), topUp: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -141,6 +141,18 @@ describe("SuggestPanel", () => {
     gone();
     renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
     expect(screen.queryByRole("button", { name: "Generate missing letters" })).toBeNull();
+  });
+
+  it("tops up the small groups after asking, on any book", async () => {
+    vi.mocked(api.topUp).mockResolvedValue({ id: "j6", book_id: 1, kind: "top_up", status: "running", done: 0,
+      total: 400, current: "", pages: [], result: null, error: "", seconds: 0 });
+    renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Top up small groups" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("goes back to not reviewed");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Top up" }));
+    expect(api.topUp).toHaveBeenCalledWith(1);
+    expect(await screen.findByText("Topping up groups: 0 of 400")).toBeInTheDocument();
   });
 
   it("shows how the suggestions compare with the labels", async () => {

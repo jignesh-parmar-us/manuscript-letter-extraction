@@ -80,7 +80,7 @@ function Tile(props: {
       role="option"
       aria-selected={selected}
       data-sample={s.id}
-      className={`tile ink-${s.ink}${selected ? " selected" : ""}${props.marked ? " marked" : ""}${props.mixup ? " mixup" : ""}${isDragging ? " dragging" : ""}`}
+      className={`tile ink-${s.ink}${s.source === "generated" ? " generated" : ""}${selected ? " selected" : ""}${props.marked ? " marked" : ""}${props.mixup ? " mixup" : ""}${isDragging ? " dragging" : ""}`}
       title={`${where}${s.distance !== null ? ` · distance ${s.distance}` : ""}${s.rules ? ` · ${s.rules}` : ""}${
         open ? "\nDouble-click to show it on its page" : ""
       }`}
@@ -88,6 +88,11 @@ function Tile(props: {
       onDoubleClick={open}
     >
       <img src={s.image} alt={`sample ${s.id}`} loading="lazy" draggable={false} />
+      {s.source === "generated" && (
+        <span className="gen-chip" aria-label="system generated">
+          gen
+        </span>
+      )}
       {props.mixup && (
         <span className="mixup-chip" title={`Possible mix-up: your letter reader reads it as ${props.mixup.read_guj} (${Math.round(props.mixup.prob * 100)}% sure)`}>
           {props.mixup.read_guj}?

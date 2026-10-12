@@ -409,6 +409,26 @@ pre.settings {
 .tile.dragging {
   opacity: 0.4;
 }
+/* a letter made by the system (Generate missing letters, Make variants): dashed frame and a "gen" chip */
+.tile.generated {
+  border-style: dashed;
+  border-color: var(--warn);
+}
+.tile.generated.selected {
+  border-color: var(--accent);
+}
+.gen-chip {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: var(--accent-text);
+  background: var(--warn);
+}
 .suggestion {
   position: absolute;
   right: 2px;

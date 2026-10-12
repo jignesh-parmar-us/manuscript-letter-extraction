@@ -9,7 +9,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { groupSamples: vi.fn(), move: vi.fn(), newGroup: vi.fn(), deleteSamples: vi.fn(),
-    merge: vi.fn(), dissolve: vi.fn(), status: vi.fn(), label: vi.fn(), checkLabel: vi.fn(), labelSamples: vi.fn(),
+    merge: vi.fn(), dissolve: vi.fn(), status: vi.fn(), variants: vi.fn(), label: vi.fn(), checkLabel: vi.fn(), labelSamples: vi.fn(),
     confirmSamples: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -54,6 +54,39 @@ describe("GroupView", () => {
     await userEvent.click(screen.getByRole("button", { name: "Not a mix-up (1)" }));
     expect(api.confirmSamples).toHaveBeenCalledWith(1, [3]);
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("marks the letters made by the system, selects them, and makes variants of a small group", async () => {
+    vi.mocked(api.groupSamples).mockResolvedValue({ total: 3, offset: 0, samples: [
+      sample(1), sample(2, { source: "generated", page_id: null, rules: "generated: a varied copy of #1" }), sample(3)] });
+    vi.mocked(api.variants).mockResolvedValue({ ...ok, made: 4, built: 1 });
+    const { act } = renderView((ctx) => (
+      <GroupView group={group({ samples: 3, generated: 1, label_dev: "घो", label_guj: "ઘો", status: "labelled" })} ctx={ctx} />
+    ));
+    const tiles = await findTiles();
+    expect(within(tiles[1]).getByLabelText("system generated")).toBeInTheDocument();
+    expect(within(tiles[0]).queryByLabelText("system generated")).toBeNull();
+    expect(tiles[1]).toHaveAttribute("title", expect.stringContaining("system generated (a varied copy of #1)"));
+    expect(screen.getByText(/2 real, 1 system generated/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Select generated (1)" }));
+    expect(tiles[1]).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Make variants" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("goes back to not reviewed");           // it was reviewed
+    await userEvent.click(within(dialog).getByRole("button", { name: "Make variants" }));
+    expect(api.variants).toHaveBeenCalledWith(1, 5);
+    expect(act).toHaveBeenCalled();
+    expect(await screen.findByText(/4 letters made \(1 built from parts\)/)).toBeInTheDocument();
+  });
+
+  it("makes no variants without a label, a real letter, or room", async () => {
+    for (const g of [group({ label_dev: "" }), group({ label_dev: "क", samples: 6, generated: 6 }),
+                     group({ label_dev: "क", samples: 10 })]) {
+      const { unmount } = renderView((ctx) => <GroupView group={g} ctx={ctx} />);
+      await findTiles();
+      expect(screen.getByRole("button", { name: "Make variants" })).toBeDisabled();
+      unmount();
+    }
   });
 
   it("moves the selected samples to Unsure", async () => {

@@ -115,7 +115,8 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "convert" | "line_search" | "line_search_measure" | "train" | "use_reader" | "generate_letters";
+    | "convert" | "line_search" | "line_search_measure" | "train" | "use_reader" | "generate_letters"
+    | "top_up";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -554,6 +555,7 @@ export const api = {
   fixCuts: (id: number) => post<Job>(`/api/books/${id}/fix-cuts`),
   fixBars: (id: number) => post<Job>(`/api/books/${id}/fix-bars`),
   generateLetters: (id: number) => post<Job>(`/api/books/${id}/generate-letters`),
+  topUp: (id: number) => post<Job>(`/api/books/${id}/top-up`),
   tesseract: (bookId: number) => get<TesseractStatus>(`/api/tesseract?book_id=${bookId}`),
   accuracy: (bookId: number, engine?: Engine) =>
     get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy${engine ? `?engine=${engine}` : ""}`),
@@ -644,6 +646,8 @@ export const api = {
     post<ActionResult>(`/api/books/${bookId}/actions/dissolve`, { group_id: groupId }),
   label: (bookId: number, groupId: number, text: string) =>
     post<ActionResult>(`/api/books/${bookId}/actions/label`, { group_id: groupId, text }),
+  variants: (bookId: number, groupId: number) =>
+    post<ActionResult>(`/api/books/${bookId}/actions/variants`, { group_id: groupId }),
   status: (bookId: number, groupId: number, change: { reviewed?: boolean; locked?: boolean }) =>
     post<ActionResult>(`/api/books/${bookId}/actions/status`, { group_id: groupId, ...change }),
   deleteSamples: (bookId: number, sampleIds: number[]) =>

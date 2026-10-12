@@ -1,6 +1,7 @@
 // One group: its label, status and samples (nearest to the group's centre first).
 // Select samples and move them out (to Unsure, another group, a new group) or delete them;
-// label the group; mark it reviewed or lock it (a System generated group says so, and how it is used); merge another group into it (chosen in the letter
+// label the group; mark it reviewed or lock it (a System generated group says so, and how it is used);
+// letters made by the system are marked "gen" (SampleGrid); "Make variants" adds some to a small group; merge another group into it (chosen in the letter
 // table, GroupPicker.tsx); dissolve it.
 // Keys: U = selected to Unsure, N = new group from selection, Delete = delete selection,
 //       Ctrl/Cmd+A = select all, Esc = clear selection.
@@ -24,6 +25,10 @@ import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
 import { isTyping, ReviewContext } from "./Review";
 import GroupPicker, { MoveTarget } from "./GroupPicker";
+
+// "Make variants": a group is filled up to TOP_UP letters, at most PER_REAL made per real letter (generate.py)
+const TOP_UP = 10;
+const PER_REAL = 3;
 import { expectedReading, ReadingsLine, SuggestionChip } from "./Suggestions";
 
 export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewContext }) {
@@ -49,6 +54,26 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const chosenMixups = mixups.filter((c) => selection.ids.has(c.sample_id));
 
   const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
+  // letters made by the system (Generate missing letters, Make variants) and real ones
+  const real = group.samples - group.generated;
+  const shownGenerated = samples.filter((s) => s.source === "generated").map((s) => s.id);
+  const canVary = !!group.label_dev && !group.locked && real > 0 && group.samples < TOP_UP && group.generated < PER_REAL * real;
+  const [variantNote, setVariantNote] = useState("");
+  async function makeVariants() {
+    const reviewed = group.status !== "auto";
+    const ok = await confirm(
+      `Make more letters for ${group.label_guj || group.code} (up to ${TOP_UP} in all, at most ${PER_REAL} per real letter): ` +
+        "built from other letters of the book with the same vowel sign where it can (printed books), otherwise " +
+        "slightly changed copies of its real letters. They are marked gen and are used only once the group is reviewed" +
+        (reviewed ? ": the group goes back to not reviewed until you look at them." : ".") +
+        " Undo takes them back.",
+      "Make variants",
+    );
+    if (!ok) return;
+    setVariantNote("");
+    const r = await act(() => api.variants(bookId, group.id));
+    if (r) setVariantNote(`${String(r.made)} letters made (${String(r.built)} built from parts); look at them and mark the group reviewed.`);
+  }
   const open = (s: Sample) =>
     openOnPage(bookId, s, samples, group.label_guj ? `${group.label_guj} (${group.code})` : group.code);
 
@@ -153,6 +178,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
           {group.label_dev && <span className="big-letter muted">{group.label_dev}</span>}
           <div className="muted small">
             {group.code} · {group.kind} · {group.samples} samples ({group.red} red, {group.black} black)
+            {group.generated > 0 && ` · ${real} real, ${group.generated} system generated`}
             {group.spread !== null && ` · spread ${group.spread}`}
           </div>
         </div>
@@ -244,6 +270,14 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
           <button className="danger" disabled={locked || !ids.length} onClick={remove} title="Delete">
             Delete
           </button>
+          {shownGenerated.length > 0 && (
+            <button
+              onClick={() => setSelection({ ids: new Set(shownGenerated), anchor: null })}
+              title="Select the letters made by the system (marked gen) that are shown"
+            >
+              Select generated ({shownGenerated.length})
+            </button>
+          )}
           {mixups.length > 0 && (
             <>
               <button
@@ -280,6 +314,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         <LineContext sample={single} version={ctx.version} onOpen={open} />
       </div>
       {back.note && <p className="small muted">{back.note}</p>}
+      {variantNote && <p className="small muted">{variantNote}</p>}
 
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expected}
         onRemoveReading={(s) => act(() => api.removeReadings(bookId, [s.id]))}
@@ -293,6 +328,21 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
       )}
 
       <div className="row toolbar">
+        <button
+          disabled={!canVary}
+          onClick={makeVariants}
+          title={
+            canVary
+              ? "Make more letters for this group from the book's letters, to review"
+              : !group.label_dev
+                ? "Label the group first"
+                : real === 0
+                  ? "No real letter to start from"
+                  : `The group has enough letters (${TOP_UP}, or ${PER_REAL} per real letter)`
+          }
+        >
+          Make variants
+        </button>
         <button disabled={locked} onClick={() => setMerging(true)} title="Choose a group from the letter table">
           Merge another group into this one…
         </button>

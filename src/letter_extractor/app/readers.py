@@ -47,7 +47,7 @@ class Step:
 
 
 def _letters(lib: Library, book_ids: Sequence[int], include_unreviewed: bool, include_words: bool):
-    """(sample id, book id, page id, label, group status, mask, spacing) of the training letters. Letters made
+    """(sample id, book id, page id, label, group status, mask, spacing, source) of the training letters. Letters made
     by the system (generate.py, no page) only from reviewed groups, even with `include_unreviewed`."""
     out = []
     with lib.session() as s:
@@ -66,7 +66,7 @@ def _letters(lib: Library, book_ids: Sequence[int], include_unreviewed: bool, in
                 if not include_words and len(split_aksharas(label)) > 1:
                     continue
                 mask = _sample_mask(lib, book, x)
-                out.append((x.id, bid, x.page_id, label, status, mask, float(spacing or 1.6 * x.h)))
+                out.append((x.id, bid, x.page_id, label, status, mask, float(spacing or 1.6 * x.h), x.source))
     return out
 
 
@@ -76,7 +76,11 @@ class _Features:
     def __init__(self, items, ci: Dict[str, int], copies: Dict[str, int], rng):
         self.ci = ci
         self.base = {it[0]: features(it[5], it[6]) for it in items}
-        self.extra = {it[0]: [features(varied(it[5], rng), it[6]) for _ in range(copies.get(it[3], 0))] for it in items}
+        # varied copies of the real letters; of the generated ones only for a letter that has no real one
+        real = {it[3] for it in items if it[7] != GENERATED}
+        self.extra = {it[0]: [features(varied(it[5], rng), it[6])
+                              for _ in range(0 if it[7] == GENERATED and it[3] in real else copies.get(it[3], 0))]
+                      for it in items}
 
     def rows(self, items, with_copies: bool = True, at_most: int = 99) -> Tuple[np.ndarray, np.ndarray]:
         X, y = [], []
@@ -136,7 +140,9 @@ def train_reader(lib: Library, book_ids: Sequence[int], min_samples: int = 5, in
     train = [it for it in items if it[2] not in held or it[3] not in outside]
     val = [it for it in items if it[2] in val_pages and it[3] in outside]
     test = [it for it in items if it[2] in test_pages and it[3] in outside]
-    copies = {lab: max(3, min(30, -(-20 // max(1, n)))) for lab, n in counts.items() if lab in ci}   # rare: more
+    # rare: more copies, counted on the real letters (variants made by the system are copies already)
+    real_counts = Counter(it[3] for it in items if it[7] != GENERATED)
+    copies = {lab: max(3, min(30, -(-20 // max(1, real_counts.get(lab) or n)))) for lab, n in counts.items() if lab in ci}
     step(1, 6, "features", f"{len(items)} letters, {len(kept)} labels")
     feats = _Features(items, ci, copies, rng)
     X, y = feats.rows(train)
