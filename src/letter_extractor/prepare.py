@@ -61,9 +61,25 @@ def paper_tone(chan: np.ndarray, paper: np.ndarray, cfg: Config) -> np.ndarray:
     return cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR).astype(np.float32)
 
 
+def _headlines(h: np.ndarray, ink: np.ndarray, cfg: Config) -> np.ndarray:
+    """The horizontal runs of `h` that are the headline of printed words, not rules: a long word's
+    headline is as straight and long as a rule, but its letters hang from it, so most of its columns have
+    ink just below it. A rule has nothing hanging from it (the text keeps a gap)."""
+    H = ink.shape[0]
+    n, lab, st, _ = cv2.connectedComponentsWithStats(h, connectivity=8)
+    keep = np.zeros(n, bool)
+    for i in range(1, n):
+        x, y, w, hh = st[i, :4]
+        y0 = y + hh + cfg.rule_below_gap_px
+        below = ink[y0:min(H, y0 + cfg.rule_below_px), x:x + w]
+        keep[i] = below.size > 0 and below.any(axis=0).mean() >= cfg.rule_headline_frac
+    return keep[lab]
+
+
 def ruled_lines(ink: np.ndarray, cfg: Config) -> np.ndarray:
     """Pixels of long straight vertical or horizontal runs (border rules). Letters are far shorter
-    than `rule_min_frac` of the page, so only the rules survive the openings."""
+    than `rule_min_frac` of the page, so only the rules survive the openings; a word's headline can be
+    as long, so a horizontal run with letters hanging from it is kept (`_headlines`)."""
     H, W = ink.shape
     m = ink.astype(np.uint8)
     slant = max(1, cfg.rule_slant_px)
@@ -73,6 +89,7 @@ def ruled_lines(ink: np.ndarray, cfg: Config) -> np.ndarray:
     v = cv2.morphologyEx(v, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, vlen)))
     h = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_RECT, (1, slant)))
     h = cv2.morphologyEx(h, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (hlen, 1)))
+    h[_headlines(h, ink, cfg)] = 0
     lines = cv2.dilate(v | h, np.ones((3, 3), np.uint8))
     return (lines > 0) & ink
 

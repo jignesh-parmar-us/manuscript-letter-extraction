@@ -11,7 +11,7 @@ suggested group for them. Every operation is an action of `actions.py`: replaced
 deleted (not removed) and new ones are recorded as "did not exist before", so undo and redo work.
 
 The ink of a page comes from page preparation (C1), computed when first needed and cached in the
-book folder (`cache/<page>_ink.npz`, checked against the page's checksum).
+book folder (`cache/<page>_ink.npz`, checked against the page's checksum and `INK_VERSION`).
 """
 from __future__ import annotations
 
@@ -35,6 +35,7 @@ from .db import Book, Line, Page, Sample
 from .library import Library, NotFound, file_sha256
 
 Box = Tuple[int, int, int, int]
+INK_VERSION = 2       # raised when page preparation changes the ink (2: headlines are not rules)
 
 
 # ---- the ink of a page ----------------------------------------------------------------------------
@@ -48,7 +49,8 @@ def page_ink(lib: Library, book: Book, page: Page) -> PreparedPage:
     cache = lib.book_dir(book) / "cache" / f"{prefix}{Path(page.file).stem}_ink.npz"
     if cache.is_file():
         data = np.load(cache)
-        if str(data["sha256"]) == page.sha256 and tuple(data["shape"]) == rgb.shape[:2]:
+        version = int(data["version"]) if "version" in data else 1
+        if str(data["sha256"]) == page.sha256 and tuple(data["shape"]) == rgb.shape[:2] and version == INK_VERSION:
             h, w = rgb.shape[:2]
             black = np.unpackbits(data["black"])[: h * w].reshape(h, w).astype(bool)
             red = np.unpackbits(data["red"])[: h * w].reshape(h, w).astype(bool)
@@ -57,7 +59,7 @@ def page_ink(lib: Library, book: Book, page: Page) -> PreparedPage:
     prepared = prepare_page(rgb, lib.book_config(book))
     cache.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(cache, sha256=np.array(page.sha256 or file_sha256(src)), shape=np.array(rgb.shape[:2]),
-                        black=np.packbits(prepared.black), red=np.packbits(prepared.red))
+                        version=np.array(INK_VERSION), black=np.packbits(prepared.black), red=np.packbits(prepared.red))
     return prepared
 
 

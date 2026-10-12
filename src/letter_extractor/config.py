@@ -33,6 +33,9 @@ class Config:
     red_min_dl: float = 8.0           # ...and it is at least this much darker (Lab L, 0-255) than the paper
     rule_min_frac: float = 0.15       # straight ink runs longer than this x page height / width are ruled lines
     rule_slant_px: int = 5            # tolerance for slanted ruled lines
+    rule_below_gap_px: int = 3        # a horizontal run is a word's headline, not a rule, if ink hangs from it:
+    rule_below_px: int = 22           # ink in this band (px), starting this gap below the run...
+    rule_headline_frac: float = 0.5   # ...in at least this share of its columns (headlines 0.73-1.0, rules ~0)
     block_smooth_px: int = 41         # smoothing of the ink profiles used to find the text block
     block_col_frac: float = 0.20      # a column is in the text block if its ink is this x a typical text column
     block_row_frac: float = 0.05      # same for rows (low: gaps between lines must not split the block)

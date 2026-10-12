@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import synthetic                                                    # noqa: E402
 from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
-from letter_extractor.prepare import prepare_page                   # noqa: E402
+from letter_extractor.prepare import prepare_page, ruled_lines      # noqa: E402
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 
@@ -50,6 +50,25 @@ class SyntheticPrepareTests(unittest.TestCase):
     def test_border_is_not_ink(self):
         for x0 in (150, synthetic.W - 150 - 44):
             self.assertEqual(self.page.ink[:, x0:x0 + 44].sum(), 0)
+
+
+class RuledLineTests(unittest.TestCase):
+    def test_a_long_headline_is_not_a_rule(self):
+        ink = np.zeros((400, 1000), bool)
+        ink[100:108, 100:700] = True                 # a word's headline, 60 % of the width...
+        for x in range(100, 700, 40):                # ...with its letters hanging from it (body and stem)
+            ink[115:150, x + 4:x + 34] = True
+            ink[108:150, x + 28:x + 34] = True
+        ink[300:306, 100:900] = True                 # a rule with nothing hanging from it
+        rules = ruled_lines(ink, Config())
+        self.assertEqual(rules[100:150].sum(), 0, "headline taken for a rule")
+        self.assertTrue(rules[300:306, 100:900].all(), "rule kept as ink")
+
+    def test_a_vertical_rule_is_still_a_rule(self):
+        ink = np.zeros((400, 1000), bool)
+        ink[20:380, 900:906] = True
+        ink[50:60, 902:960] = True                   # text touching it does not save it
+        self.assertTrue(ruled_lines(ink, Config())[20:380, 900:906].all())
 
 
 @unittest.skipUnless((SAMPLES / "page1.jpg").is_file(), "sample pages not present")

@@ -195,7 +195,7 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
 - **Ink masks:**
   - red ink: Lab `a*` at least 14 above the local paper and at least 8 darker (L) than it;
   - black ink: lightness below 0.62 x the local paper lightness, and not red.
-- **Ruled lines:** straight ink runs longer than 15% of the page height or width are border rules and are removed from the ink masks.
+- **Ruled lines:** straight ink runs longer than 15% of the page height or width are border rules and are removed from the ink masks, except a horizontal run with letters hanging from it (ink in the 22 px below it in at least half of its columns): that is the headline of a long printed word.
 - **Text block:** the main run of ink-dense columns, then of rows; folio numbers cover only a few lines, so they fall outside it.
 - Remove specks smaller than `min_speck_px` (separately for red and black).
 
@@ -206,6 +206,7 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
 - **Fixed thresholds against the local paper instead of an adaptive (Sauvola) threshold.** The ink is clearly separated from the paper once the paper tone is known locally, so a simple, explainable rule per ink was enough.
 - **The median window is 151 px, not 51.** With 51 px the window is about one letter wide; inside dense red text the "paper" estimate was pulled towards red (`a*` 150 instead of 134), so the red headlines and light strokes were lost. With 151 px paper and red ink separate cleanly (paper at 0, red ink at about +40 in `a*` difference).
 - **Ruled lines are removed by shape**, which the plan did not mention. On raw scans the red rules are red ink too; removing them is what lets the text block exclude them. Letters that cross a rule lose the crossing pixels, so pages cleaned by the border remover are still preferred.
+- **Headlines are not rules (added later).** On printed pages a long word's headline is as straight as a rule and often longer than 15% of the width, so it was erased and its letters were cut without it (about 6% of the samples of the printed books, on 14 of 23 pages). A horizontal run is now a rule only if nothing hangs from it: headlines measured 0.73-1.0 of their columns with ink just below, rules about 0. On every page of the seven books only headlines came back; vertical borders and the handwritten book's border frames are still removed. Samples already cut are given their headline back by `app/headlines.py` (list, fix, undo, with a backup), not by cutting again, so the review is kept. The cached page ink (`cache/<page>_ink.npz`) carries a version and is computed again after such a change.
 
 ### C2. Line detection (FR-3)
 
@@ -651,6 +652,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | `paper_blur_px` | C1 | 151 (was 51 in the plan, see C1) |
 | `black_max_rel_l`, `red_min_da`, `red_min_dl` | C1 | 0.62, 14, 8 |
 | `rule_min_frac` | C1 | 0.15 of the page |
+| `rule_below_gap_px`, `rule_below_px`, `rule_headline_frac` | C1 | 3, 22, 0.5 (a run with letters hanging from it is a headline) |
 | `min_speck_px` | C1 | 8 / 5 |
 | `line_spacing_px` | C2 | 0 = auto (≈ 112) |
 | `headline_min_run_px` | C2 | 25 |
