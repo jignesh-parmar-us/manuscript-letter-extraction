@@ -104,13 +104,15 @@ def delete_word_list(lib: Library, list_id: int) -> None:
 
 
 # ---- what a book's model learns from ----------------------------------------------------------------------
-def _label_lines(s, book_id: int) -> List[str]:
+def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
     """The labelled letters of the book's Training Data pages in reading order, in stretches."""
-    rows = s.execute(select(Sample.line_id, LetterGroup.label_dev)
-                     .join(Page, Sample.page_id == Page.id)
-                     .outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
-                     .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training")
-                     .order_by(Page.id, Sample.line_number, Sample.x, Sample.pos)).all()
+    q = (select(Sample.line_id, LetterGroup.label_dev)
+         .join(Page, Sample.page_id == Page.id)
+         .outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
+         .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training"))
+    if skip_files:
+        q = q.where(Page.file.not_in(list(skip_files)))
+    rows = s.execute(q.order_by(Page.id, Sample.line_number, Sample.x, Sample.pos)).all()
     out, cur, line = [], [], None
     for line_id, label in rows:
         if line_id != line or not label:
@@ -124,9 +126,12 @@ def _label_lines(s, book_id: int) -> List[str]:
     return out
 
 
-def _proofread_lines(s, book_id: int) -> List[str]:
+def _proofread_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
     out = []
-    for raw in s.scalars(select(PageText.proofread).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id)):
+    q = select(PageText.proofread).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id)
+    if skip_files:
+        q = q.where(Page.file.not_in(list(skip_files)))
+    for raw in s.scalars(q):
         out.extend(v for v in json.loads(raw or "{}").values() if v)
     return out
 
@@ -159,6 +164,20 @@ def book_model(lib: Library, book_id: int) -> LanguageModel:
         if f.is_file():
             lm.add_all(f.read_text(encoding="utf-8").splitlines())
     _cache[key] = (sig, lm)
+    return lm
+
+
+def book_model_without(lib: Library, book_id: int, skip_files: Sequence[str]) -> LanguageModel:
+    """The book's language model without the labels and proofread lines of the pages `skip_files` (both
+    parts), for measuring on those pages; the word lists are kept. Not cached."""
+    with lib.session() as s:
+        lm = LanguageModel()
+        lm.add_all(_label_lines(s, book_id, skip_files))
+        lm.add_all(_proofread_lines(s, book_id, skip_files))
+        files = [lib.root / "dictionaries" / w.file for w in _lists_of(s, book_id)]
+    for f in files:
+        if f.is_file():
+            lm.add_all(f.read_text(encoding="utf-8").splitlines())
     return lm
 
 

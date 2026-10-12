@@ -115,6 +115,79 @@ class WholeLineTests(unittest.TestCase):
         self.assertEqual(marks, [("व", "ण")])                                  # 60 for व, and the line search read ण
         self.assertEqual(first["aksharas"][3]["search_guj"], "ણ")
 
+    def test_our_reader_shows_its_own_reading_with_places_and_shared_corrections(self):
+        from letter_extractor.app import linesearch
+        from letter_extractor.app.wholelines import set_whole_line
+        from letter_extractor.ocr.segment import Step
+        self.lib.set_book_config(self.book, Config(language_model=False))
+        read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)
+        self.assertIsNone(page_whole_lines(self.lib, self.page, "search"))       # our reader has not read it
+        self.assertEqual(book_whole_lines(self.lib, self.book, part="training", engine="search"), [])
+        steps = [Step(0, 10, "ना"), Step(10, 20, "रा"), Step(20, 30, "य"), Step(30, 40, "ण"),
+                 Step(60, 70, "भ", space=True), Step(70, 80, "ग")]
+        with mock.patch.object(linesearch, "_load", return_value=(None, {"typical_width": 30.0, "widths": {}})), \
+                mock.patch.object(linesearch, "read_line", return_value=("नारायण भग", steps, {})):
+            linesearch.search_book(self.lib, self.book, [self.page])
+        got = page_whole_lines(self.lib, self.page, "search")
+        first = got["lines"][0]
+        self.assertEqual(first["text_dev"], "नारायण भग")
+        self.assertEqual([x["text_dev"] for x in first["aksharas"]], ["ना", "रा", "य", "ण", "भ", "ग"])
+        self.assertEqual([x["space"] for x in first["aksharas"]], [False] * 4 + [True, False])
+        self.assertEqual([(x["text_dev"], x.get("other_dev")) for x in first["aksharas"] if x["uncertain"]],
+                         [("ण", "व")])                                         # Tesseract read व there
+        self.assertIsNotNone(first["aksharas"][0]["box"])                      # its place on the page
+        self.assertEqual(first["aksharas"][4]["box"][0] - first["aksharas"][0]["box"][0], 60)
+        self.assertTrue(book_whole_lines(self.lib, self.book, part="training", engine="search"))
+        set_whole_line(self.lib, self.lines, text="नारायण भगवान", reviewed=True)    # one correction per line
+        for engine in ("tesseract", "search"):
+            line = page_whole_lines(self.lib, self.page, engine)["lines"][0]
+            self.assertEqual((line["edited_dev"], line["reviewed"]), ("नारायण भगवान", True))
+
+    def test_the_reader_says_when_the_reviewed_letters_changed(self):
+        from letter_extractor.app import linesearch
+        from letter_extractor.app.db import LetterGroup, Sample
+        reader = mock.MagicMock()
+        meta = {"letters": 30, "labels": 3, "typical_width": 30.0, "widths": {}}
+        self.assertIsNone(linesearch.line_reader_info(self.lib, self.book))
+        with mock.patch.object(linesearch, "_train", return_value=(reader, meta)):
+            linesearch.train_line_reader(self.lib, self.book)
+        self.assertFalse(linesearch.line_reader_info(self.lib, self.book)["changed"])
+        with self.lib.session() as s:
+            g = s.scalar(select(LetterGroup).join(Sample, Sample.group_id == LetterGroup.id)
+                         .where(LetterGroup.book_id == self.book, Sample.line_id.is_not(None)))
+            g.label_dev, g.status = "क", "reviewed"
+        self.assertTrue(linesearch.line_reader_info(self.lib, self.book)["changed"])
+
+    def test_the_measure_leaves_out_the_tested_pages(self):
+        from letter_extractor.app import linesearch
+        from letter_extractor.app.wholelines import set_whole_line
+        self.lib.set_book_config(self.book, Config(language_model=True))
+        with mock.patch("letter_extractor.app.dictionary.book_model", return_value=LanguageModel()):
+            read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)
+        with self.lib.session() as s:
+            page = s.get(Page, self.page)
+            page.part, file = "read", page.file                                # the checked lines are Read Book lines
+        set_whole_line(self.lib, self.lines, text="नारायण भग", reviewed=True)
+        meta = {"letters": 30, "labels": 3, "typical_width": 30.0, "widths": {}}
+        with mock.patch.object(linesearch, "_train", return_value=(None, meta)) as train, \
+                mock.patch("letter_extractor.app.dictionary.book_model_without", return_value=LanguageModel()) as lm, \
+                mock.patch.object(linesearch, "read_line", return_value=("नारायण भग", [], {})):
+            r = linesearch.measure(self.lib, self.book)
+        self.assertEqual(train.call_args.args[2], [file])                      # trained without the tested page
+        self.assertEqual(lm.call_args.args[2], [file])
+        self.assertEqual((r["folds"], r["lines"]), (1, 1))
+        self.assertEqual(r["cer"]["ours"], 0.0)
+        self.assertGreater(r["cer"]["tesseract"], 0.0)                         # व for ण
+        self.assertEqual((r["mistakes"], r["caught"]), (1, 1))                 # the mark falls on the mistake
+        self.assertEqual(linesearch.last_measure(self.lib, self.book)["line_results"][0]["truth"], "नारायण भग")
+
+    def test_border_marks_at_the_line_edges_are_left_out(self):
+        from letter_extractor.app.wholelines import trim_edges
+        aks = [["|", 40.0, False], ["!", 30.0, True], ["ना", 96.0, True], ["।", 90.0, False], ["]", 20.0, True]]
+        self.assertEqual([a[0] for a in trim_edges(aks)], ["ना", "।"])
+        self.assertFalse(trim_edges(aks)[0][2])                                  # no gap before the first akshara
+        self.assertEqual(trim_edges([["|", 40.0, False]]), [])
+
     def test_disagreements(self):
         from letter_extractor.app.linesearch import disagreements
         self.assertEqual(disagreements(["ना", "रा", "य"], "नारा य"), [None, None, None])
@@ -146,6 +219,9 @@ class WholeLineTests(unittest.TestCase):
         txt = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&script=devanagari"
                     f"&page_id={self.page}&token=t").text
         self.assertIn("नारायण भग", txt)                                             # the correction is downloaded
+        self.assertEqual(c.get(f"/api/books/{self.book}/line-search", headers=h).json(), {"reader": None, "measure": None})
+        self.assertEqual(c.get(f"/api/pages/{self.page}/whole-lines?engine=search", headers=h).status_code, 404)
+        self.assertEqual(c.get(f"/api/books/{self.book}/whole-lines?part=training&engine=search", headers=h).json(), [])
         c.close()
 
 

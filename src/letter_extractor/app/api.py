@@ -222,10 +222,10 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                             mode=body.mode).as_dict()
 
     @app.get("/api/pages/{page_id}/whole-lines", dependencies=auth)
-    def whole_lines_of_page(page_id: int) -> Dict:
-        """A page's lines read whole by Tesseract (no letter cutting)."""
+    def whole_lines_of_page(page_id: int, engine: str = Query("tesseract", pattern="^(tesseract|search)$")) -> Dict:
+        """A page's lines read whole by Tesseract or by the line search (no letter cutting)."""
         from .wholelines import page_whole_lines
-        got = page_whole_lines(library, page_id)
+        got = page_whole_lines(library, page_id, engine)
         if got is None:
             raise HTTPException(404, "This page's lines are not read yet.")
         return got
@@ -243,15 +243,22 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     @app.get("/api/books/{book_id}/line-search", dependencies=auth)
     def line_search_reader(book_id: int) -> Dict:
-        """The book's line-search reader: what it was trained on, or {"reader": null}."""
-        from .linesearch import line_reader_info
-        return {"reader": line_reader_info(library, book_id)}
+        """The book's line-search reader (what it was trained on, or null) and its last measure (or null)."""
+        from .linesearch import last_measure, line_reader_info
+        m = last_measure(library, book_id)
+        return {"reader": line_reader_info(library, book_id), "measure": m}
+
+    @app.post("/api/books/{book_id}/line-search/measure", dependencies=auth, status_code=202)
+    def line_search_measure(book_id: int) -> Dict:
+        """Score the line search fold-fair on the checked lines (a job)."""
+        return jobs.line_search_measure(book_id).as_dict()
 
     @app.get("/api/books/{book_id}/whole-lines", dependencies=auth)
-    def whole_lines_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$")) -> List[Dict]:
+    def whole_lines_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$"),
+                            engine: str = Query("tesseract", pattern="^(tesseract|search)$")) -> List[Dict]:
         from .wholelines import book_whole_lines
         library.get_book(book_id)
-        return book_whole_lines(library, book_id, part)
+        return book_whole_lines(library, book_id, part, engine)
 
     @app.get("/api/pages/{page_id}/text", dependencies=auth)
     def text_of_page(page_id: int) -> Dict:
@@ -296,7 +303,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                       page_id: Optional[int] = None, script: str = Query("gujarati", pattern="^(gujarati|devanagari)$"),
                       part: str = Query("read", pattern="^(training|read)$"),
                       marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$"),
-                      readers: str = Query("both", pattern="^(both|tesseract|lines|lines_lm)$")):
+                      readers: str = Query("both", pattern="^(both|tesseract|lines|lines_lm|search)$")):
         """The text of one page or of every converted page of a part, as .txt (UTF-8) or Word."""
         from urllib.parse import quote
         from ..mapping import mapping_for
@@ -305,9 +312,9 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         book = library.get_book(book_id)
         cfg = library.book_config(book)
         mapping = mapping_for(cfg)
-        if readers in ("lines", "lines_lm"):        # lines read whole by Tesseract (+ the language model)
-            from .wholelines import whole_line_texts
-            rows = whole_line_texts(library, book_id, part, page_id)
+        if readers in ("lines", "lines_lm", "search"):   # lines read whole by Tesseract (+ the language
+            from .wholelines import whole_line_texts      # model), or by the line search (our reader)
+            rows = whole_line_texts(library, book_id, part, page_id, "search" if readers == "search" else "tesseract")
             if not rows:
                 raise HTTPException(404, "No lines read yet.")
             mark = marker or cfg.uncertain_marker

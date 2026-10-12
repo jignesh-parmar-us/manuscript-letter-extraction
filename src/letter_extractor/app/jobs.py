@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | line_search | train | use_reader
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | line_search | line_search_measure | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -205,6 +205,13 @@ class Jobs:
             raise LibraryError("No pages read whole yet: read the pages first (Read all pages).")
         return self.start(book_id, "line_search", lambda progress, cancel: search_book(
             self.lib, book_id, page_ids, part, retrain, progress, cancel), total=total)
+
+    def line_search_measure(self, book_id: int) -> Job:
+        """Score the line search fold-fair on the checked lines (linesearch.measure): one step per fold."""
+        from .linesearch import measure
+        self.lib.get_book(book_id)
+        return self.start(book_id, "line_search_measure", lambda progress, cancel: measure(
+            self.lib, book_id, progress=progress, cancel=cancel), total=4)
 
     def train(self, book_id: int, books=None, min_samples: int = 5, include_unreviewed: bool = False,
               include_words: bool = False, name: str = "") -> Job:

@@ -47,6 +47,7 @@ interface Props {
   initialScript?: Script;
   overlay?: boolean; // shown on top of the screen (bottom), not inside a scrolling panel
   onClose?: () => void;
+  closable?: boolean; // a Close button also when not an overlay
 }
 
 export default function LetterPalette(props: Props) {
@@ -59,7 +60,7 @@ export default function LetterPalette(props: Props) {
   );
 }
 
-function Palette({ onKey, onBackspace, onEmpty, extra, initialScript = "gujarati", overlay, onClose }: Props) {
+function Palette({ onKey, onBackspace, onEmpty, extra, initialScript = "gujarati", overlay, onClose, closable }: Props) {
   const [script, setScript] = useState<Script>(initialScript);
   return (
     <div className="palette" role="group" aria-label="Letters">
@@ -76,7 +77,7 @@ function Palette({ onKey, onBackspace, onEmpty, extra, initialScript = "gujarati
           ⌫
         </button>
         {onEmpty && <button onClick={onEmpty}>Empty</button>}
-        {overlay && onClose && (
+        {(overlay || closable) && onClose && (
           <button className="palette-close" onClick={onClose}>
             Close
           </button>

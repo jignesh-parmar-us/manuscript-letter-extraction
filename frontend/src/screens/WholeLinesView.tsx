@@ -6,8 +6,13 @@
 // keys move between aksharas (← →) and lines (↑ ↓). A line can be corrected (✎, or the box in Line by line)
 // and marked reviewed (✓): a reviewed line is also kept as a checked line (Line truth). "With the language
 // model" shows the corrected reading (changed aksharas underlined); downloads follow it and the corrections.
+//
+// engine "search" (Whole lines (our reader)): the same view with the line search's reading (linesearch.py):
+// no Tesseract, its aksharas with their places; where Tesseract reads differently is highlighted. Its reader
+// is trained on the book's reviewed letters (Retrain when they changed), and Measure scores it fold-fair on
+// the checked lines. Corrections and ✓ are the line's: the same in both views.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, Book, Marker, PageInfo, TextSource, WholeAkshara, WholeLine, WholeLines } from "../api";
+import { api, Book, LineEngine, LineSearchState, Marker, PageInfo, TextSource, WholeAkshara, WholeLine, WholeLines } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import LetterPalette from "../components/LetterPalette";
 import { useJob } from "../components/useJob";
@@ -23,6 +28,7 @@ interface Props {
   book: Book;
   pageId: number | null;
   onChanged: () => void;
+  engine?: LineEngine;
   layout: Layout;
   pageStyle: PageStyle;
   aligned: boolean;
@@ -68,13 +74,17 @@ export function useArrowKeys(onMove: (step: number, line: number) => void) {
   }, [onMove]);
 }
 
-export default function WholeLinesView({ book, pageId, onChanged, layout, pageStyle, aligned }: Props) {
+export default function WholeLinesView({ book, pageId, onChanged, engine = "tesseract", layout, pageStyle, aligned }: Props) {
+  const ours = engine === "search";
   const [pages, setPages] = useState<PageInfo[]>([]);
-  const [read, setRead] = useState<Map<number, number>>(new Map()); // page id -> lines read
+  const [read, setRead] = useState<Map<number, number>>(new Map()); // page id -> lines read (by this engine)
+  const [readByTesseract, setReadByTesseract] = useState<Set<number>>(new Set()); // our reader needs these
+  const [state, setState] = useState<LineSearchState | null>(null); // our reader: training and measure
   const [text, setText] = useState<WholeLines | null>(null);
   const [script, setScript] = useState<Script>("gujarati");
   const [marker, setMarker] = useState<Marker>("none");
-  const [lm, setLm] = useState(storedLm);
+  const [lmChoice, setLm] = useState(storedLm);
+  const lm = lmChoice && !ours; // our reader uses the language model in its search already
   const [li, setLi] = useState(0); // the current line
   const [ai, setAi] = useState<number | null>(null); // the selected akshara of that line
   const [editing, setEditing] = useState<number | null>(null); // a line id (Whole page)
@@ -88,8 +98,12 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
 
   useEffect(() => {
     api.pages(book.id, "read").then(setPages, setError);
-    api.bookWholeLines(book.id).then((ps) => setRead(new Map(ps.map((p) => [p.page_id, p.lines]))), setError);
-  }, [book.id, version]);
+    api.bookWholeLines(book.id, engine).then((ps) => setRead(new Map(ps.map((p) => [p.page_id, p.lines]))), setError);
+    if (ours) {
+      api.bookWholeLines(book.id).then((ps) => setReadByTesseract(new Set(ps.map((p) => p.page_id))), setError);
+      api.lineSearchReader(book.id).then(setState, setError);
+    }
+  }, [book.id, version, engine, ours]);
   useEffect(() => {
     if (pageId === null && pages.length) go(`/books/${book.id}/text/${pages[0].id}`);
   }, [pageId, pages, book.id]);
@@ -99,15 +113,16 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
     setAi(null);
     setEditing(null);
     if (pageId === null || !isRead) return;
-    api.wholeLines(pageId).then(setText, setError);
-  }, [pageId, isRead, version]);
+    api.wholeLines(pageId, engine).then(setText, setError);
+  }, [pageId, isRead, version, engine]);
   useEffect(() => setLi(0), [pageId]);
 
   const onEnd = useCallback(() => {
     setVersion((v) => v + 1);
     onChanged();
   }, [onChanged]);
-  const [job, setJob] = useJob(book.job?.kind === "convert" || book.job?.kind === "line_search" ? book.job : null, onEnd);
+  const kinds = ours ? ["line_search", "line_search_measure"] : ["convert"];
+  const [job, setJob] = useJob(book.job && kinds.includes(book.job.kind) ? book.job : null, onEnd);
   const running = job?.status === "running";
 
   async function readPages(ids?: number[]) {
@@ -118,10 +133,18 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
       setError(e);
     }
   }
-  async function secondOpinion(ids?: number[]) {
+  async function readOurs(ids?: number[], retrain = false) {
     setError(null);
     try {
-      setJob(await api.lineSearch(book.id, ids));
+      setJob(await api.lineSearch(book.id, ids, retrain));
+    } catch (e) {
+      setError(e);
+    }
+  }
+  async function measure() {
+    setError(null);
+    try {
+      setJob(await api.lineSearchMeasure(book.id));
     } catch (e) {
       setError(e);
     }
@@ -140,7 +163,8 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
   const prev = at > 0 ? pages[at - 1] : undefined;
   const next = at >= 0 && at < pages.length - 1 ? pages[at + 1] : undefined;
   const nRead = pages.filter((p) => read.has(p.id)).length;
-  const source: TextSource = lm ? "lines_lm" : "lines";
+  const source: TextSource = ours ? "search" : lm ? "lines_lm" : "lines";
+  const reader = state?.reader ?? null;
   const lines = text?.lines ?? [];
   const cur = lines[Math.min(li, Math.max(0, lines.length - 1))] ?? null;
   const picked = cur && ai !== null && !cur.edited_dev ? cur.aksharas[ai] ?? null : null;
@@ -334,6 +358,19 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
     if (layout === "page") lineRefs.current.get(li)?.scrollIntoView?.({ block: "nearest" });
   }, [li, layout]);
 
+  // the Letters palette under the correction box, in the page's flow: it never covers the box and has no
+  // scroll of its own (As a page: below the panes, since the text pane scrolls)
+  const paletteRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (letters) paletteRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [letters]);
+  const palette = letters && (
+    <div ref={paletteRef} className="line-palette">
+      <LetterPalette onKey={insert} onBackspace={backspace} closable onClose={() => setLetters(false)}
+        extra={<button onClick={() => insert(" ")}>Space</button>} />
+    </div>
+  );
+
   const correctionBox = (ln: WholeLine, onCancel?: () => void) => (
     <>
       <div className="line-edit">
@@ -367,10 +404,7 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
           </button>
         )}
       </div>
-      {letters && (
-        <LetterPalette overlay onClose={() => setLetters(false)} onKey={insert} onBackspace={backspace}
-          extra={<button onClick={() => insert(" ")}>Space</button>} />
-      )}
+      {layout !== "page" || pageStyle !== "image" ? palette : null}
     </>
   );
 
@@ -392,27 +426,37 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
         <button disabled={!next} onClick={() => next && go(`/books/${book.id}/text/${next.id}`)} aria-label="Next page">
           ▶
         </button>
-        <button disabled={running || !page} onClick={() => page && readPages([page.id])}>
-          {isRead ? "Read this page again" : "Read this page"}
-        </button>
-        <button disabled={running || !pages.length} onClick={() => readPages()}>
-          Read all pages
-        </button>
+        {ours ? (
+          <>
+            <button disabled={running || !page || !readByTesseract.has(page.id)} onClick={() => page && readOurs([page.id])}
+              title="Our reader reads this page's lines (they must be read by Tesseract first: it uses the same lines)">
+              {isRead ? "Read this page again" : "Read this page"}
+            </button>
+            <button disabled={running || !readByTesseract.size} onClick={() => readOurs()}
+              title="Our reader reads every page read whole by Tesseract (about 7 s per line). The first time, it learns the letters first (a few minutes).">
+              Read all pages
+            </button>
+          </>
+        ) : (
+          <>
+            <button disabled={running || !page} onClick={() => page && readPages([page.id])}>
+              {isRead ? "Read this page again" : "Read this page"}
+            </button>
+            <button disabled={running || !pages.length} onClick={() => readPages()}>
+              Read all pages
+            </button>
+          </>
+        )}
         <span className="small muted">
           {nRead} of {pages.length} read
         </span>
-        <button
-          disabled={running || !nRead}
-          onClick={() => secondOpinion()}
-          title="The line search reads the pages read whole again, without Tesseract, using this book's reviewed letters; the aksharas where it reads differently are marked uncertain. The first time, it learns the letters first (a few minutes)."
-        >
-          Second opinion
-        </button>
         <span className="spacer" />
-        <label className="row small" title="Tesseract's reading corrected by the book's language model (Read Book → Dictionary)">
-          <input type="checkbox" checked={lm} onChange={(e) => chooseLm(e.target.checked)} />
-          With the language model
-        </label>
+        {!ours && (
+          <label className="row small" title="Tesseract's reading corrected by the book's language model (Read Book → Dictionary)">
+            <input type="checkbox" checked={lm} onChange={(e) => chooseLm(e.target.checked)} />
+            With the language model
+          </label>
+        )}
         <div className="row" role="group" aria-label="Script">
           <button className={script === "gujarati" ? "tab active" : "tab"} onClick={() => setScript("gujarati")}>
             ગુજરાતી
@@ -422,6 +466,31 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
           </button>
         </div>
       </div>
+      {ours && (
+        <div className="row our-reader small" aria-label="Our reader">
+          <span>
+            {reader
+              ? `Reader trained on ${reader.letters} reviewed letters (${reader.labels} labels), ${new Date(reader.trained_at).toLocaleString()}.`
+              : "No reader yet: Read all pages learns the letters first (a few minutes)."}
+            {reader?.changed && <strong> Your reviewed letters changed since: retrain to use them.</strong>}
+          </span>
+          {reader && (
+            <button className={reader.changed ? "primary" : ""} disabled={running || !readByTesseract.size}
+              onClick={() => readOurs(undefined, true)}
+              title="Learn the letters again from the reviewed groups as they are now (a few minutes), then read all pages again">
+              Retrain and read all pages
+            </button>
+          )}
+          <button disabled={running} onClick={measure}
+            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also Training Data pages (about 10 minutes per group, four groups).">
+            Measure
+          </button>
+        </div>
+      )}
+      {ours && !readByTesseract.size && (
+        <p className="muted small">Our reader reads the lines found for Whole lines (Tesseract): read the pages there first.</p>
+      )}
+      {ours && state?.measure && <MeasureResult m={state.measure} />}
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
       {!pages.length ? (
         <p className="muted">No Read Book pages are cut yet: upload the book and cut its pages first (Upload &amp; capture).</p>
@@ -464,13 +533,19 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
           </div>
           {!text ? (
             <p className="muted">
-              {isRead ? "Loading…" : "This page is not read yet: Read this page (Tesseract reads each line whole, no letters are cut)."}
+              {isRead
+                ? "Loading…"
+                : ours
+                  ? "Our reader has not read this page yet: Read this page."
+                  : "This page is not read yet: Read this page (Tesseract reads each line whole, no letters are cut)."}
             </p>
           ) : (
             <>
               <p className="small muted">
-                Tesseract read each line whole · {text.uncertain} uncertain aksharas (highlighted)
-                {searched > 0 && ` · second opinion on ${searched} of ${lines.length} lines`}
+                {ours
+                  ? `Our reader read ${searched} of ${lines.length} lines, without Tesseract · ${text.uncertain} aksharas where Tesseract reads differently (highlighted)`
+                  : `Tesseract read each line whole · ${text.uncertain} uncertain aksharas (highlighted)`}
+                {!ours && searched > 0 && ` · our reader's second opinion on ${searched} of ${lines.length} lines`}
                 {lm && ` · ${changed} changed by the language model (underlined)`} · {reviewed} of {lines.length} lines reviewed ·
                 ← → aksharas, ↑ ↓ lines
               </p>
@@ -503,6 +578,7 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
                 </div>
               ) : (
                 pageStyle === "image" ? (
+                  <>
                   <div className="text-panes">
                     <div className="text-page" aria-label="Page">
                       {page && (
@@ -551,6 +627,8 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
                       </div>
                     </div>
                   </div>
+                  {editing !== null && palette}
+                  </>
                 ) : (
                 <div className="interlinear" aria-label="Lines">
                   {page && lines.map((ln, i) => (
@@ -589,12 +667,19 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
                 </div>
                 )
               )}
-              {picked && (
+              {picked && ours && (
+                <p className="small text-letter-info" aria-live="polite">
+                  <strong>{aksharaText(picked, script, lm)}</strong> · our reader
+                  {picked.other_dev !== undefined &&
+                    ` · Tesseract: ${picked.other_dev ? (script === "gujarati" ? picked.other_guj : picked.other_dev) : "nothing here"}`}
+                </p>
+              )}
+              {picked && !ours && (
                 <p className="small text-letter-info" aria-live="polite">
                   <strong>{aksharaText(picked, script, lm)}</strong> · Tesseract: {script === "gujarati" ? picked.text_guj : picked.text_dev} (
-                  {Math.round(picked.conf)}){picked.lm_dev && ` · the language model: ${script === "gujarati" ? picked.lm_guj : picked.lm_dev}`}
+                  {Math.round(picked.conf ?? 0)}){picked.lm_dev && ` · the language model: ${script === "gujarati" ? picked.lm_guj : picked.lm_dev}`}
                   {picked.search_dev !== undefined &&
-                    ` · the line search: ${picked.search_dev ? (script === "gujarati" ? picked.search_guj : picked.search_dev) : "nothing here"}`}
+                    ` · our reader: ${picked.search_dev ? (script === "gujarati" ? picked.search_guj : picked.search_dev) : "nothing here"}`}
                 </p>
               )}
             </>
@@ -612,6 +697,57 @@ export default function WholeLinesView({ book, pageId, onChanged, layout, pageSt
             </section>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** The last fold-fair measure of our reader on the checked lines, with every line to check by eye. */
+function MeasureResult({ m }: { m: NonNullable<LineSearchState["measure"]> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="measure-result small" aria-label="Measure">
+      <p>
+        On <strong>{m.lines}</strong> checked lines ({m.pages} pages, {m.chars} characters; measured{" "}
+        {new Date(m.measured_at).toLocaleString()}), characters wrong: <strong>our reader {m.cer.ours}%</strong> ·
+        Tesseract {m.cer.tesseract}% · Tesseract + language model {m.cer.tesseract_lm}%. As a second opinion it marks{" "}
+        {m.marked}% of the aksharas and {m.caught} of the {m.mistakes} still wrong after Tesseract + language model.{" "}
+        <button className="link" onClick={() => setOpen((v) => !v)}>
+          {open ? "Hide the lines" : "Show the lines"}
+        </button>
+      </p>
+      <p className="muted">
+        Fair: our reader and its language model were trained without the pages being scored ({m.folds} groups of
+        pages). The language model beside Tesseract knows every page, and checked text typed from Tesseract's
+        reading slightly favours Tesseract.
+      </p>
+      {open && (
+        <table className="measure-lines">
+          <thead>
+            <tr>
+              <th>Page · line</th>
+              <th>Checked text / our reader / Tesseract</th>
+              <th className="num">Ours wrong</th>
+              <th className="num">Tesseract wrong</th>
+            </tr>
+          </thead>
+          <tbody>
+            {m.line_results.map((x) => (
+              <tr key={`${x.page}-${x.line}`}>
+                <td>
+                  {x.page} · {x.line}
+                </td>
+                <td lang="sa" className="measure-texts">
+                  <div>{x.truth}</div>
+                  <div className={x.wrong.ours ? "measure-diff" : ""}>{x.ours}</div>
+                  <div className={x.wrong.tesseract ? "measure-diff" : ""}>{x.tesseract}</div>
+                </td>
+                <td className="num">{x.wrong.ours}</td>
+                <td className="num">{x.wrong.tesseract}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );

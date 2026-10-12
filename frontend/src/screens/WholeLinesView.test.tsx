@@ -8,7 +8,7 @@ vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { ...real.api, pages: vi.fn(), bookWholeLines: vi.fn(), wholeLines: vi.fn(), convert: vi.fn(),
     job: vi.fn(), cancelJob: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), proofreadStats: vi.fn(), saveWholeLine: vi.fn(),
-    lineSearch: vi.fn() } };
+    lineSearch: vi.fn(), lineSearchReader: vi.fn(), lineSearchMeasure: vi.fn() } };
 });
 
 const book = { id: 4, job: null } as unknown as Book;
@@ -84,16 +84,19 @@ describe("Whole lines", () => {
     expect(await screen.findByRole("button", { name: "Line 1 reviewed" })).toHaveClass("done");
   });
 
-  it("shows one line at a time, with the letters on top of the screen", async () => {
+  it("shows one line at a time, with the letters under the correction box", async () => {
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: "Line by line" }));
     expect(await screen.findByText("Line 1 of 2")).toBeInTheDocument();
     expect(screen.getByLabelText("Line on the page")).toBeInTheDocument();
     expect(screen.getByLabelText("Correct the line")).toHaveValue("નારાયણ ભગ");   // with the language model
     await userEvent.click(screen.getByRole("button", { name: "Letters…" }));
-    expect(document.body.querySelector(".palette-overlay")).not.toBeNull();         // on top, not in the panel
+    expect(document.body.querySelector(".palette-overlay")).toBeNull();            // in the flow: it never covers the box
+    expect(screen.getByRole("group", { name: "Letters" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ક" }));
+    expect(screen.getByLabelText("Correct the line")).toHaveValue("નારાયણ ભગક");
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(document.body.querySelector(".palette-overlay")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Letters" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Next line" }));
     expect(screen.getByText("Line 2 of 2")).toBeInTheDocument();
     expect(screen.getByLabelText("Correct the line")).toHaveValue("જો");
@@ -116,22 +119,66 @@ describe("Whole lines", () => {
     expect(screen.getByLabelText("Correct the line")).toBeInTheDocument();
   });
 
-  it("asks the line search for a second opinion and shows what it read", async () => {
+  it("shows our reader's second opinion in Tesseract's view", async () => {
     const t = text();
     t.lines[0].searched = true;
     t.lines[0].aksharas[1] = { ...t.lines[0].aksharas[1], uncertain: true, search_dev: "य", search_guj: "ય" };
     vi.mocked(api.wholeLines).mockResolvedValue(t);
-    vi.mocked(api.lineSearch).mockResolvedValue({ id: "j", book_id: 4, kind: "line_search", status: "running", done: 0,
-      total: 1, current: "", pages: [], result: null, error: "", seconds: 0 });
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     const pane = await screen.findByLabelText("Lines");
     await waitFor(() => expect(within(pane).getByText("રા")).toHaveClass("uncertain"));
     expect(screen.getByText(/second opinion on 1 of 2 lines/)).toBeInTheDocument();
     await userEvent.click(within(pane).getByText("રા"));
-    expect(screen.getByText(/the line search: ય/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Second opinion" }));
-    expect(api.lineSearch).toHaveBeenCalledWith(4, undefined);
-    expect(await screen.findByText(/Second opinion \(line search\)/)).toBeInTheDocument();
+    expect(screen.getByText(/our reader: ય/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Second opinion" })).toBeNull();     // in its own tab now
+  });
+
+  it("shows our reader's own reading, retrains it and measures it", async () => {
+    const t = text();
+    t.lines[0].searched = true;
+    t.lines[0].aksharas[3] = { ...t.lines[0].aksharas[3], text_dev: "ण", text_guj: "ણ", conf: null, lm_dev: undefined,
+      lm_guj: undefined, other_dev: "व", other_guj: "વ" };
+    vi.mocked(api.wholeLines).mockResolvedValue(t);
+    vi.mocked(api.lineSearchReader).mockResolvedValue({
+      reader: { letters: 8946, labels: 412, trained_at: "2026-10-12T05:58:50Z", seconds: 400, changed: true },
+      measure: { measured_at: "2026-10-12T09:00:00Z", folds: 4, pages: 8, lines: 73, chars: 6677,
+        cer: { ours: 10.2, tesseract: 5.1, tesseract_lm: 4.45 }, marked: 19.4, mistakes: 277, caught: 244,
+        line_results: [{ page: "Untitled-15.jpg", line: 1, truth: "नारायण", ours: "नारायण", tesseract: "नारायव", tesseract_lm: "नारायण",
+          chars: 6, wrong: { ours: 0, tesseract: 1, tesseract_lm: 0 } }] },
+    });
+    const job = { id: "j", book_id: 4, status: "running", done: 0, total: 1, current: "", pages: [], result: null, error: "", seconds: 0 };
+    vi.mocked(api.lineSearch).mockResolvedValue({ ...job, kind: "line_search" } as never);
+    vi.mocked(api.lineSearchMeasure).mockResolvedValue({ ...job, kind: "line_search_measure" } as never);
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Whole lines (our reader)" }));
+    const pane = await screen.findByLabelText("Lines");
+    expect(api.wholeLines).toHaveBeenLastCalledWith(9, "search");
+    expect(api.bookWholeLines).toHaveBeenCalledWith(4, "search");
+    expect(screen.queryByLabelText("With the language model")).toBeNull();
+    expect(screen.getByRole("link", { name: "Page .txt" }).getAttribute("href")).toMatch(/readers=search&page_id=9/);
+    await userEvent.click(within(pane).getByText("ણ"));
+    expect(screen.getByText(/our reader · Tesseract: વ/)).toBeInTheDocument();
+    expect(screen.getByText(/Reader trained on 8946 reviewed letters/)).toBeInTheDocument();
+    expect(screen.getByText(/changed since: retrain/)).toBeInTheDocument();
+    expect(screen.getByText(/our reader 10.2%/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show the lines" }));
+    expect(screen.getByText("Untitled-15.jpg · 1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retrain and read all pages" }));
+    expect(api.lineSearch).toHaveBeenCalledWith(4, undefined, true);
+    expect(await screen.findByText(/Our reader \(line search\)/)).toBeInTheDocument();
+  });
+
+  it("measures our reader on the checked lines", async () => {
+    vi.mocked(api.lineSearchReader).mockResolvedValue({ reader: null, measure: null });
+    vi.mocked(api.lineSearchMeasure).mockResolvedValue({ id: "j", book_id: 4, kind: "line_search_measure", status: "running",
+      done: 0, total: 4, current: "", pages: [], result: null, error: "", seconds: 0 } as never);
+    localStorage.setItem("text-mode", "search");
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    expect(await screen.findByText(/No reader yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retrain and read all pages" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Measure" }));
+    expect(api.lineSearchMeasure).toHaveBeenCalledWith(4);
+    expect(await screen.findByText(/Measuring our reader/)).toBeInTheDocument();
   });
 
   it("reads a page whole and switches to the cut-letter view", async () => {

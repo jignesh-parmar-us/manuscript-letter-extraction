@@ -64,6 +64,18 @@
     the language model. Its reading (<code>search_dev</code>) is aligned with Tesseract's aksharas (difflib) and each
     differing akshara is uncertain. On the 73 checked lines: 10.2% wrong alone, 6.6 s per line; the marks cover 19.4%
     of the aksharas and 88% of the mistakes left by Tesseract + language model.</p>
+  <p><strong>Whole lines (our reader)</strong>: the line search's reading with each akshara's columns on the line and
+    its ink rows as a box on the page (<code>whole_line.search_aksharas</code>), shown like Tesseract's; corrections
+    and reviews are per line, shared. The reader keeps a hash of the reviewed letters it learned (label and place):
+    when they change, Retrain is offered. <strong>Measure</strong> (<code>linesearch.measure</code>): every Read Book
+    page is also a Training Data page, so the pages with checked lines go in 4 folds and, for each, the reader and the
+    language model are trained without them (the word lists are kept); CER in code points, spaces and "|" left out,
+    beside Tesseract alone and Tesseract + language model as read whole (that model knows every page).</p>
+  <p><strong>Page borders</strong>: before the search, thin pieces of ink at a line's two edges are removed when they
+    are taller than the line's letters, broken and reaching out of the letters' band, or specks
+    (<code>segment.clear_borders</code>); a danda is solid and within the band, so it stays. Tesseract's border marks
+    (<code>| ! I ] '</code>) at the line edges are left out of its text (<code>wholelines.trim_edges</code>). On
+    Untitled-51 and 52: our reader 12.6% → 7.5% wrong.</p>
 
   <h2>3a. Tesseract on each line</h2>
   <ol>

@@ -231,6 +231,9 @@ class WholeLine(Base):
     edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # the line search's reading (linesearch.py): where it differs, Tesseract's aksharas are marked uncertain
     search_dev: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # its aksharas, JSON [[text_dev, space before, box on the page or None], ...]; when it read the line
+    search_aksharas: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    search_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class LineTruth(Base):

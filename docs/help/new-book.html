@@ -256,12 +256,15 @@
       line as its strip of the page with its text under it); <span class="ui">Line by line</span> shows one line at a time
       (◀ ▶). <span class="ui">Aligned text</span> puts each akshara under its letter (untick it for plain text). Click an akshara to see it on the page; ← → move between aksharas,
       ↑ ↓ between lines. <span class="ui">✎ Correct</span> a line and <span class="ui">Save</span>; <span class="ui">✓</span>
-      marks it reviewed (a reviewed line is also a checked line in Line truth). <span class="ui">Second opinion</span>
-      (after reading): the line search reads the lines again without Tesseract, from this book's reviewed letters (the
-      first time it learns them, a few minutes; then about 7 s per line), and every akshara it reads differently is
-      marked uncertain; clicking it shows what the line search read. On the checked lines the marks fall on about a
-      fifth of the aksharas and catch 88% of the remaining mistakes, so checking the highlighted aksharas finds most of
-      them. The text itself stays Tesseract's. <strong>Cut letters</strong>: <span class="ui">Convert all pages</span> (or one page). Each page is shown beside its
+      marks it reviewed (a reviewed line is also a checked line in Line truth). <strong>Whole lines (our reader)</strong>
+      (after Tesseract has read the pages): <span class="ui">Read all pages</span>: our reader (the line search) reads the
+      same lines without Tesseract, from this book's reviewed letters (the first time it learns them, a few minutes; then
+      about 7 s per line). Its text is shown in the same views; the aksharas where Tesseract reads differently are
+      highlighted in both tabs, and clicking one shows what the other read. On the checked lines the marks fall on about
+      a fifth of the aksharas and catch 88% of Tesseract's remaining mistakes. When groups were reviewed or changed since
+      it learned, it says so: <span class="ui">Retrain and read all pages</span>. <span class="ui">Measure</span> scores
+      it on your checked lines, fairly (trained again without the pages it is scored on, about 40 minutes), beside
+      Tesseract, with every line listed. A correction or ✓ belongs to the line: the same in both tabs. <strong>Cut letters</strong>: <span class="ui">Convert all pages</span> (or one page). Each page is shown beside its
       text: <span class="ui">Tesseract only</span> shows what Tesseract read, <span class="ui">Tesseract + your
       groups</span> adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it
       is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader

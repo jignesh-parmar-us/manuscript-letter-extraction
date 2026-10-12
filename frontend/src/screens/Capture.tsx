@@ -25,7 +25,8 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   capture_read: "Cutting the Read Book pages",
   import_pdf: "Turning the PDF into page images",
   convert: "Converting pages into text",
-  line_search: "Second opinion (line search)",
+  line_search: "Our reader (line search)",
+  line_search_measure: "Measuring our reader on the checked lines",
   train: "Training a letter reader",
   use_reader: "Reading with the letter reader",
 };
@@ -280,11 +281,18 @@ export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) 
       )}
       {job.status === "done" && result && job.kind === "line_search" && (
         <p className="small">
-          {result.pages} pages, {result.lines} lines read again by the line search; where it reads an akshara differently,
-          the akshara is marked uncertain
+          {result.pages} pages, {result.lines} lines read by our reader; where it reads an akshara differently from
+          Tesseract, the akshara is marked uncertain in both views
         </p>
       )}
-      {job.status === "done" && result && job.kind !== "convert" && job.kind !== "line_search" && (
+      {job.status === "done" && result && job.kind === "line_search_measure" && (
+        <p className="small">
+          {result.lines} checked lines: our reader {(result.cer as unknown as { ours: number }).ours}% of the characters
+          wrong, Tesseract {(result.cer as unknown as { tesseract: number }).tesseract}%
+        </p>
+      )}
+      {job.status === "done" && result && job.kind !== "convert" && job.kind !== "line_search" &&
+        job.kind !== "line_search_measure" && (
         <p className="small">
           {result.pages} pages, {result.lines} lines, {result.samples} letters
           {"groups" in result && `, ${result.groups} groups, ${result.unsure} unsure`}

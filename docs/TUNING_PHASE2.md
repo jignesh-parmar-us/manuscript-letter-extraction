@@ -373,3 +373,33 @@ The number of voting groups (k) makes no difference: within the distance limit t
 **On the real book** (a copy of the user's library, `split_mixed`): 81 groups split, 1,115 letters moved. g0001 lost its 152 ते (ने 351 and 20 मे stay: too few to leave); g0002 lost its 57 म and 34 मा, and kept its 70 ना, which are misread न; g0003 lost its 36 व and 26 वा, and kept 23 पा (misreadings).
 
 **Handwriting** (no labels yet): the two handwritten sample pages read with Tesseract, the noisiest reader (about a third wrong, C10): one split in 854 letters, 6 त-shaped letters out of a group that mixed त and न. The shape check keeps reading noise from splitting groups. With the labelled-books reader (C13) the same rule applies on handwriting.
+
+## Whole lines (our reader): the fold-fair Measure in the app (2026-10-12)
+
+Text → Whole lines (our reader) → **Measure** (`linesearch.measure`) on a copy of the library, book 6, after the user's group cleanup. The 8 pages with checked lines in 4 folds of 2; for each, the reader and the language model trained without them (word lists kept). 42 minutes.
+
+| Fold | Pages left out | Letters trained on | Minutes |
+|---|---|---|---|
+| 1 | Untitled-15, 28 | 8,048 | 13.4 |
+| 2 | Untitled-16, 33 | 8,095 | 10.9 |
+| 3 | Untitled-26, 41 | 8,219 | 9.1 |
+| 4 | Untitled-27, 51 | 8,132 | 8.9 |
+
+| On 73 checked lines (6,675 characters) | Characters wrong |
+|---|---|
+| Our reader (line search), fold-fair | **9.99%** |
+| Tesseract, whole lines | 5.03% |
+| Tesseract + language model (the model knows every page) | 4.12% |
+
+Marks where our reader differs from Tesseract + language model: **15.6%** of the aksharas, **215 of 255 (84%)** of the remaining mistakes (stage 4: 19.4%, 244 of 277). The cleanup changed our reader little (stage 5: 10.18%).
+
+## Page borders at the line edges (2026-10-12)
+
+Seen by the user: both readers read the page border (Untitled-51, 52; a few lines of 53, 65, 66). Edge pieces of all 299 Read Book lines of book 6, by what Tesseract read there: 44 border edges (`|`, `!`), 4 danda edges, 550 others. Border pieces: 1–22 px wide, 74–147 px tall (letters: median 67), broken (40–85% of their height inked), 9–13 px from the text. ॥: 28–35 × 52–59 px, solid.
+
+| Rule (`segment.clear_borders`) | Border edges cleared | Danda edges touched | Other edges touched |
+|---|---|---|---|
+| outermost piece only, ≤ 0.2 × letter width, tall or broken | 20 of 44 | 0 | 5 (right borders) |
+| pieces peeled one by one, ≤ 0.45 ×, taller than letters / broken and out of the band / specks | **36 of 44** | **0** | 11 (specks, right borders; checked by eye) |
+
+The 8 border edges left have no border in our reader's ink (the cut letters left it out). Re-reading Untitled-51 and 52 (26 lines, the current reader): **12.6% → 7.5%** of the characters wrong against the checked text (11 lines) or Tesseract's text without `|` (15 lines).

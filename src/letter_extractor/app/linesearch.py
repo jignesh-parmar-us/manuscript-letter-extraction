@@ -11,11 +11,18 @@ The line search needs its own reader, trained on the book's reviewed Training Da
   varied copies (more for rare labels): all count as the letter (a tolerance band);
 - **not a letter:** its two halves, the letter with its close next neighbour, the window shifted 25-45%;
 - every label weighs the same in total; all negatives together weigh a quarter of a label per label.
-It is kept in the book folder (line-search/) with each label's usual width, and used until trained again.
+It is kept in the book folder (line-search/) with each label's usual width, and used until trained again
+(Retrain in Whole lines (our reader)); `reader_info` says when the reviewed letters changed since.
+
+Its reading is kept per line (`search_dev`) with each akshara's place on the page (`search_aksharas`), so
+Text → Whole lines (our reader) can show it like Tesseract's. `measure` scores it fold-fair on the checked
+lines (Line truth): the Read Book pages are also Training Data pages, so for each fold of pages the reader
+and the language model are rebuilt without them (as in stages 3 and 4).
 """
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import time
 import unicodedata
@@ -28,7 +35,7 @@ from sqlalchemy import select
 from ..ocr.aksharas import split_aksharas
 from ..ocr.features import features, varied
 from ..ocr.reader import LetterReader
-from ..ocr.segment import SearchSettings, read_line
+from ..ocr.segment import SearchSettings, clear_borders, read_line
 from .db import Book, LetterGroup, Line, Page, Sample, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
 from .samples import _sample_mask
@@ -43,13 +50,26 @@ def _folder(lib: Library, book: Book):
     return lib.book_dir(book) / "line-search"
 
 
+def _signature(s, book_id: int) -> str:
+    """What the reader learns from (each reviewed Training Data letter: its label and place), as a hash."""
+    rows = s.execute(select(Sample.id, LetterGroup.label_dev, LetterGroup.status, Sample.x, Sample.w)
+                     .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
+                     .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
+                            Sample.line_id.is_not(None), LetterGroup.label_dev != "", LetterGroup.status != "auto")
+                     .order_by(Sample.id)).all()
+    return hashlib.sha1(json.dumps([list(r) for r in rows], ensure_ascii=False).encode()).hexdigest()
+
+
 def line_reader_info(lib: Library, book_id: int) -> Optional[Dict]:
-    """What the book's line-search reader was trained on, or None if it has none."""
+    """What the book's line-search reader was trained on, or None if it has none; `changed`: the reviewed
+    letters changed since (retrain to use them)."""
     meta = _folder(lib, lib.get_book(book_id)) / "meta.json"
     if not meta.is_file():
         return None
     info = json.loads(meta.read_text(encoding="utf-8"))
-    return {k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}
+    with lib.session() as s:
+        changed = info.get("signature") != _signature(s, book_id)
+    return {**{k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}, "changed": changed}
 
 
 def _paste(lib: Library, book: Book, smps: Sequence[Sample]):
@@ -77,14 +97,32 @@ def train_line_reader(lib: Library, book_id: int, progress: Optional[Callable[[s
                       cancel: Optional[Callable[[], bool]] = None, seed: int = 0) -> Dict:
     """Train and keep the book's line-search reader (see the module notes)."""
     t0 = time.time()
+    book = lib.get_book(book_id)
+    with lib.session() as s:
+        signature = _signature(s, book_id)
+    reader, meta = _train(lib, book_id, (), progress, cancel, seed)
+    folder = _folder(lib, book)
+    folder.mkdir(parents=True, exist_ok=True)
+    reader.save(folder / "reader.npz")
+    info = {**meta, "trained_at": now().isoformat(), "seconds": round(time.time() - t0, 1), "signature": signature}
+    (folder / "meta.json").write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
+    return {k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}
+
+
+def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None, seed: int = 0):
+    """The reader and its meta (letters, labels, typical width, each label's width), trained on the
+    reviewed letters of the Training Data pages, those of `skip_files` left out."""
     rng = np.random.default_rng(seed)
     book = lib.get_book(book_id)
     letters = []
     with lib.session() as s:
-        rows = s.execute(select(Sample, LetterGroup.label_dev, Page.line_spacing)
-                         .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
-                         .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
-                                Sample.line_id.is_not(None), LetterGroup.label_dev != "")).all()
+        q = (select(Sample, LetterGroup.label_dev, Page.line_spacing)
+             .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
+             .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
+                    Sample.line_id.is_not(None), LetterGroup.label_dev != ""))
+        if skip_files:
+            q = q.where(Page.file.not_in(list(skip_files)))
+        rows = s.execute(q).all()
         status = dict(s.execute(select(LetterGroup.id, LetterGroup.status)
                                 .where(LetterGroup.book_id == book_id)).all())
         by_line = defaultdict(list)
@@ -157,13 +195,9 @@ def train_line_reader(lib: Library, book_id: int, progress: Optional[Callable[[s
     widths = defaultdict(list)
     for L in letters:
         widths[L["label"]].append(L["w"])
-    folder = _folder(lib, book)
-    reader.save(folder / "reader.npz")
-    info = {"letters": len(letters), "labels": len(freq), "trained_at": now().isoformat(),
-            "seconds": round(time.time() - t0, 1), "typical_width": float(np.median([L["w"] for L in letters])),
-            "widths": {k: float(np.median(v)) for k, v in widths.items()}}
-    (folder / "meta.json").write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
-    return {k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}
+    return reader, {"letters": len(letters), "labels": len(freq),
+                    "typical_width": float(np.median([L["w"] for L in letters])),
+                    "widths": {k: float(np.median(v)) for k, v in widths.items()}}
 
 
 def _load(lib: Library, book: Book):
@@ -174,9 +208,33 @@ def _load(lib: Library, book: Book):
     return LetterReader.load(folder / "reader.npz"), meta
 
 
+def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: float, model, lm,
+                settings: SearchSettings = SearchSettings()) -> Dict[int, tuple]:
+    """{line id: (text, aksharas)} for the lines with cut letters (their ink); aksharas as `search_aksharas`."""
+    reader, meta = model
+    found = {}
+    for lid in line_ids:
+        with lib.session() as s:
+            smps = s.scalars(select(Sample).where(Sample.line_id == lid, Sample.deleted.is_(False))).all()
+            if not smps:
+                continue
+            c, x0, _ = _paste(lib, book, smps)
+            y0 = min(m.y for m in smps)
+            band = (float(np.median([m.y - y0 for m in smps])), float(np.median([m.y + m.h - y0 for m in smps])))
+            c, _ = clear_borders(c, meta["typical_width"], float(np.median([m.h for m in smps])), band)
+        text, steps, _ = read_line(c, spacing, reader, meta["typical_width"], meta["widths"], lm, settings)
+        aks = []
+        for st in steps:
+            rows = np.flatnonzero(c[:, st.x0:st.x1].any(axis=1))
+            box = [int(x0 + st.x0), int(y0 + rows.min()), int(st.x1 - st.x0), int(rows.max() - rows.min() + 1)] \
+                if rows.size else None
+            aks.append([unicodedata.normalize("NFC", st.label), bool(st.space), box])
+        found[lid] = (unicodedata.normalize("NFC", text), aks)
+    return found
+
+
 def search_page(lib: Library, page_id: int, model, lm, settings: SearchSettings = SearchSettings()) -> Dict:
     """Read every line of a page that was read whole again with the line search, and keep its reading."""
-    reader, meta = model
     with lib.session() as s:
         page = s.get(Page, page_id)
         if page is None:
@@ -186,20 +244,13 @@ def search_page(lib: Library, page_id: int, model, lm, settings: SearchSettings 
         line_ids = list(s.scalars(select(Line.id).join(WholeLine, WholeLine.line_id == Line.id)
                                   .where(Line.page_id == page_id).order_by(Line.number)))
         file = page.file
-    found = {}
-    for lid in line_ids:
-        with lib.session() as s:
-            smps = s.scalars(select(Sample).where(Sample.line_id == lid, Sample.deleted.is_(False))).all()
-            if not smps:
-                continue
-            c, _, _ = _paste(lib, book, smps)
-        text, _, _ = read_line(c, spacing, reader, meta["typical_width"], meta["widths"], lm, settings)
-        found[lid] = unicodedata.normalize("NFC", text)
+    found = _read_lines(lib, book, line_ids, spacing, model, lm, settings)
     with lib.session() as s:
-        for lid, text in found.items():
+        for lid, (text, aks) in found.items():
             row = s.scalar(select(WholeLine).where(WholeLine.line_id == lid))
             if row is not None:
-                row.search_dev = text
+                row.search_dev, row.search_at = text, now()
+                row.search_aksharas = json.dumps(aks, ensure_ascii=False)
     return {"page": file, "lines": len(found)}
 
 
@@ -255,3 +306,115 @@ def disagreements(aksharas: Sequence[str], search_dev: str) -> List[Optional[str
         for k, i in enumerate(range(i1, i2)):
             out[i] = other[j1 + k] if op == "replace" and i2 - i1 == j2 - j1 else ""
     return out
+
+
+def _chars(text: str) -> str:
+    """As scored: NFC code points, spaces and the border "|" left out (docs/TUNING_PHASE2.md)."""
+    return "".join(ch for ch in unicodedata.normalize("NFC", text) if not ch.isspace() and ch != "|")
+
+
+def _distance(a: str, b: str) -> int:
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _wrong_aksharas(aksharas: Sequence[str], truth: str) -> List[bool]:
+    """Per akshara of a reading: whether it is not matched by the checked text."""
+    right = [a for a in split_aksharas(_chars(truth)) if a.strip()]
+    out = [True] * len(aksharas)
+    for op, i1, i2, _, _ in difflib.SequenceMatcher(None, list(aksharas), right, autojunk=False).get_opcodes():
+        if op == "equal":
+            for i in range(i1, i2):
+                out[i] = False
+    return out
+
+
+def _measure_file(lib: Library, book: Book) -> "Path":
+    return _folder(lib, book) / "measure.json"
+
+
+def last_measure(lib: Library, book_id: int) -> Optional[Dict]:
+    f = _measure_file(lib, lib.get_book(book_id))
+    return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+
+
+def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: Optional[Callable[[], bool]] = None,
+            settings: SearchSettings = SearchSettings()) -> Dict:
+    """Score the line search on the checked lines (Line truth) of the Read Book pages, fold-fair: the pages
+    with checked lines are split into `folds` folds; for each, the reader and the language model are
+    rebuilt without those pages (they are also Training Data pages) and its lines are read. Beside it:
+    Tesseract alone and Tesseract + language model as read whole (that language model knows every page),
+    and the second opinion's marks on Tesseract + language model. Kept in line-search/measure.json."""
+    from .db import LineTruth
+    from .dictionary import book_model_without
+    from .wholelines import trim_edges
+    t0 = time.time()
+    book = lib.get_book(book_id)
+    use_lm = lib.book_config(book).language_model
+    with lib.session() as s:
+        rows = s.execute(select(Page.id, Page.file, Page.number, Page.line_spacing, Line.id, Line.number,
+                                LineTruth.text_dev, WholeLine.aksharas)
+                         .join(Line, Line.page_id == Page.id).join(LineTruth, LineTruth.line_id == Line.id)
+                         .join(WholeLine, WholeLine.line_id == Line.id)
+                         .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "")
+                         .order_by(Page.number, Page.id, Line.number)).all()
+    if not rows:
+        raise LibraryError("No checked lines yet: correct lines in Whole lines and mark them reviewed (✓), "
+                           "or check lines in Line truth.")
+    pages = sorted({(r[2], r[0], r[1], r[3]) for r in rows})
+    n_folds = max(1, min(folds, len(pages)))
+    lines = []
+    for k in range(n_folds):
+        if cancel and cancel():
+            raise Cancelled(f"Stopped after {k} of {n_folds} folds; nothing was kept.")
+        fold = pages[k::n_folds]
+        files = [p[2] for p in fold]
+        t = time.time()
+        reader, meta = _train(lib, book_id, files, cancel=cancel, seed=k)
+        lm = book_model_without(lib, book_id, files) if use_lm else None
+        lm = lm if lm is not None and len(lm) else None
+        for _, pid, file, spacing in fold:
+            mine = [r for r in rows if r[0] == pid]
+            got = _read_lines(lib, book, [r[4] for r in mine], spacing or 100.0, (reader, meta), lm, settings)
+            for r in mine:
+                if r[4] not in got:
+                    continue
+                aks = trim_edges(json.loads(r[7]))
+                tess = "".join((" " if a[2] else "") + a[0] for a in aks)
+                tess_lm_aks = [a[3] if len(a) > 3 and a[3] else a[0] for a in aks]
+                tess_lm = "".join((" " if a[2] else "") + x for a, x in zip(aks, tess_lm_aks))
+                ours = got[r[4]][0]
+                wrong = _wrong_aksharas(tess_lm_aks, r[6])
+                marked = [o is not None for o in disagreements(tess_lm_aks, ours)]
+                truth = _chars(r[6])
+                lines.append({"page": file, "line": r[5], "truth": r[6], "ours": ours, "tesseract": tess,
+                              "tesseract_lm": tess_lm, "chars": len(truth),
+                              "wrong": {"ours": _distance(_chars(ours), truth),
+                                        "tesseract": _distance(_chars(tess), truth),
+                                        "tesseract_lm": _distance(_chars(tess_lm), truth)},
+                              "aksharas": len(tess_lm_aks), "marked": sum(marked), "mistakes": sum(wrong),
+                              "caught": sum(m and w for m, w in zip(marked, wrong))})
+        if progress:
+            progress(k + 1, n_folds, LineDone(f"fold {k + 1}: {', '.join(files)}", "OK",
+                                              f"trained on {meta['letters']} letters", time.time() - t))
+    chars = sum(x["chars"] for x in lines) or 1
+    aksharas = sum(x["aksharas"] for x in lines) or 1
+    mistakes = sum(x["mistakes"] for x in lines)
+    result = {
+        "measured_at": now().isoformat(), "seconds": round(time.time() - t0, 1), "folds": n_folds,
+        "pages": len(pages), "lines": len(lines), "chars": chars,
+        "cer": {e: round(100 * sum(x["wrong"][e] for x in lines) / chars, 2)
+                for e in ("ours", "tesseract", "tesseract_lm")},
+        "marked": round(100 * sum(x["marked"] for x in lines) / aksharas, 1),
+        "mistakes": mistakes, "caught": sum(x["caught"] for x in lines),
+        "line_results": lines,
+    }
+    f = _measure_file(lib, book)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    return {k: v for k, v in result.items() if k != "line_results"}

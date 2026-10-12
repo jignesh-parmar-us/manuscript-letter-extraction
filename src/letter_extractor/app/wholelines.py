@@ -13,7 +13,13 @@ become one of Tesseract's own alternatives for it when the line gets much more l
 user's word list: 5.06% -> 4.45%.
 
 With the line search's second opinion (linesearch.py, `search_dev`), the aksharas where it reads the
-line differently are also uncertain (and say what it read).
+line differently are also uncertain (and say what it read). The same lines can be shown as the line search
+read them (`engine="search"`, Text → Whole lines (our reader)): its aksharas with their places, those
+where Tesseract reads differently uncertain; corrections and reviews are the line's, shared by both.
+
+A page border caught at a line's edge comes out of Tesseract as "|", "!", "I", "]" or "'": such aksharas at
+the start or end of a line are left out when the line is shown, downloaded or measured (`trim_edges`); in
+this script they are never text (a danda is "।", "॥").
 
 A line can be corrected (`edited_dev`, shown and downloaded instead of the reading) and marked reviewed;
 a reviewed line is also kept as a checked line (Line truth), so every reviewed line joins the test set.
@@ -97,6 +103,24 @@ def read_page_lines(lib: Library, page_id: int, reader: Callable) -> Dict:
     return {"page": file, "lines": len(found), "uncertain": low}
 
 
+BORDER_MARKS = set("|!Il[]'\"`")
+
+
+def trim_edges(aks: List[list]) -> List[list]:
+    """The aksharas of a reading without the border marks at its start and end (see the module notes)."""
+    def mark(a):
+        return bool(a[0].strip()) and set(a[0].strip()) <= BORDER_MARKS
+    i, j = 0, len(aks)
+    while i < j and mark(aks[i]):
+        i += 1
+    while j > i and mark(aks[j - 1]):
+        j -= 1
+    out = [list(a) for a in aks[i:j]]
+    if out and out[0][2]:
+        out[0][2] = False                                   # no word gap before the first akshara
+    return out
+
+
 def _uncertain(conf: float, cfg) -> bool:
     return 0.8 * conf / 100 < cfg.text_min_confidence
 
@@ -128,8 +152,10 @@ def read_book_lines(lib: Library, book_id: int, page_ids: Optional[Sequence[int]
     return {"pages": len(ids), "lines": lines, "uncertain": uncertain, "seconds": round(time.time() - t0, 1)}
 
 
-def page_whole_lines(lib: Library, page_id: int) -> Optional[Dict]:
-    """A page's lines read whole, for the Text view; None if none of them is read."""
+def page_whole_lines(lib: Library, page_id: int, engine: str = "tesseract") -> Optional[Dict]:
+    """A page's lines read whole, for the Text view; None if none of them is read (by `engine`)."""
+    if engine == "search":
+        return _page_search_lines(lib, page_id)
     with lib.session() as s:
         page = s.get(Page, page_id)
         if page is None:
@@ -142,7 +168,7 @@ def page_whole_lines(lib: Library, page_id: int) -> Optional[Dict]:
             return None
         lines, low, read_at = [], 0, None
         for ln, w in rows:
-            aks = json.loads(w.aksharas) if w is not None else []
+            aks = trim_edges(json.loads(w.aksharas)) if w is not None else []
             other = disagreements([a[0] for a in aks], w.search_dev) if w is not None and w.search_dev \
                 else [None] * len(aks)
             items = [{"text_dev": a[0], "text_guj": mapping.gujarati(a[0]), "conf": a[1], "space": a[2],
@@ -154,9 +180,9 @@ def page_whole_lines(lib: Library, page_id: int) -> Optional[Dict]:
             if w is not None and (read_at is None or w.read_at > read_at):
                 read_at = w.read_at
             edited = w.edited_dev if w is not None else ""
+            text = "".join((" " if a[2] else "") + a[0] for a in aks)
             lines.append({"line_id": ln.id, "number": ln.number, "box": [ln.x, ln.y, ln.w, ln.h],
-                          "text_dev": w.text_dev if w is not None else "",
-                          "text_guj": mapping.gujarati(w.text_dev) if w is not None else "", "aksharas": items,
+                          "text_dev": text, "text_guj": mapping.gujarati(text), "aksharas": items,
                           "edited_dev": edited, "edited_guj": mapping.gujarati(edited) if edited else "",
                           "reviewed": bool(w.reviewed) if w is not None else False,
                           "searched": bool(w is not None and w.search_dev)})
@@ -164,16 +190,53 @@ def page_whole_lines(lib: Library, page_id: int) -> Optional[Dict]:
                 "read_at": read_at.isoformat() if read_at else None}
 
 
-def book_whole_lines(lib: Library, book_id: int, part: str = "read") -> List[Dict]:
-    """The pages of a part with lines read whole: page id, lines read."""
+def _page_search_lines(lib: Library, page_id: int) -> Optional[Dict]:
+    """A page's lines as the line search read them, in the shape of `page_whole_lines`."""
     with lib.session() as s:
-        rows = s.execute(select(Page.id, func.count(WholeLine.id)).join(Line, Line.page_id == Page.id)
-                         .join(WholeLine, WholeLine.line_id == Line.id)
-                         .where(Page.book_id == book_id, Page.part == part).group_by(Page.id)).all()
+        page = s.get(Page, page_id)
+        if page is None:
+            raise NotFound(f"No page with id {page_id}.")
+        mapping = mapping_for(lib.book_config(s.get(Book, page.book_id)))
+        rows = s.execute(select(Line, WholeLine).outerjoin(WholeLine, WholeLine.line_id == Line.id)
+                         .where(Line.page_id == page_id).order_by(Line.number)).all()
+        if not any(w is not None and w.search_at is not None for _, w in rows):
+            return None
+        lines, low, read_at = [], 0, None
+        for ln, w in rows:
+            done = w is not None and w.search_at is not None
+            aks = json.loads(w.search_aksharas or "[]") if done else []
+            tess = "".join(a[0] for a in trim_edges(json.loads(w.aksharas))) if w is not None else ""
+            other = disagreements([a[0] for a in aks], tess) if tess else [None] * len(aks)
+            items = [{"text_dev": a[0], "text_guj": mapping.gujarati(a[0]), "conf": None, "space": a[1],
+                      "uncertain": o is not None, "box": a[2],
+                      **({"other_dev": o, "other_guj": mapping.gujarati(o)} if o is not None else {})}
+                     for a, o in zip(aks, other)]
+            low += sum(x["uncertain"] for x in items)
+            if done and (read_at is None or w.search_at > read_at):
+                read_at = w.search_at
+            edited = w.edited_dev if w is not None else ""
+            text = w.search_dev if done else ""
+            lines.append({"line_id": ln.id, "number": ln.number, "box": [ln.x, ln.y, ln.w, ln.h],
+                          "text_dev": text, "text_guj": mapping.gujarati(text), "aksharas": items,
+                          "edited_dev": edited, "edited_guj": mapping.gujarati(edited) if edited else "",
+                          "reviewed": bool(w.reviewed) if w is not None else False, "searched": done})
+        return {"page_id": page_id, "lines": lines, "uncertain": low,
+                "read_at": read_at.isoformat() if read_at else None}
+
+
+def book_whole_lines(lib: Library, book_id: int, part: str = "read", engine: str = "tesseract") -> List[Dict]:
+    """The pages of a part with lines read whole (by `engine`): page id, lines read."""
+    with lib.session() as s:
+        q = (select(Page.id, func.count(WholeLine.id)).join(Line, Line.page_id == Page.id)
+             .join(WholeLine, WholeLine.line_id == Line.id).where(Page.book_id == book_id, Page.part == part))
+        if engine == "search":
+            q = q.where(WholeLine.search_at.is_not(None))
+        rows = s.execute(q.group_by(Page.id)).all()
     return [{"page_id": pid, "lines": n} for pid, n in rows]
 
 
-def whole_line_texts(lib: Library, book_id: int, part: str = "read", page_id: Optional[int] = None):
+def whole_line_texts(lib: Library, book_id: int, part: str = "read", page_id: Optional[int] = None,
+                     engine: str = "tesseract"):
     """(page, [line texts]) per page with lines read whole, in page order, for downloads."""
     out = []
     with lib.session() as s:
@@ -183,7 +246,7 @@ def whole_line_texts(lib: Library, book_id: int, part: str = "read", page_id: Op
         for p in pages:
             s.expunge(p)
     for p in pages:
-        got = page_whole_lines(lib, p.id)
+        got = page_whole_lines(lib, p.id, engine)
         if got is not None:
             out.append((p, got["lines"]))
     return out

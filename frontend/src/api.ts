@@ -115,7 +115,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "convert" | "line_search" | "train" | "use_reader";
+    | "convert" | "line_search" | "line_search_measure" | "train" | "use_reader";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -173,7 +173,10 @@ export interface TextLetter {
 /** Which readers the Text view shows: Tesseract's reading alone, or with the labelled groups' opinion. */
 export type Readers = "tesseract" | "both";
 /** What the downloads write: the cut-letter text (Readers) or lines read whole, with or without the language model. */
-export type TextSource = Readers | "lines" | "lines_lm";
+export type TextSource = Readers | "lines" | "lines_lm" | "search";
+
+/** Who read the lines whole: Tesseract, or the line search (our reader). */
+export type LineEngine = "tesseract" | "search";
 
 export interface PageText {
   page_id: number;
@@ -203,13 +206,15 @@ export interface TextSummary {
 export interface WholeAkshara {
   text_dev: string;
   text_guj: string;
-  conf: number; // 0 to 100
+  conf: number | null; // 0 to 100; null for our reader
   space: boolean; // a word gap before it
   uncertain: boolean;
   lm_dev?: string; // the language model's reading, where it differs
   lm_guj?: string;
   search_dev?: string; // the line search's reading, where it differs ("" where it read nothing)
   search_guj?: string;
+  other_dev?: string; // our reader's view: Tesseract's reading, where it differs ("" where it read nothing)
+  other_guj?: string;
   box?: [number, number, number, number] | null; // on the page
 }
 
@@ -223,7 +228,7 @@ export interface WholeLine {
   edited_dev?: string; // your correction ("" when none)
   edited_guj?: string;
   reviewed?: boolean;
-  searched?: boolean; // the line search gave its second opinion
+  searched?: boolean; // the line search (our reader) read it
 }
 
 export interface WholeLines {
@@ -231,6 +236,34 @@ export interface WholeLines {
   lines: WholeLine[];
   uncertain: number;
   read_at: string | null;
+}
+
+/** Our reader (the line search): what it was trained on and its last fold-fair measure. */
+export interface LineSearchState {
+  reader: { letters: number; labels: number; trained_at: string; seconds: number; changed: boolean } | null;
+  measure: LineSearchMeasure | null;
+}
+
+export interface LineSearchMeasure {
+  measured_at: string;
+  folds: number;
+  pages: number;
+  lines: number;
+  chars: number;
+  cer: { ours: number; tesseract: number; tesseract_lm: number }; // % of the characters wrong
+  marked: number; // % of the aksharas marked by the second opinion
+  mistakes: number; // aksharas still wrong after Tesseract + language model
+  caught: number; // of them marked
+  line_results: {
+    page: string;
+    line: number;
+    truth: string;
+    ours: string;
+    tesseract: string;
+    tesseract_lm: string;
+    chars: number;
+    wrong: { ours: number; tesseract: number; tesseract_lm: number };
+  }[];
 }
 
 /** The line truth screen: checked text of whole lines. */
@@ -538,12 +571,14 @@ export const api = {
     post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read", mode }),
   lineSearch: (id: number, pageIds?: number[], retrain = false) =>
     post<Job>(`/api/books/${id}/line-search`, { page_ids: pageIds ?? null, part: "read", retrain }),
-  lineSearchReader: (id: number) =>
-    get<{ reader: { letters: number; labels: number; trained_at: string; seconds: number } | null }>(`/api/books/${id}/line-search`),
-  wholeLines: (pageId: number) => get<WholeLines>(`/api/pages/${pageId}/whole-lines`),
+  lineSearchReader: (id: number) => get<LineSearchState>(`/api/books/${id}/line-search`),
+  lineSearchMeasure: (id: number) => post<Job>(`/api/books/${id}/line-search/measure`, {}),
+  wholeLines: (pageId: number, engine: LineEngine = "tesseract") =>
+    get<WholeLines>(`/api/pages/${pageId}/whole-lines?engine=${engine}`),
   saveWholeLine: (lineId: number, change: { text?: string; reviewed?: boolean; shown?: string }) =>
     put<{ line_id: number; edited_dev: string; edited_guj: string; reviewed: boolean }>(`/api/lines/${lineId}/whole`, change),
-  bookWholeLines: (id: number) => get<{ page_id: number; lines: number }[]>(`/api/books/${id}/whole-lines`),
+  bookWholeLines: (id: number, engine: LineEngine = "tesseract") =>
+    get<{ page_id: number; lines: number }[]>(`/api/books/${id}/whole-lines?engine=${engine}`),
   pageText: (pageId: number) => get<PageText>(`/api/pages/${pageId}/text`),
   bookTexts: (id: number) => get<TextSummary[]>(`/api/books/${id}/texts`),
   proofread: (pageId: number, line: number, proofread = true) =>

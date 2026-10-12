@@ -11,8 +11,9 @@
 // and the letter joins the book's Training Data), split in two, joined with the next letter or deleted.
 // A line is marked proofread with its ✓ button; converting again keeps proofread lines as they are.
 //
-// The section opens with a choice of how the text is read: "Whole lines" (WholeLinesView: Tesseract reads
-// each line image as it is, no letters cut; measured best) or "Cut letters" (this view).
+// The section opens with a choice of how the text is read: "Whole lines (Tesseract)" (WholeLinesView:
+// Tesseract reads each line image as it is, no letters cut; measured best), "Whole lines (our reader)" (the
+// same view with the line search's reading, its Retrain and its fold-fair Measure) or "Cut letters" (this view).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ActionResult, Book, Marker, PageInfo, PageText, ProofreadStats, Readers, TextLetter, TextSummary } from "../api";
 import ErrorBox from "../components/ErrorBox";
@@ -100,14 +101,10 @@ function storedReaders(): Readers {
   }
 }
 
-type Mode = "lines" | "letters";
+type Mode = "lines" | "search" | "letters";
 
 function storedMode(): Mode {
-  try {
-    return localStorage.getItem("text-mode") === "letters" ? "letters" : "lines";
-  } catch {
-    return "lines";
-  }
+  return stored<Mode>("text-mode", ["lines", "search", "letters"], "lines");
 }
 
 /** Read Book → Text: whole lines (Tesseract alone) or cut letters (with your groups, reader, language model). */
@@ -138,6 +135,10 @@ export default function TextView(props: Props) {
         <button className={mode === "lines" ? "tab active" : "tab"} onClick={() => choose("lines")}
           title="Tesseract reads each line image whole; no letters are cut">
           Whole lines (Tesseract)
+        </button>
+        <button className={mode === "search" ? "tab active" : "tab"} onClick={() => choose("search")}
+          title="Our reader (the line search) reads each line without Tesseract, from this book's reviewed letters">
+          Whole lines (our reader)
         </button>
         <button className={mode === "letters" ? "tab active" : "tab"} onClick={() => choose("letters")}
           title="The page is cut into letters, read by Tesseract and checked with your groups, reader and language model; letters can be corrected">
@@ -176,11 +177,14 @@ export default function TextView(props: Props) {
         <span className="small muted mode-note">
           {mode === "lines"
             ? "Each line image goes to Tesseract as it is: no letters are cut."
-            : "Each cut letter is read and checked with your groups, letter reader and language model; proofread here."}
+            : mode === "search"
+              ? "Our reader slides along each line and reads the letters it learned from your reviewed groups: no Tesseract."
+              : "Each cut letter is read and checked with your groups, letter reader and language model; proofread here."}
         </span>
       </div>
-      {mode === "lines" ? (
-        <WholeLinesView {...props} layout={layout} pageStyle={pageStyle} aligned={aligned} />
+      {mode === "lines" || mode === "search" ? (
+        <WholeLinesView key={mode} {...props} engine={mode === "search" ? "search" : "tesseract"} layout={layout}
+          pageStyle={pageStyle} aligned={aligned} />
       ) : (
         <LettersView {...props} layout={layout} pageStyle={pageStyle} aligned={aligned} />
       )}

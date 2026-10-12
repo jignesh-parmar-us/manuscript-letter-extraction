@@ -1435,3 +1435,31 @@ a.button.disabled {
   outline: 2px solid var(--accent);
   border-radius: 3px;
 }
+/* Whole lines (our reader): its reader, Retrain, Measure and the last measure */
+.our-reader {
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.measure-result {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 6px 10px;
+  margin: 6px 0;
+}
+.measure-result p {
+  margin: 4px 0;
+}
+.measure-lines {
+  width: 100%;
+}
+.measure-texts {
+  font: 18px/1.5 "Noto Sans Devanagari", sans-serif;
+}
+.measure-texts div:first-child {
+  font-weight: 600;
+}
+.measure-diff {
+  color: var(--danger);
+}

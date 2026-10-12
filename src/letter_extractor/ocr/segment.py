@@ -15,6 +15,11 @@ Plan: `docs/SEGMENTATION_PLAN.md`. Measured on the 73 checked lines of the print
    A step scores log p(label) + `bonus` - `width_weight` x (log(width / the label's usual width))^2 /
    (2 x 0.3^2) + `lm_weight` x log P(label | last two). Empty stretches are skipped (a space if wide);
    an "unknown" step (-12) makes sure a path always exists.
+
+Before the search, `clear_borders` removes a page border caught at the start or end of the line (the
+user's observation, 2026-10-12): thin pieces of ink at the edge, peeled one by one, that are taller than
+the line's letters, broken and reaching above or below the letters' band, or tiny specks. A danda is solid
+and stays within the band, so it is kept (checked on every line edge of the printed 1933 book).
 """
 from __future__ import annotations
 
@@ -47,7 +52,7 @@ class Step:
     x0: int                             # columns of the line mask
     x1: int
     label: str                          # "" for a skipped empty stretch, "?" for unknown
-    space: bool = False                 # a word gap before the next letter
+    space: bool = False                 # an empty stretch: a word gap; a letter (as returned): a gap before it
 
 
 def _crop(mask: np.ndarray, a: int, b: int) -> Optional[np.ndarray]:
@@ -56,6 +61,52 @@ def _crop(mask: np.ndarray, a: int, b: int) -> Optional[np.ndarray]:
     if ys.size < 10:
         return None
     return part[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+
+def _ink_runs(mask: np.ndarray, join: float) -> List[Tuple[int, int]]:
+    """Stretches of columns with ink, those closer than `join` px joined."""
+    cols = mask.any(axis=0)
+    edges = np.flatnonzero(np.diff(np.concatenate([[0], cols.astype(np.int8), [0]])))
+    out: List[Tuple[int, int]] = []
+    for a, b in zip(edges[::2], edges[1::2]):
+        if out and a - out[-1][1] < join:
+            out[-1] = (out[-1][0], int(b))
+        else:
+            out.append((int(a), int(b)))
+    return out
+
+
+def clear_borders(mask: np.ndarray, typical_width: float, letter_height: float, band: Tuple[float, float],
+                  most: int = 6) -> Tuple[np.ndarray, int]:
+    """The mask without border pieces at its two edges (see the module notes), and how many were removed.
+    `letter_height`: the line's usual letter height; `band`: the rows its letters usually span."""
+    T, h_ref = typical_width, letter_height
+
+    def border_like(a: int, b: int) -> bool:
+        ys = np.flatnonzero(mask[:, a:b].any(axis=1))
+        top, bot = int(ys.min()), int(ys.max())
+        h, w = bot - top + 1, b - a
+        if w > 0.45 * T:
+            return False
+        if h >= 1.1 * h_ref:                                        # taller than the letters
+            return True
+        filled = mask[top:bot + 1, a:b].any(axis=1).mean()
+        if (top < band[0] - 0.2 * h_ref or bot > band[1] + 0.2 * h_ref) and filled < 0.9:
+            return True                                             # broken, reaching out of the letters' band
+        return h <= 0.3 * h_ref and w <= 0.15 * T                   # a speck
+
+    runs = _ink_runs(mask, 0.15 * T)
+    out, removed = mask, 0
+    for side in (0, -1):
+        for _ in range(most):
+            if len(runs) < 2 or not border_like(*runs[side]):
+                break
+            a, b = runs.pop(side)
+            if out is mask:
+                out = mask.copy()
+            out[:, a:b] = False
+            removed += 1
+    return out, removed
 
 
 def candidates(mask: np.ndarray, step: int) -> List[int]:
@@ -178,4 +229,11 @@ def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, wi
         node = prev
     steps.reverse()
     text = "".join((" " if st.space and st.label == "" else st.label) for st in steps)
-    return " ".join(text.split()), [st for st in steps if st.label], stats
+    letters, gap = [], False
+    for st in steps:                                        # a letter's `space`: a word gap before it
+        if st.label:
+            letters.append(Step(st.x0, st.x1, st.label, gap and bool(letters)))
+            gap = False
+        else:
+            gap = gap or st.space
+    return " ".join(text.split()), letters, stats
