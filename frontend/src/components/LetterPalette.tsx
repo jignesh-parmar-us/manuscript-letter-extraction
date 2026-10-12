@@ -1,7 +1,10 @@
 // The on-screen letters (consonants, conjuncts, joined letters, vowel signs, marks, digits, punctuation)
 // in Gujarati or Devanagari: the label picker builds labels with it, the line truth screen corrects lines.
 // A key gives its text in the palette's script; vowel signs and marks attach to the letter before them.
-import { ReactNode, useState } from "react";
+// As an overlay with an `anchor` (the label box) it floats next to the anchor, above it when there is more
+// room above, below it otherwise, never over it (pinned to the bottom of the window it covered the label
+// box of the Pages tab's selection panel on short windows).
+import { CSSProperties, ReactNode, RefObject, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 export type Script = "gujarati" | "devanagari";
@@ -48,15 +51,57 @@ interface Props {
   overlay?: boolean; // shown on top of the screen (bottom), not inside a scrolling panel
   onClose?: () => void;
   closable?: boolean; // a Close button also when not an overlay
+  anchor?: RefObject<HTMLElement | null>; // overlay: float next to this element instead of the window's bottom
 }
 
 export default function LetterPalette(props: Props) {
   if (!props.overlay) return <Palette {...props} />;
   return createPortal(
-    <div className="palette-overlay">
-      <Palette {...props} />
-    </div>,
+    props.anchor ? (
+      <Floating anchor={props.anchor}>
+        <Palette {...props} />
+      </Floating>
+    ) : (
+      <div className="palette-overlay">
+        <Palette {...props} />
+      </div>
+    ),
     document.body,
+  );
+}
+
+const GAP = 8; // between the anchor and the letters, and the window's edges
+
+/** Where the letters go: on the side of the anchor with more room, as wide as the window allows. */
+export function floatingPlace(r: { top: number; bottom: number; left: number; width: number }, vw: number, vh: number): CSSProperties {
+  const width = Math.min(920, vw - 2 * GAP);
+  const left = Math.min(Math.max(GAP, r.left + r.width / 2 - width / 2), vw - GAP - width);
+  const above = r.top - 2 * GAP;
+  const below = vh - r.bottom - 2 * GAP;
+  return above > below
+    ? { left, width, bottom: vh - r.top + GAP, maxHeight: Math.max(120, above) }
+    : { left, width, top: r.bottom + GAP, maxHeight: Math.max(120, below) };
+}
+
+function Floating({ anchor, children }: { anchor: RefObject<HTMLElement | null>; children: ReactNode }) {
+  const [style, setStyle] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    function place() {
+      const el = anchor.current;
+      setStyle(el ? floatingPlace(el.getBoundingClientRect(), window.innerWidth, window.innerHeight) : null);
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);                 // also the panels that scroll
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchor]);
+  return (
+    <div className="palette-floating" style={style ?? { visibility: "hidden" }}>
+      {children}
+    </div>
   );
 }
 

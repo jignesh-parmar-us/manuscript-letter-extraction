@@ -99,3 +99,26 @@ describe("LabelPicker", () => {
     expect(screen.getByRole("button", { name: "Label it" })).toBeDisabled();
   });
 });
+
+describe("the letters of a compact label box", () => {
+  it("float next to the box on the side with more room, never over it", async () => {
+    const { floatingPlace } = await import("./LetterPalette");
+    const low = floatingPlace({ top: 700, bottom: 730, left: 100, width: 300 }, 1200, 800);   // the box near the bottom
+    expect(low.bottom).toBe(800 - 700 + 8);                                                  // above it
+    expect(low.maxHeight).toBe(700 - 16);
+    const high = floatingPlace({ top: 40, bottom: 70, left: 100, width: 300 }, 1200, 800);   // near the top
+    expect(high.top).toBe(70 + 8);                                                           // below it
+    expect(high.maxHeight).toBe(800 - 70 - 16);
+    expect(floatingPlace({ top: 40, bottom: 70, left: 1100, width: 80 }, 1200, 800).left).toBe(1200 - 8 - 920);
+  });
+
+  it("open as a floating panel, not pinned to the window's bottom", async () => {
+    vi.mocked(api.checkLabel).mockResolvedValue({ ok: false, error: "" } as never);
+    render(<LabelPicker bookId={1} current={{ dev: "", guj: "" }} compact onSave={async () => true} />);
+    await userEvent.click(screen.getByRole("button", { name: "Letters…" }));
+    expect(document.body.querySelector(".palette-floating")).not.toBeNull();
+    expect(document.body.querySelector(".palette-overlay")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(document.body.querySelector(".palette-floating")).toBeNull();
+  });
+});

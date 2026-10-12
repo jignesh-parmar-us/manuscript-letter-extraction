@@ -29,6 +29,7 @@ export default function LabelPicker(props: Props) {
   const [info, setInfo] = useState<LabelInfo | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const box = useRef<HTMLDivElement>(null); // the label box's row: the letters float next to it (compact)
 
   // a new label (saved, undone) replaces the text; not on the first render, which may start from initialText
   const shownLabel = useRef(current.guj);
@@ -83,7 +84,7 @@ export default function LabelPicker(props: Props) {
 
   return (
     <div className={compact ? "label-picker compact" : "label-picker"}>
-      <div className="row">
+      <div className="row" ref={box}>
         <input
           className="label-input"
           aria-label="Label"
@@ -161,7 +162,7 @@ export default function LabelPicker(props: Props) {
       )}
       {open && (
         <LetterPalette onKey={add} onBackspace={backspace} onEmpty={() => setText("")} overlay={compact}
-          onClose={() => setOpen(false)} />
+          anchor={box} onClose={() => setOpen(false)} />
       )}
     </div>
   );
