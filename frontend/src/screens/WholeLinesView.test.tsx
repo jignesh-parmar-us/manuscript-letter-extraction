@@ -55,6 +55,20 @@ describe("Whole lines", () => {
     expect(document.querySelector(".line-crop .text-box.selected")).not.toBeNull();   // the akshara on its line
   });
 
+  it("shows each line as its own line image, without the next line's ink", async () => {
+    const t = text();
+    t.lines[0].image = "/files/books/4/read/lines/p_L01.png";
+    t.lines[0].image_box = [4, 4, 312, 72];
+    vi.mocked(api.wholeLines).mockResolvedValue(t);
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Line by line" }));
+    const crop = await screen.findByLabelText("Line on the page");
+    expect(crop.querySelector("img")?.getAttribute("src")).toBe("/files/books/4/read/lines/p_L01.png");
+    expect(crop.style.aspectRatio).toBe("312 / 72");
+    await userEvent.click(screen.getByRole("button", { name: "Next line" }));
+    expect(screen.getByLabelText("Line on the page").querySelector("img")?.getAttribute("src")).toBe("/p/9");   // no line image: the page
+  });
+
   it("moves through the aksharas and lines with the arrow keys", async () => {
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     const pane = await screen.findByLabelText("Lines");

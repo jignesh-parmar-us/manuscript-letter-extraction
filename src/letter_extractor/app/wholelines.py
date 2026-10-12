@@ -121,6 +121,13 @@ def trim_edges(aks: List[list]) -> List[list]:
     return out
 
 
+def _strip(ln: Line, page: Page, margin: int) -> Dict:
+    """The line image (only this line's ink; the Line by line view shows it) and its place on the page."""
+    x0, y0 = max(0, ln.x - margin), max(0, ln.y - margin)
+    x1, y1 = min(page.width, ln.x + ln.w + margin), min(page.height, ln.y + ln.h + margin)
+    return {"image": ln.image, "image_box": [x0, y0, x1 - x0, y1 - y0]}
+
+
 def _uncertain(conf: float, cfg) -> bool:
     return 0.8 * conf / 100 < cfg.text_min_confidence
 
@@ -185,7 +192,7 @@ def page_whole_lines(lib: Library, page_id: int, engine: str = "tesseract") -> O
                           "text_dev": text, "text_guj": mapping.gujarati(text), "aksharas": items,
                           "edited_dev": edited, "edited_guj": mapping.gujarati(edited) if edited else "",
                           "reviewed": bool(w.reviewed) if w is not None else False,
-                          "searched": bool(w is not None and w.search_dev)})
+                          "searched": bool(w is not None and w.search_dev), **_strip(ln, page, cfg.line_margin_px)})
         return {"page_id": page_id, "lines": lines, "uncertain": low,
                 "read_at": read_at.isoformat() if read_at else None}
 
@@ -196,7 +203,8 @@ def _page_search_lines(lib: Library, page_id: int) -> Optional[Dict]:
         page = s.get(Page, page_id)
         if page is None:
             raise NotFound(f"No page with id {page_id}.")
-        mapping = mapping_for(lib.book_config(s.get(Book, page.book_id)))
+        cfg = lib.book_config(s.get(Book, page.book_id))
+        mapping = mapping_for(cfg)
         rows = s.execute(select(Line, WholeLine).outerjoin(WholeLine, WholeLine.line_id == Line.id)
                          .where(Line.page_id == page_id).order_by(Line.number)).all()
         if not any(w is not None and w.search_at is not None for _, w in rows):
@@ -219,7 +227,8 @@ def _page_search_lines(lib: Library, page_id: int) -> Optional[Dict]:
             lines.append({"line_id": ln.id, "number": ln.number, "box": [ln.x, ln.y, ln.w, ln.h],
                           "text_dev": text, "text_guj": mapping.gujarati(text), "aksharas": items,
                           "edited_dev": edited, "edited_guj": mapping.gujarati(edited) if edited else "",
-                          "reviewed": bool(w.reviewed) if w is not None else False, "searched": done})
+                          "reviewed": bool(w.reviewed) if w is not None else False, "searched": done,
+                          **_strip(ln, page, cfg.line_margin_px)})
         return {"page_id": page_id, "lines": lines, "uncertain": low,
                 "read_at": read_at.isoformat() if read_at else None}
 

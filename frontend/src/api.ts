@@ -229,6 +229,8 @@ export interface WholeLine {
   edited_guj?: string;
   reviewed?: boolean;
   searched?: boolean; // the line search (our reader) read it
+  image?: string | null; // the line image: only this line's ink
+  image_box?: [number, number, number, number]; // where it lies on the page
 }
 
 export interface WholeLines {

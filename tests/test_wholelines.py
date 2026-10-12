@@ -69,8 +69,13 @@ class WholeLineTests(unittest.TestCase):
         with self.lib.session() as s:
             ln = s.get(Line, self.lines)
             ox, oy = max(0, ln.x - 6), max(0, ln.y - 6)                       # the line image's corner on the page
-        x = page_whole_lines(self.lib, self.page)["lines"][0]["aksharas"][0]
-        self.assertEqual(x["box"], [ox, oy, 10, 10])
+        line = page_whole_lines(self.lib, self.page)["lines"][0]
+        self.assertEqual(line["aksharas"][0]["box"], [ox, oy, 10, 10])
+        self.assertEqual(line["image_box"][:2], [ox, oy])                     # the line image starts there
+        with self.lib.session() as s:
+            ln = s.get(Line, self.lines)
+            self.assertEqual(line["image"], ln.image)
+            self.assertLessEqual(line["image_box"][2], ln.w + 12)
 
     def test_a_line_is_corrected_and_reviewed_and_becomes_a_checked_line(self):
         from letter_extractor.app.db import LineTruth

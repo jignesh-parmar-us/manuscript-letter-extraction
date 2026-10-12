@@ -1,5 +1,8 @@
 // One line of a page, cropped from the page image, with boxes on it (letters, aksharas): the "Line by line"
 // view of Read Book → Text. Boxes are in page pixels; the crop adds a small margin around the line.
+// With `strip` (the line image, where the other lines' ink is painted out, and its place on the page) that
+// image is shown instead: lines are closer than their boxes are high, so a crop of the page showed the top
+// half of the next line.
 import { PageInfo } from "../api";
 
 export interface CropMark {
@@ -21,11 +24,20 @@ export function cropOf(page: PageInfo, box: Box): Box {
   return [x, y, Math.min(page.width - x, box[2] + 2 * pad), Math.min(page.height - y, box[3] + 2 * pad)];
 }
 
-export default function LineCrop({ page, box, marks = [] }: { page: PageInfo; box: Box; marks?: CropMark[] }) {
-  const [x, y, w, h] = cropOf(page, box);
+export interface Strip {
+  src: string;
+  box: Box; // where the line image lies on the page
+}
+
+export default function LineCrop({ page, box, marks = [], strip }: { page: PageInfo; box: Box; marks?: CropMark[]; strip?: Strip }) {
+  const [x, y, w, h] = strip ? strip.box : cropOf(page, box);
   return (
     <div className="line-crop" style={{ aspectRatio: `${w} / ${h}` }} aria-label="Line on the page">
-      <img src={page.image} alt="" style={{ width: pct(page.width, w), left: pct(-x, w), top: pct(-y, h) }} />
+      {strip ? (
+        <img src={strip.src} alt="" style={{ width: "100%", left: 0, top: 0 }} />
+      ) : (
+        <img src={page.image} alt="" style={{ width: pct(page.width, w), left: pct(-x, w), top: pct(-y, h) }} />
+      )}
       {marks.map((m) => (
         <span
           key={m.key}
@@ -59,8 +71,8 @@ export interface AlignedItem {
 
 /** A line's text under its cropped image, each akshara at its own place: what is highlighted in the text sits
  *  straight below the same letter on the page. The font follows the width of the letters. */
-export function AlignedText({ page, box, items }: { page: PageInfo; box: Box; items: AlignedItem[] }) {
-  const [x, , w] = cropOf(page, box);
+export function AlignedText({ page, box, items, strip }: { page: PageInfo; box: Box; items: AlignedItem[]; strip?: Strip }) {
+  const [x, , w] = strip ? strip.box : cropOf(page, box);
   const widths = items.map((i) => i.box[2]).sort((a, b) => a - b);
   const typical = widths.length ? widths[Math.floor(widths.length / 2)] : w / 20;
   const size = Math.max(1.2, Math.min(9, ((100 * typical) / w) * 0.8)); // in % of the strip's width

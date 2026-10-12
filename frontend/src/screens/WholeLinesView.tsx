@@ -18,7 +18,7 @@ import LetterPalette from "../components/LetterPalette";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
-import LineCrop, { AlignedText } from "./LineCrop";
+import LineCrop, { AlignedText, Strip } from "./LineCrop";
 import type { Layout, PageStyle } from "./TextView";
 
 type Script = "gujarati" | "devanagari";
@@ -43,6 +43,11 @@ function aksharaText(x: WholeAkshara, script: Script, lm: boolean): string {
 function lineText(ln: WholeLine, script: Script, lm: boolean): string {
   if (ln.edited_dev) return script === "gujarati" ? ln.edited_guj ?? "" : ln.edited_dev;
   return ln.aksharas.map((x) => (x.space ? " " : "") + aksharaText(x, script, lm)).join("");
+}
+
+/** The line image to show for a line (only its own ink), when the server gave one. */
+function stripOf(ln: WholeLine): Strip | undefined {
+  return ln.image && ln.image_box ? { src: ln.image, box: ln.image_box } : undefined;
 }
 
 /** A page's lines as plain text (no markers), for the picture and the PDF. */
@@ -333,6 +338,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         <AlignedText
           page={page}
           box={ln.box}
+          strip={stripOf(ln)}
           items={ln.aksharas.map((x, k) => ({
             key: k,
             box: x.box!,
@@ -567,6 +573,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
                   <LineCrop
                     page={page}
                     box={cur.box}
+                    strip={stripOf(cur)}
                     marks={cur.edited_dev ? [] : cur.aksharas.flatMap((x, k) =>
                       x.box && (x.uncertain || k === ai)
                         ? [{ key: k, box: x.box, className: `${x.uncertain ? "uncertain " : ""}${k === ai ? "selected" : ""}`.trim(),
@@ -638,6 +645,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
                       <LineCrop
                         page={page}
                         box={ln.box}
+                        strip={stripOf(ln)}
                         marks={ln.edited_dev ? [] : ln.aksharas.flatMap((x, k) =>
                           x.box && (x.uncertain || (i === li && k === ai))
                             ? [{ key: k, box: x.box, className: `${x.uncertain ? "uncertain " : ""}${i === li && k === ai ? "selected" : ""}`.trim(),

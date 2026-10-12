@@ -228,6 +228,10 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         got = page_whole_lines(library, page_id, engine)
         if got is None:
             raise HTTPException(404, "This page's lines are not read yet.")
+        with library.session() as s:
+            book_id = s.get(Page, page_id).book_id
+        for ln in got["lines"]:
+            ln["image"] = f"/files/books/{book_id}/{ln['image']}?token={token}" if ln.get("image") else None
         return got
 
     @app.put("/api/lines/{line_id}/whole", dependencies=auth)
