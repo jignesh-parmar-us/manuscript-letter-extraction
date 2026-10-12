@@ -79,6 +79,9 @@ describe("TextView", () => {
     const word = screen.getByRole("link", { name: "Page Word" });
     expect(word.getAttribute("href")).toMatch(/^\/files\/texts\/4\?format=docx&script=devanagari&marker=guess&readers=tesseract&page_id=9/);
     expect(screen.getByRole("link", { name: ".txt" }).getAttribute("href")).not.toMatch(/page_id/);   // whole book
+    // the page images (not the text) as a PDF: this page, or all pages
+    expect(screen.getByRole("link", { name: "This page" }).getAttribute("href")).toMatch(/^\/files\/page-images\/4\?part=read&page_id=9&/);
+    expect(screen.getByRole("link", { name: /^All \d+ pages$/ }).getAttribute("href")).toMatch(/^\/files\/page-images\/4\?part=read&token=/);
   });
 
   it("shows Tesseract alone, or with the groups' second opinion", async () => {

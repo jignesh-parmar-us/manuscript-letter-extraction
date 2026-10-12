@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ActionResult, Book, Marker, PageInfo, PageText, ProofreadStats, Readers, TextLetter, TextSummary } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
+import { PageImagesPdf, PrintPages } from "../components/PageDownloads";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
@@ -337,13 +338,6 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
       setError(e);
     }
   }
-  useEffect(() => {
-    if (!printing) return;
-    const done = () => setPrinting(null);
-    window.addEventListener("afterprint", done, { once: true });
-    window.setTimeout(() => window.print(), 50); // after the print view is drawn
-    return () => window.removeEventListener("afterprint", done);
-  }, [printing]);
 
   const nConverted = pages.filter((p) => converted.has(p.id)).length;
   const states = text?.line_states ?? [];
@@ -660,6 +654,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
             <button className="small" disabled={!nConverted} onClick={() => printPdf(true)}>
               PDF
             </button>
+            <PageImagesPdf bookId={book.id} pageId={page?.id ?? null} nPages={pages.length} />
           </div>
           {layout === "line" ? (
             !text || !page ? (
@@ -750,16 +745,11 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
         </>
       )}
       {printing && (
-        <div className="print-text" lang="gu">
-          {printing.map((t) => (
-            <section key={t.page_id}>
-              {printing.length > 1 && <h3>{pages.find((p) => p.id === t.page_id)?.file}</h3>}
-              {plainLines(t, script, readers).map((l, i) => (
-                <p key={i}>{l}</p>
-              ))}
-            </section>
-          ))}
-        </div>
+        <PrintPages
+          pages={printing.map((t) => ({ key: t.page_id, title: pages.find((p) => p.id === t.page_id)?.file,
+            lines: plainLines(t, script, readers) }))}
+          onDone={() => setPrinting(null)}
+        />
       )}
     </div>
   );

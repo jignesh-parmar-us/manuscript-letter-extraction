@@ -618,6 +618,9 @@ export const api = {
   textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: TextSource,
     pageId?: number) =>
     `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
+  /** The page images (not the text) of one page or of every Read Book page, as one PDF. */
+  pageImagesUrl: (id: number, pageId?: number) =>
+    `/files/page-images/${id}?part=read${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
   pagePart: (pageId: number, part: Part, force = false) =>
     post<{ page: number; part: Part; samples: number }>(`/api/pages/${pageId}/part`, { part, force }),
 

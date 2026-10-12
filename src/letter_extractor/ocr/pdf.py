@@ -55,3 +55,17 @@ def pdf_pages(pdf: Path, out: Path, dpi: int = 300, progress: Optional[Callable]
     finally:
         doc.close()
     return names
+
+
+def images_pdf(files: List[Path], out: Path, dpi: int = 300) -> int:
+    """Page images to one PDF, a page for each image in the order given, written to `out`. Pages are
+    added one at a time (Pillow's append), so a whole book is never in memory at once. An image that
+    says its resolution keeps it; the others are taken at `dpi`. Returns the number of pages."""
+    from PIL import Image
+    out = Path(out)
+    for i, f in enumerate(files):
+        with Image.open(f) as im:
+            page = im if im.mode in ("1", "L", "RGB", "CMYK") else im.convert("RGB")
+            res = float((im.info.get("dpi") or (dpi,))[0]) or dpi
+            page.save(out, "PDF", resolution=res, quality=90, append=i > 0)
+    return len(files)

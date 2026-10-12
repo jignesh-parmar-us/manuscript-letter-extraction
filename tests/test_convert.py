@@ -202,6 +202,20 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(c.get(f"/api/pages/999999/text", headers=h).status_code, 404)
         c.close()
 
+    def test_page_images_download_as_one_pdf(self):
+        import pypdfium2 as pdfium
+        with self.lib.session() as s:
+            n = s.scalar(select(func.count(Page.id)).where(Page.book_id == self.book, Page.part == "training"))
+        c = TestClient(create_app(self.lib, "t"))
+        r = c.get(f"/files/page-images/{self.book}?part=training&page_id={self.page}&token=t")
+        self.assertEqual((r.status_code, r.headers["content-type"]), (200, "application/pdf"))
+        self.assertIn("attachment", r.headers["content-disposition"])
+        self.assertEqual(len(pdfium.PdfDocument(r.content)), 1)
+        r = c.get(f"/files/page-images/{self.book}?part=training&token=t")
+        self.assertEqual(len(pdfium.PdfDocument(r.content)), n)                      # a PDF page for each page
+        self.assertEqual(c.get(f"/files/page-images/{self.book}?part=read&token=t").status_code, 404)
+        c.close()
+
 
 if __name__ == "__main__":
     unittest.main()

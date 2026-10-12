@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, Book, LineEngine, LineSearchState, Marker, PageInfo, TextSource, WholeAkshara, WholeLine, WholeLines } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import LetterPalette from "../components/LetterPalette";
+import { PageImagesPdf, PrintPages } from "../components/PageDownloads";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
@@ -288,13 +289,6 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
       setError(e);
     }
   }
-  useEffect(() => {
-    if (!printing) return;
-    const done = () => setPrinting(null);
-    window.addEventListener("afterprint", done, { once: true });
-    window.setTimeout(() => window.print(), 50);
-    return () => window.removeEventListener("afterprint", done);
-  }, [printing]);
 
   /** One line's aksharas, clickable (or its correction, as plain text). */
   function lineSpans(ln: WholeLine, i: number) {
@@ -542,6 +536,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             <button className="small" disabled={!nRead} onClick={() => printPdf(true)}>
               PDF
             </button>
+            <PageImagesPdf bookId={book.id} pageId={page?.id ?? null} nPages={pages.length} />
           </div>
           {!text ? (
             <p className="muted">
@@ -701,16 +696,11 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         </>
       )}
       {printing && (
-        <div className="print-text" lang="gu">
-          {printing.map((t) => (
-            <section key={t.page_id}>
-              {printing.length > 1 && <h3>{pages.find((p) => p.id === t.page_id)?.file}</h3>}
-              {wholePlainLines(t, script, lm).map((l, i) => (
-                <p key={i}>{l}</p>
-              ))}
-            </section>
-          ))}
-        </div>
+        <PrintPages
+          pages={printing.map((t) => ({ key: t.page_id, title: pages.find((p) => p.id === t.page_id)?.file,
+            lines: wholePlainLines(t, script, lm) }))}
+          onDone={() => setPrinting(null)}
+        />
       )}
     </div>
   );

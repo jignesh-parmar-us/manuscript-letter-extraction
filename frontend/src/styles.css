@@ -1220,17 +1220,16 @@ a.button.disabled {
   display: none;
 }
 @media print {
-  body * {
-    visibility: hidden;
+  /* only the text, in the normal flow (it is drawn straight in <body>): page breaks are ignored in an
+     absolutely positioned box, so every book page would not start on a new sheet */
+  body > *:not(.print-text) {
+    display: none !important;
   }
-  .print-text,
-  .print-text * {
-    visibility: visible;
+  body {
+    background: #fff;
   }
   .print-text {
     display: block;
-    position: absolute;
-    inset: 0 auto auto 0;
     font-size: 16pt;
     line-height: 1.7;
     color: #000;
@@ -1241,6 +1240,12 @@ a.button.disabled {
   }
   .print-text section + section {
     break-before: page;
+    page-break-before: always; /* older WebKit (the app window) */
+  }
+  .print-text h3 {
+    margin: 0 0 8pt;
+    font-size: 11pt;
+    color: #555;
   }
 }
 

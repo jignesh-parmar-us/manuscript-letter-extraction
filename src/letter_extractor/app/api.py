@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -362,6 +363,37 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             media = "text/plain; charset=utf-8"
         disposition = f"attachment; filename*=UTF-8''{quote(name)}.{format}"
         return Response(data, media_type=media, headers={"Content-Disposition": disposition})
+
+    @app.get("/files/page-images/{book_id}", dependencies=auth)
+    def download_page_images(book_id: int, page_id: Optional[int] = None,
+                             part: str = Query("read", pattern="^(training|read)$")):
+        """The page images of one page or of every page of a part, as one PDF (a page for each image)."""
+        import tempfile
+        from urllib.parse import quote
+        from starlette.background import BackgroundTask
+        from ..ocr.pdf import images_pdf
+        book = library.get_book(book_id)
+        with library.session() as s:
+            q = select(Page).where(Page.book_id == book_id, Page.part == part)
+            if page_id:
+                q = q.where(Page.id == page_id)
+            rows = s.scalars(q.order_by(Page.number, Page.id)).all()
+            files = [library.page_path(book, p) for p in rows]
+        if not files:
+            raise HTTPException(404, "No pages.")
+        missing = [f.name for f in files if not f.is_file()]
+        if missing:
+            raise HTTPException(404, f"The page image {missing[0]} is missing.")
+        fd, tmp = tempfile.mkstemp(suffix=".pdf")
+        os.close(fd)
+        try:
+            images_pdf(files, Path(tmp), dpi=library.book_config(book).pdf_dpi)
+        except Exception:
+            os.unlink(tmp)
+            raise
+        name = f"{files[0].stem if page_id else book.name} - page images.pdf"
+        return FileResponse(tmp, media_type="application/pdf", background=BackgroundTask(os.unlink, tmp),
+                            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})
 
     # ---- the line truth screen: checked text of whole lines ---------------------------------------------
     @app.get("/api/books/{book_id}/truth", dependencies=auth)
