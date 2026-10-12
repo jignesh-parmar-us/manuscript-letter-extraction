@@ -126,7 +126,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
     setVersion((v) => v + 1);
     onChanged();
   }, [onChanged]);
-  const kinds = ours ? ["line_search", "line_search_measure"] : ["convert"];
+  const kinds = ours ? ["line_search", "line_search_train", "line_search_measure"] : ["convert"];
   const [job, setJob] = useJob(book.job && kinds.includes(book.job.kind) ? book.job : null, onEnd);
   const running = job?.status === "running";
 
@@ -138,10 +138,18 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
       setError(e);
     }
   }
-  async function readOurs(ids?: number[], retrain = false) {
+  async function readOurs(ids?: number[]) {
     setError(null);
     try {
-      setJob(await api.lineSearch(book.id, ids, retrain));
+      setJob(await api.lineSearch(book.id, ids));
+    } catch (e) {
+      setError(e);
+    }
+  }
+  async function retrain() {
+    setError(null);
+    try {
+      setJob(await api.lineSearchTrain(book.id));
     } catch (e) {
       setError(e);
     }
@@ -476,19 +484,17 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         <div className="row our-reader small" aria-label="Our reader">
           <span>
             {reader
-              ? `Reader trained on ${reader.letters} reviewed letters (${reader.labels} labels), ${new Date(reader.trained_at).toLocaleString()}.`
-              : "No reader yet: Read all pages learns the letters first (a few minutes)."}
-            {reader?.changed && <strong> Your reviewed letters changed since: retrain to use them.</strong>}
+              ? `Reader trained on ${reader.letters} reviewed letters and ${reader.lines} checked lines (${reader.labels} labels), ${new Date(reader.trained_at).toLocaleString()}.`
+              : "No reader yet: Retrain (or Read all pages) learns the letters first."}
+            {reader?.changed && <strong> Your reviewed letters or checked lines changed since: retrain to use them.</strong>}
           </span>
-          {reader && (
-            <button className={reader.changed ? "primary" : ""} disabled={running || !readByTesseract.size}
-              onClick={() => readOurs(undefined, true)}
-              title="Learn the letters again from the reviewed groups as they are now (a few minutes), then read all pages again">
-              Retrain and read all pages
-            </button>
-          )}
+          <button className={!reader || reader.changed ? "primary" : ""} disabled={running}
+            onClick={retrain}
+            title="Learn again from the reviewed groups and every checked line (✓ or Line truth), as they are now (about half an hour). It does not read the pages: Read all pages (or a page) afterwards to use it.">
+            Retrain
+          </button>
           <button disabled={running} onClick={measure}
-            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also Training Data pages (about 10 minutes per group, four groups).">
+            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also Training Data pages (about 30 minutes per group, four groups: about 2 hours).">
             Measure
           </button>
         </div>

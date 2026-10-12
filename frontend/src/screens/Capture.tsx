@@ -27,6 +27,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   convert: "Converting pages into text",
   line_search: "Our reader (line search)",
   line_search_measure: "Measuring our reader on the checked lines",
+  line_search_train: "Training our reader (reviewed letters and checked lines)",
   train: "Training a letter reader",
   use_reader: "Reading with the letter reader",
   generate_letters: "Making the missing letters",
@@ -293,8 +294,14 @@ export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) 
           wrong, Tesseract {(result.cer as unknown as { tesseract: number }).tesseract}%
         </p>
       )}
+      {job.status === "done" && result && job.kind === "line_search_train" && (
+        <p className="small">
+          Our reader learned {result.letters} reviewed letters and {(result as unknown as { lines: number }).lines} checked
+          lines. Read the pages again to use it.
+        </p>
+      )}
       {job.status === "done" && result && job.kind !== "convert" && job.kind !== "line_search" &&
-        job.kind !== "line_search_measure" && (
+        job.kind !== "line_search_measure" && job.kind !== "line_search_train" && (
         <p className="small">
           {result.pages} pages, {result.lines} lines, {result.samples} letters
           {"groups" in result && `, ${result.groups} groups, ${result.unsure} unsure`}

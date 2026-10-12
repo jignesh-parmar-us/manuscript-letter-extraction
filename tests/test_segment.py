@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from letter_extractor.features import hog, hog_batch                     # noqa: E402
 from letter_extractor.ocr.features import features, features_batch       # noqa: E402
 from letter_extractor.ocr.language import LanguageModel                  # noqa: E402
-from letter_extractor.ocr.segment import SearchSettings, candidates, clear_borders, read_line   # noqa: E402
+from letter_extractor.ocr.segment import (SearchSettings, align, candidates, clear_borders, line_windows,   # noqa: E402
+                                         read_line)
 
 SPACING = 100.0
 
@@ -93,6 +94,25 @@ class SegmentTests(unittest.TestCase):
         out, n = clear_borders(m, 50.0, 60.0, (40.0, 100.0))
         self.assertEqual(n, 2)
         self.assertTrue(out[:, 200:212].any())
+
+    def test_a_checked_line_is_cut_into_its_aksharas_even_unknown_ones(self):
+        r = WidthReader()
+        m = line(20, 40, 20)
+        win = line_windows(m, SPACING, 30.0, SearchSettings(step=2))
+        P = r.probabilities(win.X)
+
+        def ink_widths(path):                                   # the ink each akshara's window holds
+            out = []
+            for q, _ in path:
+                cols = np.flatnonzero(m[:, win.cand[win.meta[q][0]]:win.cand[win.meta[q][1]]].any(axis=0))
+                out.append(int(cols.max() - cols.min() + 1))
+            return out
+        path, score = align(win, P, r.classes, 30.0, ["क", "ख", "क"])
+        self.assertEqual([a for _, a in path], ["क", "ख", "क"])
+        self.assertEqual(ink_widths(path), [20, 40, 20])                          # each akshara its own letter
+        path, _ = align(win, P, r.classes, 30.0, ["क", "ग", "क"])                 # ग: no class, cut by width
+        self.assertEqual(ink_widths(path), [20, 40, 20])
+        self.assertEqual(align(win, P, r.classes, 30.0, []), (None, None))
 
     def test_pruning_drops_unlikely_windows(self):
         widths = {"क": 20.0, "ख": 40.0}

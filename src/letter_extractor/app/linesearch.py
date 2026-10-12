@@ -35,7 +35,7 @@ from sqlalchemy import select
 from ..ocr.aksharas import split_aksharas
 from ..ocr.features import features, varied
 from ..ocr.reader import LetterReader
-from ..ocr.segment import SearchSettings, clear_borders, read_line
+from ..ocr.segment import SearchSettings, align, clear_borders, line_windows, read_line
 from .db import Book, LetterGroup, Line, Page, Sample, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
 from .samples import _sample_mask
@@ -43,7 +43,9 @@ from .suggest import LineDone
 
 NOT_A_LETTER = "<not a letter>"
 NEG_WEIGHT = 0.25
-EPOCHS = 15
+EPOCHS = 40                 # 15 before learning from corrections; 40 measured better (TUNING_PHASE2.md)
+BASE_EPOCHS = 15            # the reader that cuts the checked lines into their aksharas
+MIN_ALIGN = -3.0            # a checked line whose cut scores less per akshara is not learned from
 
 
 def _folder(lib: Library, book: Book):
@@ -51,25 +53,33 @@ def _folder(lib: Library, book: Book):
 
 
 def _signature(s, book_id: int) -> str:
-    """What the reader learns from (each reviewed Training Data letter: its label and place), as a hash."""
+    """What the reader learns from (each reviewed Training Data letter: its label and place; each checked
+    line of the Read Book pages and its text), as a hash."""
+    from .db import LineTruth
+    checked = s.execute(select(LineTruth.line_id, LineTruth.text_dev).join(Line, LineTruth.line_id == Line.id)
+                        .join(Page, Line.page_id == Page.id)
+                        .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "")
+                        .order_by(LineTruth.line_id)).all()
     rows = s.execute(select(Sample.id, LetterGroup.label_dev, LetterGroup.status, Sample.x, Sample.w)
                      .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
                      .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
                             Sample.line_id.is_not(None), LetterGroup.label_dev != "", LetterGroup.status != "auto")
                      .order_by(Sample.id)).all()
-    return hashlib.sha1(json.dumps([list(r) for r in rows], ensure_ascii=False).encode()).hexdigest()
+    return hashlib.sha1(json.dumps([[list(r) for r in rows], [list(r) for r in checked]],
+                                   ensure_ascii=False).encode()).hexdigest()
 
 
 def line_reader_info(lib: Library, book_id: int) -> Optional[Dict]:
     """What the book's line-search reader was trained on, or None if it has none; `changed`: the reviewed
-    letters changed since (retrain to use them)."""
+    letters or the checked lines changed since (retrain to use them)."""
     meta = _folder(lib, lib.get_book(book_id)) / "meta.json"
     if not meta.is_file():
         return None
     info = json.loads(meta.read_text(encoding="utf-8"))
     with lib.session() as s:
         changed = info.get("signature") != _signature(s, book_id)
-    return {**{k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}, "changed": changed}
+    return {**{k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}, "lines": info.get("lines", 0),
+            "changed": changed}
 
 
 def _paste(lib: Library, book: Book, smps: Sequence[Sample]):
@@ -104,19 +114,103 @@ def train_line_reader(lib: Library, book_id: int, progress: Optional[Callable[[s
     folder = _folder(lib, book)
     folder.mkdir(parents=True, exist_ok=True)
     reader.save(folder / "reader.npz")
-    info = {**meta, "trained_at": now().isoformat(), "seconds": round(time.time() - t0, 1), "signature": signature}
+    info = {"lines": 0, **meta, "trained_at": now().isoformat(), "seconds": round(time.time() - t0, 1),
+            "signature": signature}
     (folder / "meta.json").write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
-    return {k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}
+    return {k: info[k] for k in ("letters", "labels", "lines", "trained_at", "seconds")}
 
 
 def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None, seed: int = 0):
-    """The reader and its meta (letters, labels, typical width, each label's width), trained on the
-    reviewed letters of the Training Data pages, those of `skip_files` left out."""
+    """The reader and its meta (letters, labels, checked lines learned, typical width, each label's
+    width), trained on the reviewed letters of the Training Data pages and on the checked lines of the
+    Read Book pages (learning from corrections), those of the pages `skip_files` left out."""
     data = _training_set(lib, book_id, skip_files, progress, cancel, seed)
     if progress:
         progress(f"training on {len(data['X'])} windows")
+    base = _fit(data, cancel, epochs=BASE_EPOCHS)
+    learned = _learn_corrections(lib, book_id, data, base, skip_files, progress, cancel)
+    if learned["lines"]:
+        data = _with_corrections(data, learned)
     reader = _fit(data, cancel)
-    return reader, data["meta"]
+    return reader, {**data["meta"], "lines": learned["lines"]}
+
+
+def _checked_lines(lib: Library, book_id: int, skip_files: Sequence[str] = ()) -> List[tuple]:
+    """(line id, page file, line spacing, checked text) of the checked lines of the Read Book pages."""
+    from .db import LineTruth
+    with lib.session() as s:
+        q = (select(Line.id, Page.file, Page.line_spacing, LineTruth.text_dev)
+             .join(LineTruth, LineTruth.line_id == Line.id).join(Page, Line.page_id == Page.id)
+             .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != ""))
+        if skip_files:
+            q = q.where(Page.file.not_in(list(skip_files)))
+        return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id, Line.number)).all()]
+
+
+def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float):
+    """A line's ink (its cut letters' masks pasted together, a page border at its edges cleared), with its
+    top left corner on the page; None for a line without letters."""
+    with lib.session() as s:
+        smps = s.scalars(select(Sample).where(Sample.line_id == line_id, Sample.deleted.is_(False))).all()
+        if not smps:
+            return None
+        c, x0, _ = _paste(lib, book, smps)
+        y0 = min(m.y for m in smps)
+        band = (float(np.median([m.y - y0 for m in smps])), float(np.median([m.y + m.h - y0 for m in smps])))
+        c, _ = clear_borders(c, typical_width, float(np.median([m.h for m in smps])), band)
+    return c, x0, y0
+
+
+def _learn_corrections(lib: Library, book_id: int, data: Dict, base: LetterReader, skip_files: Sequence[str] = (),
+                       progress=None, cancel=None) -> Dict:
+    """Learning from corrections: each checked line is cut into the aksharas of its checked text
+    (`segment.align`, with the reader trained on the letters), and each of its windows becomes a training
+    example of its akshara, also of aksharas no group has yet."""
+    book = lib.get_book(book_id)
+    T = data["meta"]["typical_width"]
+    X, labels, widths, used = [], [], defaultdict(list), 0
+    rows = _checked_lines(lib, book_id, skip_files)
+    for n, (lid, _, spacing, text) in enumerate(rows, 1):
+        if cancel and cancel():
+            raise Cancelled("Cancelled; the line search reader was not changed.")
+        if progress and n % 10 == 1:
+            progress(f"learning from the checked lines: {n} of {len(rows)}")
+        ink = _line_ink(lib, book, lid, T)
+        if ink is None:
+            continue
+        win = line_windows(ink[0], spacing or 100.0, T)
+        if win is None or not len(win.X):
+            continue
+        aks = [a for a in split_aksharas(_chars(text)) if a.strip() and a != "?"]
+        path, score = align(win, base.probabilities(win.X), base.classes, T, aks)
+        if path is None or score < MIN_ALIGN:
+            continue
+        used += 1
+        for q, a in path:
+            X.append(win.X[q])
+            labels.append(a)
+            widths[a].append(win.meta[q][2])
+    return {"lines": used, "X": X, "labels": labels, "widths": widths}
+
+
+def _with_corrections(data: Dict, learned: Dict) -> Dict:
+    """The training set with the checked lines' windows added (new labels get a class); weights again so
+    that every label weighs the same in total."""
+    old = data["classes"]
+    labels = sorted(set(old[:-1]) | set(learned["labels"]))
+    classes = labels + [NOT_A_LETTER]
+    ci = {c: i for i, c in enumerate(classes)}
+    y = np.concatenate([np.array([ci[old[k]] for k in data["y"]], np.int64),
+                        np.array([ci[a] for a in learned["labels"]], np.int64)])
+    X = np.concatenate([data["X"], np.array(learned["X"], np.float32)])
+    per = Counter(y.tolist())
+    notl = ci[NOT_A_LETTER]
+    weights = np.array([(NEG_WEIGHT * (len(per) - 1) if k == notl else 1.0) / per[int(k)] for k in y], np.float32)
+    weights *= len(weights) / weights.sum()
+    meta = dict(data["meta"])
+    meta["widths"] = {**{a: float(np.median(v)) for a, v in learned["widths"].items()}, **meta["widths"]}
+    meta["labels"] = len(labels)
+    return {"X": X, "y": y, "weights": weights, "classes": classes, "meta": meta}
 
 
 def _fit(data: Dict, cancel=None, hidden: int = 0, epochs: int = EPOCHS) -> LetterReader:
@@ -227,14 +321,10 @@ def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: floa
     reader, meta = model
     found = {}
     for lid in line_ids:
-        with lib.session() as s:
-            smps = s.scalars(select(Sample).where(Sample.line_id == lid, Sample.deleted.is_(False))).all()
-            if not smps:
-                continue
-            c, x0, _ = _paste(lib, book, smps)
-            y0 = min(m.y for m in smps)
-            band = (float(np.median([m.y - y0 for m in smps])), float(np.median([m.y + m.h - y0 for m in smps])))
-            c, _ = clear_borders(c, meta["typical_width"], float(np.median([m.h for m in smps])), band)
+        ink = _line_ink(lib, book, lid, meta["typical_width"])
+        if ink is None:
+            continue
+        c, x0, y0 = ink
         text, steps, _ = read_line(c, spacing, reader, meta["typical_width"], meta["widths"], lm, settings)
         aks = []
         for st in steps:

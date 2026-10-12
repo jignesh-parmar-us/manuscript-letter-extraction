@@ -265,8 +265,11 @@
       about 7 s per line). Its text is shown in the same views; the aksharas where Tesseract reads differently are
       highlighted in both tabs, and clicking one shows what the other read. On the checked lines the marks fall on about
       a fifth of the aksharas and catch 88% of Tesseract's remaining mistakes. When groups were reviewed or changed since
-      it learned, it says so: <span class="ui">Retrain and read all pages</span>. <span class="ui">Measure</span> scores
-      it on your checked lines, fairly (trained again without the pages it is scored on, about 40 minutes), beside
+      it learned, it says so: <span class="ui">Retrain</span>. Retrain learns from your reviewed groups <em>and every
+      checked line</em> (it finds which ink is which akshara of your text, so it also learns letters no group has yet;
+      about half an hour); it does not read the pages: <span class="ui">Read all pages</span> (or a page) afterwards,
+      and new pages can be read without retraining. <span class="ui">Measure</span> scores
+      it on your checked lines, fairly (trained again without the pages it is scored on, about 2 hours), beside
       Tesseract, with every line listed. A correction or ✓ belongs to the line: the same in both tabs. <strong>Cut letters</strong>: <span class="ui">Convert all pages</span> (or one page). Each page is shown beside its
       text: <span class="ui">Tesseract only</span> shows what Tesseract read, <span class="ui">Tesseract + your
       groups</span> adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it

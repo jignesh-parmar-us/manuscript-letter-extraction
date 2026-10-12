@@ -22,7 +22,7 @@ from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFo
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | line_search | line_search_measure | train | use_reader
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | line_search | line_search_train | line_search_measure | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -205,6 +205,21 @@ class Jobs:
             raise LibraryError("No pages read whole yet: read the pages first (Read all pages).")
         return self.start(book_id, "line_search", lambda progress, cancel: search_book(
             self.lib, book_id, page_ids, part, retrain, progress, cancel), total=total)
+
+    def line_search_train(self, book_id: int) -> Job:
+        """Train the line search reader again (reviewed letters and checked lines), without reading."""
+        from .linesearch import train_line_reader
+        from .suggest import LineDone
+        self.lib.get_book(book_id)
+
+        def run(progress, cancel):
+            t0 = time.time()
+            r = train_line_reader(self.lib, book_id, lambda msg: progress(0, 1, LineDone(msg, "OK", "", time.time() - t0)),
+                                  cancel)
+            progress(1, 1, LineDone("line search reader", "OK",
+                                    f"{r['letters']} letters, {r['lines']} checked lines", time.time() - t0))
+            return r
+        return self.start(book_id, "line_search_train", run, total=1)
 
     def line_search_measure(self, book_id: int) -> Job:
         """Score the line search fold-fair on the checked lines (linesearch.measure): one step per fold."""

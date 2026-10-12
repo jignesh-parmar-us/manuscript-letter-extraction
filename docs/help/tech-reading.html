@@ -71,6 +71,13 @@
     page is also a Training Data page, so the pages with checked lines go in 4 folds and, for each, the reader and the
     language model are trained without them (the word lists are kept); CER in code points, spaces and "|" left out,
     beside Tesseract alone and Tesseract + language model as read whole (that model knows every page).</p>
+  <p><strong>Learning from corrections</strong> (<code>linesearch._learn_corrections</code>,
+    <code>segment.align</code>): Retrain first fits a reader on the reviewed letters, then cuts every checked line
+    into the aksharas of its checked text (forced alignment over the same windows as the search: a known akshara by
+    the reader's probability, an unknown one by the window being a letter and its width) and adds each window as an
+    example of its akshara, so letters no group has yet are learned too; the final reader (linear, 40 epochs) learns
+    from both. Measure does the same per fold, with the checked lines of the other folds' pages only. Fold-fair on 99
+    lines: 8.38% → 7.32% (the two newest pages 4.89% → 3.93%; Tesseract 3.80%).</p>
   <p><strong>Page borders</strong>: before the search, thin pieces of ink at a line's two edges are removed when they
     are taller than the line's letters, broken and reaching out of the letters' band, or specks
     (<code>segment.clear_borders</code>); a danda is solid and within the band, so it stays. Tesseract's border marks

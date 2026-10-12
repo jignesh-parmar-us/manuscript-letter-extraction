@@ -8,7 +8,7 @@ vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { ...real.api, pages: vi.fn(), bookWholeLines: vi.fn(), wholeLines: vi.fn(), convert: vi.fn(),
     job: vi.fn(), cancelJob: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), proofreadStats: vi.fn(), saveWholeLine: vi.fn(),
-    lineSearch: vi.fn(), lineSearchReader: vi.fn(), lineSearchMeasure: vi.fn() } };
+    lineSearch: vi.fn(), lineSearchReader: vi.fn(), lineSearchMeasure: vi.fn(), lineSearchTrain: vi.fn() } };
 });
 
 const book = { id: 4, job: null } as unknown as Book;
@@ -154,7 +154,7 @@ describe("Whole lines", () => {
       lm_guj: undefined, other_dev: "व", other_guj: "વ" };
     vi.mocked(api.wholeLines).mockResolvedValue(t);
     vi.mocked(api.lineSearchReader).mockResolvedValue({
-      reader: { letters: 8946, labels: 412, trained_at: "2026-10-12T05:58:50Z", seconds: 400, changed: true },
+      reader: { letters: 8946, labels: 412, lines: 99, trained_at: "2026-10-12T05:58:50Z", seconds: 400, changed: true },
       measure: { measured_at: "2026-10-12T09:00:00Z", folds: 4, pages: 8, lines: 73, chars: 6677,
         cer: { ours: 10.2, tesseract: 5.1, tesseract_lm: 4.45 }, marked: 19.4, mistakes: 277, caught: 244,
         line_results: [{ page: "Untitled-15.jpg", line: 1, truth: "नारायण", ours: "नारायण", tesseract: "नारायव", tesseract_lm: "नारायण",
@@ -163,6 +163,7 @@ describe("Whole lines", () => {
     const job = { id: "j", book_id: 4, status: "running", done: 0, total: 1, current: "", pages: [], result: null, error: "", seconds: 0 };
     vi.mocked(api.lineSearch).mockResolvedValue({ ...job, kind: "line_search" } as never);
     vi.mocked(api.lineSearchMeasure).mockResolvedValue({ ...job, kind: "line_search_measure" } as never);
+    vi.mocked(api.lineSearchTrain).mockResolvedValue({ ...job, kind: "line_search_train" } as never);
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: "Whole lines (our reader)" }));
     const pane = await screen.findByLabelText("Lines");
@@ -172,14 +173,15 @@ describe("Whole lines", () => {
     expect(screen.getByRole("link", { name: "Page .txt" }).getAttribute("href")).toMatch(/readers=search&page_id=9/);
     await userEvent.click(within(pane).getByText("ણ"));
     expect(screen.getByText(/our reader · Tesseract: વ/)).toBeInTheDocument();
-    expect(screen.getByText(/Reader trained on 8946 reviewed letters/)).toBeInTheDocument();
+    expect(screen.getByText(/Reader trained on 8946 reviewed letters and 99 checked lines/)).toBeInTheDocument();
     expect(screen.getByText(/changed since: retrain/)).toBeInTheDocument();
     expect(screen.getByText(/our reader 10.2%/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show the lines" }));
     expect(screen.getByText("Untitled-15.jpg · 1")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Retrain and read all pages" }));
-    expect(api.lineSearch).toHaveBeenCalledWith(4, undefined, true);
-    expect(await screen.findByText(/Our reader \(line search\)/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retrain" }));             // training only
+    expect(api.lineSearchTrain).toHaveBeenCalledWith(4);
+    expect(api.lineSearch).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Training our reader/)).toBeInTheDocument();
   });
 
   it("measures our reader on the checked lines", async () => {
@@ -189,7 +191,7 @@ describe("Whole lines", () => {
     localStorage.setItem("text-mode", "search");
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     expect(await screen.findByText(/No reader yet/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Retrain and read all pages" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Retrain" })).toHaveClass("primary");    // no reader yet
     await userEvent.click(screen.getByRole("button", { name: "Measure" }));
     expect(api.lineSearchMeasure).toHaveBeenCalledWith(4);
     expect(await screen.findByText(/Measuring our reader/)).toBeInTheDocument();

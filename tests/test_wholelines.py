@@ -193,6 +193,19 @@ class WholeLineTests(unittest.TestCase):
         self.assertFalse(trim_edges(aks)[0][2])                                  # no gap before the first akshara
         self.assertEqual(trim_edges([["|", 40.0, False]]), [])
 
+    def test_corrections_add_examples_and_new_labels(self):
+        import numpy as np
+        from letter_extractor.app.linesearch import NOT_A_LETTER, _with_corrections
+        data = {"X": np.zeros((3, 2), np.float32), "y": np.array([0, 1, 2]), "weights": np.ones(3, np.float32),
+                "classes": ["क", "ख", NOT_A_LETTER], "meta": {"widths": {"क": 20.0}, "labels": 2}}
+        learned = {"X": [np.ones(2, np.float32)] * 2, "labels": ["क", "हे"], "widths": {"हे": [30, 34], "क": [99]}}
+        got = _with_corrections(data, learned)
+        self.assertEqual(got["classes"], ["क", "ख", "हे", NOT_A_LETTER])        # हे: a label no group has
+        self.assertEqual(got["y"].tolist(), [0, 1, 3, 0, 2])                     # the old classes renumbered
+        self.assertEqual(got["meta"]["widths"], {"क": 20.0, "हे": 32.0})          # the letters' width kept
+        w = got["weights"]
+        self.assertAlmostEqual(float(w[0] + w[3]), float(w[1]), places=5)        # every label weighs the same
+
     def test_disagreements(self):
         from letter_extractor.app.linesearch import disagreements
         self.assertEqual(disagreements(["ना", "रा", "य"], "नारा य"), [None, None, None])

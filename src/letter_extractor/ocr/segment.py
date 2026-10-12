@@ -268,3 +268,57 @@ def search(win: Windows, P: Optional[np.ndarray], classes: Sequence[str], typica
         else:
             gap = gap or st.space
     return " ".join(text.split()), letters, stats
+
+
+def align(win: Optional[Windows], P: Optional[np.ndarray], classes: Sequence[str], typical_width: float,
+          aksharas: Sequence[str]) -> Tuple[Optional[List[Tuple[int, str]]], Optional[float]]:
+    """Forced alignment (learning from checked lines): the best way to cut the line into exactly the
+    `aksharas` of its checked text, empty stretches free. A known akshara scores log p of its window plus
+    half the width term; one the reader has no class for scores the window being a letter at all and
+    the width term (wider tolerance), minus 2. Returns [(window index, akshara)] and the mean score per
+    akshara, or (None, None) when the line cannot be cut so."""
+    if win is None or P is None or not len(P) or not aksharas:
+        return None, None
+    n, m, T = len(win.cand), len(aksharas), typical_width
+    ci = {c: i for i, c in enumerate(classes)}
+    letter = 1.0 - P[:, -1]
+    out_edges: List[List[Tuple[int, int, int]]] = [[] for _ in range(n)]
+    for q, (i, j, w) in enumerate(win.meta):
+        out_edges[i].append((j, q, w))
+    empty: List[List[int]] = [[] for _ in range(n)]
+    for i, j, _ in win.empty_edges:
+        empty[i].append(j)
+    NEG = -1e18
+    best = np.full((n, m + 1), NEG)
+    back: Dict[Tuple[int, int], Tuple[int, int, Optional[int]]] = {}
+    best[0, 0] = 0.0
+    for i in range(n):
+        for t in range(m + 1):
+            sc = best[i, t]
+            if sc <= NEG / 2:
+                continue
+            for j in empty[i]:
+                if sc > best[j, t]:
+                    best[j, t] = sc
+                    back[(j, t)] = (i, t, None)
+            if t == m:
+                continue
+            k = ci.get(aksharas[t])
+            for j, q, w in out_edges[i]:
+                wp = -math.log(w / T) ** 2 / (2 * 0.6 ** 2)
+                s = (math.log(max(float(P[q, k]), 1e-6)) + 0.5 * wp if k is not None
+                     else math.log(max(float(letter[q]), 1e-6)) + wp - 2.0)
+                if sc + s > best[j, t + 1]:
+                    best[j, t + 1] = sc + s
+                    back[(j, t + 1)] = (i, t, q)
+    if best[n - 1, m] <= NEG / 2:
+        return None, None
+    path: List[Tuple[int, str]] = []
+    node = (n - 1, m)
+    while node in back:
+        i, t, q = back[node]
+        if q is not None:
+            path.append((q, aksharas[t]))
+        node = (i, t)
+    path.reverse()
+    return path, float(best[n - 1, m] / m)

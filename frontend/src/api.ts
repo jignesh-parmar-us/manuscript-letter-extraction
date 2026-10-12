@@ -115,7 +115,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "convert" | "line_search" | "line_search_measure" | "train" | "use_reader" | "generate_letters"
+    | "convert" | "line_search" | "line_search_train" | "line_search_measure" | "train" | "use_reader" | "generate_letters"
     | "top_up";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
@@ -243,7 +243,7 @@ export interface WholeLines {
 
 /** Our reader (the line search): what it was trained on and its last fold-fair measure. */
 export interface LineSearchState {
-  reader: { letters: number; labels: number; trained_at: string; seconds: number; changed: boolean } | null;
+  reader: { letters: number; labels: number; lines: number; trained_at: string; seconds: number; changed: boolean } | null;
   measure: LineSearchMeasure | null;
 }
 
@@ -585,6 +585,7 @@ export const api = {
     post<Job>(`/api/books/${id}/line-search`, { page_ids: pageIds ?? null, part: "read", retrain }),
   lineSearchReader: (id: number) => get<LineSearchState>(`/api/books/${id}/line-search`),
   lineSearchMeasure: (id: number) => post<Job>(`/api/books/${id}/line-search/measure`, {}),
+  lineSearchTrain: (id: number) => post<Job>(`/api/books/${id}/line-search/train`, {}),
   wholeLines: (pageId: number, engine: LineEngine = "tesseract") =>
     get<WholeLines>(`/api/pages/${pageId}/whole-lines?engine=${engine}`),
   saveWholeLine: (lineId: number, change: { text?: string; reviewed?: boolean; shown?: string }) =>

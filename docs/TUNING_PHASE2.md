@@ -403,3 +403,18 @@ Seen by the user: both readers read the page border (Untitled-51, 52; a few line
 | pieces peeled one by one, ≤ 0.45 ×, taller than letters / broken and out of the band / specks | **36 of 44** | **0** | 11 (specks, right borders; checked by eye) |
 
 The 8 border edges left have no border in our reader's ink (the cut letters left it out). Re-reading Untitled-51 and 52 (26 lines, the current reader): **12.6% → 7.5%** of the characters wrong against the checked text (11 lines) or Tesseract's text without `|` (15 lines).
+
+## Learning from corrections (2026-10-12)
+
+Fold-fair, 4 folds by page, on 99 checked lines (8,961 characters; the user corrected Untitled-52 and 53, 26 lines). A harness caches each fold's training windows and the windows of its checked lines, so readers and settings are tried without recomputing features. ZWNJ / ZWJ are left out of the scoring from here on (typed text has them, no reader writes them: 3 false errors).
+
+| Our reader | Characters wrong | New pages (52, 53) |
+|---|---|---|
+| linear, 15 epochs (as built) | 8.38% | 4.89% |
+| linear, 40 epochs | 8.14% | 4.24% |
+| one hidden layer (384), 15 epochs | 7.52% | 5.11% |
+| **linear, 40 epochs, learning from the other folds' checked lines** | **7.32%** | **3.93%** |
+| Tesseract (whole lines) | 4.69% | 3.80% |
+| Tesseract + language model (knows every page) | 3.78% | — |
+
+Why the reader lagged: 2.8% of the checked aksharas had no class (हे: its group not reviewed and its letters not on a line; क्ष्मी, त्सं, र्ष, र्ण, ई…); बा→वा, the most common confusion, came from ब / बा letters inside the व / वा groups (195 वा letters against 1 बा). Learning from corrections: each checked line cut into the aksharas of its text (`segment.align`), its windows added as examples (3,235–4,096 letters per fold, 33–45 new labels). Left: vowel signs (नी→नो 6, र→रे, री→रो, ती→तो, पा→पो), a few ब→व.

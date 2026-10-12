@@ -257,6 +257,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         m = last_measure(library, book_id)
         return {"reader": line_reader_info(library, book_id), "measure": m}
 
+    @app.post("/api/books/{book_id}/line-search/train", dependencies=auth, status_code=202)
+    def line_search_train(book_id: int) -> Dict:
+        """Train the line search reader again on the reviewed letters and the checked lines (a job)."""
+        return jobs.line_search_train(book_id).as_dict()
+
     @app.post("/api/books/{book_id}/line-search/measure", dependencies=auth, status_code=202)
     def line_search_measure(book_id: int) -> Dict:
         """Score the line search fold-fair on the checked lines (a job)."""
