@@ -35,7 +35,7 @@ from sqlalchemy import select
 from .. import io_utils
 from ..features import normalize
 from ..mapping import CATEGORIES, category, code_points, mapping_for, safe_name, sort_key, transliterate, unmapped
-from .db import Book, LetterGroup, Line, Page, Sample
+from .db import GENERATED, Book, LetterGroup, Line, Page, Sample
 from .library import Library, LibraryError, NotFound
 
 IMAGE_MODES = ("original", "normalized", "fixed64")
@@ -92,6 +92,9 @@ def export_book(lib: Library, book_id: int, folder: Optional[Path] = None, image
         samples = _reading_order(list(s.scalars(select(Sample).where(Sample.book_id == book_id,
                                                                     Sample.part == "training",
                                                                     Sample.deleted.is_(False)))))
+        # letters made by the system only once their group is reviewed
+        samples = [x for x in samples if x.source != GENERATED
+                   or (x.group_id in groups and groups[x.group_id].status != "auto")]
         lines = list(s.scalars(select(Line).join(Page).where(Page.book_id == book_id, Page.part == "training")
                                .order_by(Line.page_id, Line.number)))
 
@@ -114,7 +117,7 @@ def export_book(lib: Library, book_id: int, folder: Optional[Path] = None, image
             target.mkdir(parents=True, exist_ok=True)
             (target / "label.txt").write_text(cls.label_guj + "\n", encoding="utf-8")
             for smp in cls.samples:
-                stem = Path(pages[smp.page_id].file).stem if smp.page_id in pages else "uploaded"
+                stem = Path(pages[smp.page_id].file).stem if smp.page_id in pages else smp.source
                 name = f"{stem}_L{smp.line_number:02d}_{smp.id:06d}.png"
                 _write_image(lib, book, smp, target / name, mode)
                 exported[smp.id] = (target / name).relative_to(folder).as_posix()
@@ -183,6 +186,7 @@ def export_book(lib: Library, book_id: int, folder: Optional[Path] = None, image
             "labelled_samples": sum(len(c.samples) for c in classes), "unsure": len(unsure),
             "unlabelled_in_lines": n_unknown, "skipped_pages": skipped, "kept_in_devanagari": kept,
             "uploaded": sum(smp.source == "uploaded" for smp in samples),
+            "generated": sum(smp.source == GENERATED for smp in samples),
         }
         lines_txt = [
             f"Book: {book.name}", f"Exported: {datetime.now().isoformat(timespec='seconds')}",
@@ -191,6 +195,7 @@ def export_book(lib: Library, book_id: int, folder: Optional[Path] = None, image
             f"Classes with fewer than {warn} samples: {len(few)}"
             + (f" ({' '.join(c.label_guj for c in few)})" if few else ""),
             f"Unsure (no label): {len(unsure)}", f"Uploaded samples: {summary['uploaded']}",
+            f"Letters made by the system (reviewed groups only): {summary['generated']}",
             f"Skipped pages: {len(skipped)}" + (f" ({', '.join(skipped)})" if skipped else ""),
             f"Characters kept in Devanagari: {' '.join(kept) if kept else 'none'}",
             f"Dataset images: {mode}",

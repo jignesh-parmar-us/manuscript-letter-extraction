@@ -12,7 +12,7 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import LetterGroup, Sample
+from .db import GENERATED, LetterGroup, Sample
 
 
 def _vec(blob: Optional[bytes]) -> Optional[np.ndarray]:
@@ -42,7 +42,8 @@ def recompute(s: Session, group_ids: Iterable[int]) -> None:
 
 
 def centres(s: Session, book_id: int, labelled_only: bool = False) -> Tuple[List[LetterGroup], np.ndarray]:
-    """All groups of a book with members, and their centres (one row each)."""
+    """All groups of a book with members, and their centres (one row each). `labelled_only` (the centres
+    that read letters): labelled groups, without the letters made by the system in groups not reviewed."""
     q = select(LetterGroup).where(LetterGroup.book_id == book_id)
     if labelled_only:
         q = q.where(LetterGroup.label_dev != "")
@@ -50,9 +51,11 @@ def centres(s: Session, book_id: int, labelled_only: bool = False) -> Tuple[List
     # every member's fingerprint in one query (one query per group took a second on a large book)
     sums: Dict[int, np.ndarray] = {}
     counts: Dict[int, int] = {}
-    for gid, fp in s.execute(select(Sample.group_id, Sample.fingerprint)
-                             .where(Sample.book_id == book_id, Sample.group_id.is_not(None),
-                                    Sample.deleted.is_(False), Sample.fingerprint.is_not(None))):
+    for gid, fp, source in s.execute(select(Sample.group_id, Sample.fingerprint, Sample.source)
+                                     .where(Sample.book_id == book_id, Sample.group_id.is_not(None),
+                                            Sample.deleted.is_(False), Sample.fingerprint.is_not(None))):
+        if labelled_only and source == GENERATED and gid in wanted and wanted[gid].status == "auto":
+            continue
         if gid in wanted:
             v = _vec(fp).astype(np.float64)
             sums[gid] = sums[gid] + v if gid in sums else v

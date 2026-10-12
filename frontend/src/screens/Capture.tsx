@@ -29,6 +29,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   line_search_measure: "Measuring our reader on the checked lines",
   train: "Training a letter reader",
   use_reader: "Reading with the letter reader",
+  generate_letters: "Making the missing letters",
 };
 
 export default function Capture({ book, info, onChanged }: Props) {

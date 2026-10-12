@@ -38,6 +38,9 @@ class UTCDateTime(TypeDecorator):
         return value
 
 
+GENERATED = "generated"   # source of letters made by the system from parts of others (generate.py)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -149,6 +152,7 @@ class Sample(Base):
     mask: Mapped[str] = mapped_column(String(500), default="")
     fingerprint: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)   # float32 vector
     source: Mapped[str] = mapped_column(String(10), default="auto")   # auto | cropped | joined | split | uploaded
+    #                                                                   | bar | generated (GENERATED)
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("letter_group.id", ondelete="SET NULL"),
                                                     index=True, nullable=True)

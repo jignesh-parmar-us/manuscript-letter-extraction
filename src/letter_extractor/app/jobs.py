@@ -302,6 +302,12 @@ class Jobs:
         return self.start(book_id, "fix_bars",
                           lambda progress, cancel: fix_bars(self.lib, book_id, progress, cancel), total=total)
 
+    def generate_letters(self, book_id: int) -> Job:
+        """Make the letters of the letter table the book has no group for, as one action (generate.py)."""
+        from .generate import generate
+        return self.start(book_id, "generate_letters",
+                          lambda progress, cancel: generate(self.lib, book_id, progress, cancel))
+
     def _images(self, book_id: int):
         from pathlib import Path
         from .. import io_utils

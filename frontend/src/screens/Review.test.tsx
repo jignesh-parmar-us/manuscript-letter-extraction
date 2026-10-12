@@ -82,4 +82,14 @@ describe("Review", () => {
     expect(filterGroups(gs, "readmixed").map((g) => g.id)).toEqual([3]);
     expect(sortGroups(gs, "share").map((g) => g.id)).toEqual([2, 1, 3, 4]);
   });
+
+  it("filters the System generated groups: all their letters made by the system, reviewed or not", () => {
+    const gs = [
+      group({ id: 1, samples: 6, generated: 6, label_dev: "घो" }),
+      group({ id: 2, samples: 6, generated: 6, label_dev: "णी", status: "labelled" }),
+      group({ id: 3, samples: 7, generated: 6, label_dev: "ढी" }),          // a real letter joined it
+      group({ id: 4, samples: 0, generated: 0 }),
+    ];
+    expect(filterGroups(gs, "generated").map((g) => g.id)).toEqual([1, 2]);
+  });
 });

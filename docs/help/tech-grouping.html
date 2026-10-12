@@ -134,6 +134,25 @@
       undo writes the before-state back, redo the after-state. Locked groups refuse every change.</li>
     <li>After each change the touched groups' centres and their letters' distances are recomputed.</li>
   </ul>
+
+  <h2>Generated missing letters (printed books)</h2>
+  <p><strong>Generate missing letters</strong> makes the letters of the letter table that no group has from the
+    book's own labelled letters, on their ink masks, lined up on the headline (<code>compose.py</code>,
+    <code>app/generate.py</code>):</p>
+  <ul>
+    <li>signs above (े ै ं ँ): the donor's ink above its headline, at the same distance from the letter body's
+      right edge; bar signs (ा ो ौ ी): the bar and its hook, after the letter with the same gap, the headline
+      carried over; signs below (ु ू): the ink below the height of the donor's consonant alone, under the foot;
+      आ ओ औ अं from अ, ऐ from ए;</li>
+    <li>only typical parts: the usual number of pieces, size (and gap) within 0.6–1.6 of the median; a bar must end
+      where its letter ends; 6 letters per missing letter, no group below 5;</li>
+    <li>not made: ि (before its letter), ृ and ् (too small to place), signs without donors, letters of their own
+      shape (ङ ञ ळ, रु, हु, दु, signs below ट ठ ड ढ).</li>
+  </ul>
+  <p>Each made letter is a sample with source <code>generated</code> and no page, in a new group with its label,
+    not reviewed. The group is <em>System generated</em> while all its letters are made, reviewed or not, until a
+    real letter joins it. Its letters are used for training the letter reader (never as held-out test letters),
+    for reading pages and in the export only once the group is reviewed. One undo takes a run back.</p>
 </main>
 </body>
 </html>

@@ -25,6 +25,9 @@ Routes (all JSON unless noted):
   files      GET /files/books/{id}/{path} (letter, mask and line images), GET /files/pages/{page_id}
              (the input page image)
   samples    POST /api/books/{id}/samples/{crop|join|split|upload}   (C5f)
+  generated  POST /api/books/{id}/generate-letters (a job, printed books): the missing letters of the letter
+             table made from the book's own letters (generate.py); groups carry `generated`, how many of
+             their letters were made so
   export     POST /api/books/{id}/export (a job), POST /api/app/open-folder   (C5g)
   app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
              PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it;
@@ -48,7 +51,7 @@ from ..config import Config, load_config
 from ..mapping import describe, mapping_for
 from . import actions, samples as manual
 from .centres import suggestions
-from .db import Book, LetterGroup, Line, Page, Sample
+from .db import GENERATED, Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
@@ -81,9 +84,9 @@ def _sample_json(smp: Sample, book_id: int, token: str) -> Dict:
 
 
 def _group_members(s, book_id: int, group_id: Optional[int] = None) -> Dict[int, List]:
-    """The members of a book's groups (or of one group) as light rows (id, ink, distance, image), nearest
+    """The members of a book's groups (or of one group) as light rows (id, ink, distance, image, source), nearest
     to the centre first: one query for all groups, without the fingerprints."""
-    q = (select(Sample.group_id, Sample.id, Sample.ink, Sample.distance, Sample.image)
+    q = (select(Sample.group_id, Sample.id, Sample.ink, Sample.distance, Sample.image, Sample.source)
          .where(Sample.book_id == book_id, Sample.group_id.is_not(None), Sample.deleted.is_(False)))
     if group_id is not None:
         q = q.where(Sample.group_id == group_id)
@@ -102,6 +105,7 @@ def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None, mem: 
     dists = [m.distance for m in mem if m.distance is not None]
     return {"id": g.id, "code": g.code, "kind": g.kind, "label_dev": g.label_dev, "label_guj": g.label_guj,
             "status": g.status, "locked": g.locked, "samples": len(mem), "red": red, "black": len(mem) - red,
+            "generated": sum(m.source == GENERATED for m in mem),     # letters made by the system (generate.py)
             "spread": round(sum(dists) / len(dists), 3) if dists else None,
             "example_id": mem[0].id if mem else None,
             "example_image": f"/files/books/{g.book_id}/{mem[0].image}?token={token}" if mem else None,
@@ -580,6 +584,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                     "lines": [{"id": ln.id, "number": ln.number, "box": [ln.x, ln.y, ln.w, ln.h], "ink": ln.ink,
                                "image": f"/files/books/{p.book_id}/{ln.image}?token={token}"} for ln in p.lines],
                     "samples": [_sample_json(smp, p.book_id, token) for smp in samples]}
+
+    @app.post("/api/books/{book_id}/generate-letters", dependencies=auth, status_code=202)
+    def generate_letters(book_id: int) -> Dict:
+        book = library.get_book(book_id)
+        if book.writing != "printed":
+            raise HTTPException(400, "Generating missing letters is for printed books for now.")
+        return jobs.generate_letters(book_id).as_dict()
 
     @app.get("/api/books/{book_id}/groups", dependencies=auth)
     def groups(book_id: int) -> List[Dict]:

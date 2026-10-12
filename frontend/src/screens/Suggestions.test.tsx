@@ -10,7 +10,7 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { tesseract: vi.fn(), accuracy: vi.fn(), suggest: vi.fn(), job: vi.fn(), cancelJob: vi.fn(),
-    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), fixBars: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
+    acceptSuggestions: vi.fn(), rejectSuggestion: vi.fn(), fixCuts: vi.fn(), fixBars: vi.fn(), generateLetters: vi.fn(), referenceBooks: vi.fn(), suggestBooks: vi.fn(), splitMixed: vi.fn(), removeReadings: vi.fn(), labelSamples: vi.fn(), readAs: vi.fn(), merge: vi.fn(),
     groupSamples: vi.fn(), unsure: vi.fn(), checkLabel: vi.fn(), move: vi.fn(), label: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
@@ -117,6 +117,30 @@ describe("SuggestPanel", () => {
     unmount();
     renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
     expect(screen.queryByRole("button", { name: "Fix ા bars" })).toBeNull();
+  });
+
+  it("generates the missing letters of a printed book after asking, and says what it made", async () => {
+    const job = { id: "j5", book_id: 1, kind: "generate_letters" as const, status: "running" as const, done: 0,
+      total: 40, current: "", pages: [], result: null, error: "", seconds: 0 };
+    vi.mocked(api.generateLetters).mockResolvedValue(job);
+    const { unmount } = renderView((ctx) => <SuggestPanel book={book()} ctx={ctx} onRead={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Generate missing letters" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("System generated");
+    expect(dialog).toHaveTextContent("only then is it used for training and reading");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Generate them" }));
+    expect(api.generateLetters).toHaveBeenCalledWith(1);
+    expect(await screen.findByText("Making letters: 0 of 40")).toBeInTheDocument();
+    unmount();
+    const done = { ...job, status: "done" as const, result: {
+      made: [{ letter: "घो", label_guj: "ઘો", group: "g0901", samples: 6 }, { letter: "णी", label_guj: "ણી", group: "g0902", samples: 6 }],
+      skipped: [{ letter: "ङ", why: "a consonant of its own shape" }, { letter: "कि", why: "the i sign is written before its letter (not made yet)" }] } };
+    const { unmount: gone } = renderView((ctx) => <SuggestPanel book={book({ job: done })} ctx={ctx} onRead={() => {}} />);
+    expect(await screen.findByText(/2 missing letters made \(12 letters\)/)).toBeInTheDocument();
+    expect(screen.getByText("2 missing letters not made")).toBeInTheDocument();
+    gone();
+    renderView((ctx) => <SuggestPanel book={book({ writing: "handwritten" })} ctx={ctx} onRead={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Generate missing letters" })).toBeNull();
   });
 
   it("shows how the suggestions compare with the labels", async () => {

@@ -4,7 +4,9 @@
 //   suggestions above a share in one undoable step, and see how the suggestions compare with the
 //   labels given so far. On printed books, "Fix cuts with Tesseract" splits samples that hold several
 //   letters and joins letters cut in pieces (C12b), as one undoable step; "Fix ા bars" gives aa bars
-//   cut onto the next letter (નાર as ન + ાર) back to their letter, by shape only (bars.py, barfix.py).
+//   cut onto the next letter (નાર as ન + ાર) back to their letter, by shape only (bars.py, barfix.py);
+//   "Generate missing letters" makes the letters of the letter table the book has no group for, from the
+//   book's own letters (generate.py): system generated groups, to be reviewed one by one.
 // - SuggestionChip (on a group): accept, change or reject its suggestion; or merge into the group
 //   that already has the suggested label.
 // - ReadingsLine (on a group): what its samples were read as; select the samples of one reading to
@@ -14,6 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Book, ENGINE_NAME, Group, Job, localTime, ReferenceBook, SuggestionAccuracy, TesseractStatus } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
+import { toGujarati } from "../components/LabelPicker";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { ReviewContext } from "./Review";
@@ -53,7 +56,10 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     [onRead],
   );
   const [job, setJob] = useJob(
-    book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" || book.job?.kind === "fix_bars" ? book.job : null,
+    book.job?.kind === "suggest" || book.job?.kind === "fix_cuts" || book.job?.kind === "fix_bars" ||
+      book.job?.kind === "generate_letters"
+      ? book.job
+      : null,
     onEnd,
   );
   const run = book.ocr_runs?.find((r) => r.engine === "tesseract");
@@ -129,6 +135,24 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
     setError(null);
     try {
       setJob(await api.fixBars(book.id));
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function generateLetters() {
+    const ok = await confirm(
+      "Make the letters of the letter table that this book has no group for (like ઘો or ણી), from its own " +
+        "labelled letters: a consonant with a vowel sign taken from another letter that has it. Each made letter " +
+        "gets a group of at least 5 letters, marked System generated and not reviewed. Look at each group, delete " +
+        "the letters that look wrong and mark it reviewed: only then is it used for training and reading. " +
+        "Undo takes all of it back in one step.",
+      "Generate them",
+    );
+    if (!ok) return;
+    setError(null);
+    try {
+      setJob(await api.generateLetters(book.id));
     } catch (e) {
       setError(e);
     }
@@ -216,6 +240,15 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
             Fix ા bars
           </button>
         )}
+        {printed && (
+          <button
+            disabled={running}
+            onClick={generateLetters}
+            title="Make the letters the book has no group for from its own letters, to review one by one"
+          >
+            Generate missing letters
+          </button>
+        )}
         {anyRun && (
           <button
             disabled={running}
@@ -255,7 +288,14 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         {running && (
           <span className="row">
             <progress max={job!.total || 1} value={job!.done} />
-            {job!.kind === "fix_cuts" ? "Checking cuts" : job!.kind === "fix_bars" ? "Checking pages" : "Reading"}:{" "}
+            {job!.kind === "fix_cuts"
+              ? "Checking cuts"
+              : job!.kind === "fix_bars"
+                ? "Checking pages"
+                : job!.kind === "generate_letters"
+                  ? "Making letters"
+                  : "Reading"}
+            :{" "}
             {job!.done} of {job!.total}
           </span>
         )}
@@ -279,6 +319,9 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
               : "No ા bar on the wrong letter found."}
             {Number(job.result.readings) > 0 && ` ${job.result.readings} letters made by the fix got back Tesseract's reading of the letters they replaced.`}
           </span>
+        )}
+        {job?.kind === "generate_letters" && job.status === "done" && job.result && (
+          <GenerateResult result={job.result} />
         )}
         {splitNote && <span>{splitNote}</span>}
         {!running && (
@@ -448,5 +491,33 @@ export function ReadingsLine({ group, ctx }: { group: Group; ctx: ReviewContext 
         of {group.read} read.{mixed && " Click a reading to select its samples, then New group or To Unsure to split the group."}
       </span>
     </div>
+  );
+}
+
+/** What "Generate missing letters" made, and why the other missing letters were not made. */
+function GenerateResult({ result }: { result: Record<string, unknown> }) {
+  const made = (result.made as { letter: string; label_guj: string; samples: number }[] | undefined) ?? [];
+  const skipped = (result.skipped as { letter: string; why: string }[] | undefined) ?? [];
+  const why = new Map<string, string[]>();
+  for (const s of skipped) why.set(s.why, [...(why.get(s.why) ?? []), s.letter]);
+  return (
+    <span>
+      {made.length
+        ? `${made.length} missing letters made (${made.reduce((n, m) => n + m.samples, 0)} letters), each in a group marked System generated: ` +
+          `choose "System generated" in the group list to review them. Undo takes it all back.`
+        : "No missing letter could be made."}
+      {skipped.length > 0 && (
+        <details>
+          <summary>{skipped.length} missing letters not made</summary>
+          <ul>
+            {[...why.entries()].map(([w, letters]) => (
+              <li key={w}>
+                {w}: {letters.map(toGujarati).join(" ")}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </span>
   );
 }

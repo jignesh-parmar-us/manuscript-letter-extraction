@@ -20,6 +20,17 @@ describe("GroupView", () => {
     for (const f of [api.move, api.deleteSamples, api.merge, api.status, api.label]) vi.mocked(f).mockResolvedValue(ok);
   });
 
+  it("says a group is System generated and how it is used, until a real letter joins it", async () => {
+    const { unmount } = renderView((ctx) => <GroupView group={group({ samples: 6, generated: 6, label_guj: "ઘો" })} ctx={ctx} />);
+    expect(await screen.findByRole("note")).toHaveTextContent("System generated");
+    expect(screen.getByRole("note")).toHaveTextContent("only reviewed, they are used for training and reading");
+    unmount();
+    renderView((ctx) => <GroupView group={group({ samples: 7, generated: 6 })} ctx={ctx} />);
+    await findTiles();
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.getByText("6 of its letters were made by the system; the rest are real letters.")).toBeInTheDocument();
+  });
+
   it("moves the selected samples to Unsure", async () => {
     renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
     const tiles = await findTiles();

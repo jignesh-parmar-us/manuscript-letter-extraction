@@ -115,7 +115,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "convert" | "line_search" | "line_search_measure" | "train" | "use_reader";
+    | "convert" | "line_search" | "line_search_measure" | "train" | "use_reader" | "generate_letters";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
   total: number;
@@ -311,6 +311,10 @@ export interface ProofreadStats {
   cer_tesseract: number | null;
 }
 
+/** A group is "system generated" while all its letters were made by the system; reviewed or not, until a
+ * real letter joins it. */
+export const isGenerated = (g: Group): boolean => g.samples > 0 && g.generated === g.samples;
+
 export interface Group {
   id: number;
   code: string;
@@ -322,6 +326,7 @@ export interface Group {
   samples: number;
   red: number;
   black: number;
+  generated: number; // letters made by the system from parts of others ("Generate missing letters")
   spread: number | null;
   example_id: number | null;
   example_image: string | null;
@@ -548,6 +553,7 @@ export const api = {
   suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),
   fixCuts: (id: number) => post<Job>(`/api/books/${id}/fix-cuts`),
   fixBars: (id: number) => post<Job>(`/api/books/${id}/fix-bars`),
+  generateLetters: (id: number) => post<Job>(`/api/books/${id}/generate-letters`),
   tesseract: (bookId: number) => get<TesseractStatus>(`/api/tesseract?book_id=${bookId}`),
   accuracy: (bookId: number, engine?: Engine) =>
     get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy${engine ? `?engine=${engine}` : ""}`),

@@ -1,6 +1,6 @@
 // One group: its label, status and samples (nearest to the group's centre first).
 // Select samples and move them out (to Unsure, another group, a new group) or delete them;
-// label the group; mark it reviewed or lock it; merge another group into it (chosen in the letter
+// label the group; mark it reviewed or lock it (a System generated group says so, and how it is used); merge another group into it (chosen in the letter
 // table, GroupPicker.tsx); dissolve it.
 // Keys: U = selected to Unsure, N = new group from selection, Delete = delete selection,
 //       Ctrl/Cmd+A = select all, Esc = clear selection.
@@ -10,7 +10,7 @@
 // One selected letter shows its line (LineContext); double-click opens it on its page, and the
 // Pages tab's "Back" returns here, to that letter (returnSpot.ts).
 import { MouseEvent, useCallback, useEffect, useState } from "react";
-import { api, Group, Sample } from "../api";
+import { api, Group, isGenerated, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
@@ -153,6 +153,20 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
         </div>
       </div>
 
+      {isGenerated(group) ? (
+        <p className="note-generated small" role="note">
+          <strong>System generated:</strong> these letters were made from parts of other letters of this book, not
+          cut from a page. Delete the ones that do not look like {group.label_guj || "this letter"} and mark the group
+          reviewed: only reviewed, they are used for training and reading. It stays System generated until a real
+          letter joins it.
+        </p>
+      ) : (
+        group.generated > 0 && (
+          <p className="muted small">
+            {group.generated} of its letters were made by the system; the rest are real letters.
+          </p>
+        )
+      )}
       <SuggestionChip group={group} ctx={ctx} onChange={setChangeTo} />
       <ReadingsLine group={group} ctx={ctx} />
 

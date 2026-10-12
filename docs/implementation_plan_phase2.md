@@ -438,6 +438,31 @@ Rules that carry over from Phase 1:
 
 **Changes from the original plan:** a new chunk.
 
+### C12f. Generating missing letters (printed books)
+
+**Status:** built (2026-10-12). Asked by the user: many cells of the Letter overview have no group (ઘો, ણી, ખૌ...) although the book has the consonant and other letters with the vowel sign; the system should make them, at least 5 each, marked "System generated", used only after the user reviews them. Tried first as a prototype on book 6 (above-headline and bar signs looked right, signs below less so, handwriting had too few labelled letters).
+
+**Goal:** a group for every missing letter that can be made from the book's own labelled letters, to review like any other group.
+
+**Files:** `compose.py` (the image work), `app/generate.py` (missing letters, the action), `app/db.py` (`GENERATED`), `app/readers.py`, `app/centres.py`, `app/export.py` (used only once reviewed), `app/jobs.py`, `app/api.py` (`POST /api/books/{id}/generate-letters`, groups carry `generated`); `frontend/src/screens/Suggestions.tsx`, `Review.tsx`, `GroupView.tsx`, `Capture.tsx`, `components/SampleGrid.tsx`, `api.ts`, `styles.css` (+ tests); `tests/test_compose.py`, `tests/test_generate.py`.
+
+**What it does:**
+- **Missing letters:** the cells of the basic letter table (vowels; every consonant with every vowel sign and mark) that no labelled group has and no group is suggested as (a suggested group is reviewed instead).
+- **Made from parts, on ink masks, lined up on the headline:** signs above (े ै ं ँ) are the donor's ink above its headline, placed at the same distance from the right edge of the new letter's body; bar signs (ा ो ौ ी) are the donor's bar with its hook, placed after the letter with the same gap and the headline carried over it; signs below (ु ू) are the donor's ink below the height of its consonant alone, hung under the new letter's foot. Vowels drawn as another vowel with a sign: आ ओ औ अं (अ), ऐ (ए). The headline is the topmost band of rows whose longest unbroken run is nearly the longest: the middle bar of भ is as long but lower, the two strokes of ै are short.
+- **Only typical parts:** sign parts with the usual number of pieces (a ीं filed as ी brings a dot) and within 0.6-1.6 of the median size (and gap, for bars); base letters within that share of the median width and height; a bar must end where the new letter ends (within 15% of its height), a sign must add ink. Each letter: 6 made (each base at most twice, the signs spread evenly), from the 12 base letters nearest their group's centre and 4 letters of each donor; fewer than 5 good ones: no group.
+- **Not made, with the reason shown:** the i sign (written before its letter), ृ and the halant (small marks a few pixels off cut away), ः ़ ँ without donors, consonants of their own shape (ङ ञ ळ when the book has none), रु रू हु दु and ट ठ ड ढ with signs below (shapes of their own).
+- **System generated:** each letter is a sample with source `generated`, no page, an image of its ink, and `rules` naming its base and donor; each made letter gets a new group with its label, not reviewed. A group is System generated while all its letters are made (`generated` = `samples`), reviewed or not; it stops being so when a real letter joins it (moved or merged in). Generation is one action: one undo takes it back.
+- **Used only once reviewed:** reader training (even with "include not reviewed"; letters without a page are never in the held-out pages or "Check these"), the labelled centres that read pages and place letters (`centres(labelled_only=True)`), and the export (counted in summary.txt; `source` in samples.csv). Real unsure letters may still be suggested into a generated group, which is how a real copy joins.
+- **In the app:** "Generate missing letters" in the Label suggestions bar (printed books; the API refuses handwritten ones for now), a background job; the result lists the letters made and, folded, the ones not made with why. The group list has the filter "System generated" and a "gen" mark; a generated group says what it is and how it is used; a generated letter's tooltip names its parts.
+
+**Tests:** headline found above a busier middle bar and below the strokes of ै; a sign above keeps its distance from the right edge; a bar keeps its gap and gets the headline; a bar ending high is refused; a sign below hangs under the foot; untypical parts and bases are left out; on the synthetic book ना and नं are made from न + ता / तं, once, undone in one step, not trained on, read with or exported until reviewed, still generated when reviewed and not when a real letter joins; training with them keeps them out of the held-out pages; handwritten books are refused; the button asks first and shows what was made.
+
+**Measured** on a copy of book 6: 127 missing letters made (761 letters) in about 50 s; of about 40 letters looked at (240 made letters), the signs sit where real ones do except a few heavy ै strokes; the faults seen on the way (ी with a stray anusvara, भ read at its middle bar, ै cut by the headline finder, ी bars ending high) are what the checks above remove. Not made: 2 ौ letters and ही (fewer than 5 good ones), and the kinds listed above.
+
+**Done when:** the user has reviewed the System generated groups of book 6. *Built; review by the user open.*
+
+**Changes from the original plan:** a new chunk.
+
 ### Part B: suggestions for handwriting
 
 ### C13. Suggestions from other labelled books
@@ -721,6 +746,7 @@ Built in this order (rearranged 2026-10-10): C10 to C13, C12b to C12e, then **C1
 | C12c | Cutting by Tesseract's reading (printed books) | built | per-book choice of cutting; readings stored at capture | FR-5, FR-7 |
 | C12d | Splitting groups that mix two letters | built | mixed groups split by reading where shapes agree; never by stroke | FR-7 |
 | C12e | Giving aa bars back to their letter (printed books) | built | bars, stems, lone bars to their letter; lines on slanted pages | FR-5, FR-8 |
+| C12f | Generating missing letters (printed books) | built (review open) | System generated groups for missing letters, used once reviewed | FR-8, FR-11 |
 | C13 | Suggestions from other labelled books | built (handwriting measurement open) | handwriting suggestions, no training | FR-7 |
 | C16a | The two parts of a book: Training Data and Read Book | built | PDF or images uploaded, cut, never grouped; grouped section menu | FR-12 |
 | C16b | Converting Read Book pages into text | built | text beside the page, uncertain letters marked; .txt, Word, PDF, picture | FR-12 |

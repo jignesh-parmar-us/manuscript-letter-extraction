@@ -8,7 +8,7 @@ import { ReviewContext, useDragSensors } from "./Review";
 
 export const group = (over: Partial<Group> = {}): Group => ({
   id: 5, code: "g0005", kind: "letter", label_dev: "", label_guj: "", status: "auto", locked: false, samples: 3,
-  red: 1, black: 2, spread: 0.3, example_id: 1, example_image: null, updated_at: null, suggestion: null, readings: [],
+  red: 1, black: 2, generated: 0, spread: 0.3, example_id: 1, example_image: null, updated_at: null, suggestion: null, readings: [],
   read: 0, ...over,
 });
 

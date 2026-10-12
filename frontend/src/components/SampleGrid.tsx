@@ -61,7 +61,11 @@ function Tile(props: {
 }) {
   const { sample: s, selected } = props;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `sample-${s.id}` });
-  const where = s.page_id ? `${s.page_file ?? "page"} · line ${s.line}, letter ${s.pos}` : "uploaded";
+  const where = s.page_id
+    ? `${s.page_file ?? "page"} · line ${s.line}, letter ${s.pos}`
+    : s.source === "generated"
+      ? `system generated (${s.rules.replace(/^generated: /, "")})`
+      : "uploaded";
   const open = s.page_id !== null && props.onOpen ? () => props.onOpen!(s) : undefined;
   return (
     <div

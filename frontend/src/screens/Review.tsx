@@ -9,7 +9,7 @@
 // "Suggested" and "Mixed readings" use the groups' votes and readings (see Suggestions.tsx).
 import { DndContext, DragEndEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionResult, api, Book, Group } from "../api";
+import { ActionResult, api, Book, Group, isGenerated } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { emptySelection, Selection } from "../components/selection";
 import { forgetSpot } from "../components/returnSpot";
@@ -21,7 +21,7 @@ import CheckView from "./CheckView";
 import LetterOverview, { missingCount } from "./LetterOverview";
 import { isMixed, SuggestPanel } from "./Suggestions";
 
-type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "suggested" | "readmixed" | "empty";
+type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "suggested" | "readmixed" | "generated" | "empty";
 type Sort = "code" | "label" | "size" | "spread" | "share";
 
 interface Props {
@@ -163,6 +163,7 @@ export default function Review({ book, view, onChanged }: Props) {
               <option value="mixed">Possibly mixed</option>
               <option value="suggested">Suggested</option>
               <option value="readmixed">Mixed readings</option>
+              <option value="generated">System generated</option>
               <option value="empty">Empty</option>
             </select>
             <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
@@ -192,6 +193,11 @@ export default function Review({ book, view, onChanged }: Props) {
                   )}
                 </span>
                 <span className="muted small">
+                  {isGenerated(g) && (
+                    <span className="badge-generated" title="System generated: made from parts of other letters">
+                      gen{" "}
+                    </span>
+                  )}
                   {g.samples}
                   {g.locked ? " 🔒" : g.status !== "auto" ? " ✓" : ""}
                 </span>
@@ -249,6 +255,7 @@ export function filterGroups(groups: Group[], filter: Filter): Group[] {
   if (filter === "unreviewed") return groups.filter((g) => g.samples > 0 && g.status === "auto");
   if (filter === "suggested") return groups.filter((g) => g.samples > 0 && !g.label_dev && !!g.suggestion);
   if (filter === "readmixed") return groups.filter((g) => g.samples > 0 && isMixed(g));
+  if (filter === "generated") return groups.filter(isGenerated);
   // possibly mixed: the 20% of groups (at least one) whose samples are furthest from their centre
   const candidates = groups.filter((g) => g.samples > 1 && g.spread !== null);
   const spreads = candidates.map((g) => g.spread as number).sort((a, b) => a - b);

@@ -32,7 +32,7 @@ from sqlalchemy import delete, select
 from ..ocr.aksharas import split_aksharas
 from ..ocr.features import features, varied
 from ..ocr.reader import LetterReader
-from .db import Book, LetterGroup, OcrReading, OcrRun, Page, Reader, Sample, now
+from .db import GENERATED, Book, LetterGroup, OcrReading, OcrRun, Page, Reader, Sample, now
 from .library import Cancelled, Library, LibraryError
 from .samples import _sample_mask
 
@@ -47,7 +47,8 @@ class Step:
 
 
 def _letters(lib: Library, book_ids: Sequence[int], include_unreviewed: bool, include_words: bool):
-    """(sample id, book id, page id, label, group status, features) of the training letters."""
+    """(sample id, book id, page id, label, group status, mask, spacing) of the training letters. Letters made
+    by the system (generate.py, no page) only from reviewed groups, even with `include_unreviewed`."""
     out = []
     with lib.session() as s:
         for bid in book_ids:
@@ -55,11 +56,12 @@ def _letters(lib: Library, book_ids: Sequence[int], include_unreviewed: bool, in
             if book is None:
                 raise LibraryError(f"No book with id {bid}.")
             q = (select(Sample, LetterGroup.label_dev, LetterGroup.status, Page.line_spacing)
-                 .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
+                 .join(LetterGroup, Sample.group_id == LetterGroup.id).outerjoin(Page, Sample.page_id == Page.id)
                  .where(Sample.book_id == bid, Sample.deleted.is_(False),       # Read Book letters
                         LetterGroup.label_dev != ""))                                  # corrected in C17 too
             if not include_unreviewed:
                 q = q.where(LetterGroup.status != "auto")
+            q = q.where((Sample.source != GENERATED) | (LetterGroup.status != "auto"))
             for x, label, status, spacing in s.execute(q).all():
                 if not include_words and len(split_aksharas(label)) > 1:
                     continue
@@ -124,7 +126,8 @@ def train_reader(lib: Library, book_ids: Sequence[int], min_samples: int = 5, in
         raise LibraryError("Too few labelled letters to train a reader: label and review more groups first "
                            f"(labels with at least {min_samples} letters: {len(kept)}).")
     ci = {c: i for i, c in enumerate(kept)}
-    pages = sorted({it[2] for it in items})
+    pages = sorted({it[2] for it in items if it[2] is not None})   # letters without a page (generated,
+    # uploaded) are always trained on: never held out, never checked
     test_pages = set(pages[3::7]) if len(pages) >= 7 else set(pages[-1:]) if len(pages) > 1 else set()
     val_pages = (set(pages[5::9]) if len(pages) >= 9 else set(pages[:1]) if len(pages) > 2 else set()) - test_pages
     held = test_pages | val_pages
@@ -165,8 +168,8 @@ def train_reader(lib: Library, book_ids: Sequence[int], min_samples: int = 5, in
     for f in range(FOLDS):
         if cancel and cancel():
             raise Cancelled("Training cancelled; no reader was saved.")
-        inside = [it for it in items if fold_of[it[2]] != f]
-        out = [it for it in items if fold_of[it[2]] == f]
+        inside = [it for it in items if fold_of.get(it[2], -1) != f]
+        out = [it for it in items if fold_of.get(it[2], -1) == f]
         if not out or len({it[3] for it in inside}) < 2:
             continue
         Xi, yi = feats.rows(inside, at_most=1)

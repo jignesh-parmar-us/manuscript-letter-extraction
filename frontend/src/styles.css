@@ -596,6 +596,16 @@ table.list.compact {
   font-size: 14px;
   color: var(--accent);
 }
+/* groups whose letters were all made by the system (Generate missing letters) */
+.badge-generated {
+  color: var(--warn);
+  font-weight: 600;
+}
+.note-generated {
+  border-left: 3px solid var(--warn);
+  padding: 4px 8px;
+  margin: 6px 0;
+}
 .suggestion-chip {
   display: flex;
   flex-wrap: wrap;
