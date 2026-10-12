@@ -1,8 +1,8 @@
 // Review groups → Check these (C14): letters the active letter reader is sure belong to another label
 // than their group's, read by a reader that did not learn from their page. Most are mistakes in the
 // groups (a થા in the યા group); some are the reader's. "Move to …" moves the letter to the group with the
-// reader's label (one undoable action); "It is right" hides it from this list (remembered on this
-// computer for this reader).
+// reader's label (one undoable action); "It is right" marks it as no mix-up for its group's label (kept in
+// the library: it leaves this list and the highlights in its group).
 import { useCallback, useEffect, useState } from "react";
 import { api, CheckItem } from "../api";
 import ErrorBox from "../components/ErrorBox";
@@ -12,31 +12,38 @@ import { ReviewContext } from "./Review";
 function hiddenKey(readerId: number | null) {
   return `check-right-${readerId}`;
 }
-function loadHidden(readerId: number | null): Set<number> {
+/** Letters hidden with "It is right" before it was kept in the library (this browser only), once. */
+function takeOldHidden(readerId: number | null): number[] {
   try {
-    return new Set(JSON.parse(localStorage.getItem(hiddenKey(readerId)) ?? "[]"));
+    const ids = JSON.parse(localStorage.getItem(hiddenKey(readerId)) ?? "[]");
+    localStorage.removeItem(hiddenKey(readerId));
+    return Array.isArray(ids) ? ids : [];
   } catch {
-    return new Set();
+    return [];
   }
 }
 
 export default function CheckView({ ctx, readerId }: { ctx: ReviewContext; readerId: number | null }) {
   const [items, setItems] = useState<CheckItem[] | null>(null);
-  const [hidden, setHidden] = useState<Set<number>>(() => loadHidden(readerId));
+  const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(() => {
     api.checkThese(ctx.bookId).then(setItems, setError);
   }, [ctx.bookId]);
   useEffect(load, [load, ctx.version]);
+  useEffect(() => {
+    const old = takeOldHidden(readerId);
+    if (old.length) api.confirmSamples(ctx.bookId, old).then(() => ctx.refresh?.(), setError);
+  }, [readerId, ctx.bookId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function right(id: number) {
-    const next = new Set(hidden).add(id);
-    setHidden(next);
+  async function right(id: number) {
+    setHidden(new Set(hidden).add(id));
     try {
-      localStorage.setItem(hiddenKey(readerId), JSON.stringify([...next]));
-    } catch {
-      // a private window: hidden until the page is closed
+      await api.confirmSamples(ctx.bookId, [id]);
+      ctx.refresh?.();
+    } catch (e) {
+      setError(e);
     }
   }
 
@@ -81,7 +88,7 @@ export default function CheckView({ ctx, readerId }: { ctx: ReviewContext; reade
                 >
                   Move to {c.read_guj}
                 </button>
-                <button onClick={() => right(c.sample_id)} title="The letter is in the right group: hide it from this list">
+                <button onClick={() => right(c.sample_id)} title="The letter is in the right group: no longer shown as a possible mix-up (here and in its group)">
                   It is right
                 </button>
                 <button className="link" onClick={() => go(`/books/${ctx.bookId}/review/${c.group_id}`)}>

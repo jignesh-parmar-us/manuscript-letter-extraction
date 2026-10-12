@@ -1473,3 +1473,29 @@ a.button.disabled {
 .measure-diff {
   color: var(--danger);
 }
+/* possible mix-ups (the letter reader's Check these) in a group */
+.tile.mixup {
+  outline: 3px solid #e08a00;
+  outline-offset: -3px;
+}
+.mixup-chip {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  font-size: 13px;
+  line-height: 1.2;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #e08a00;
+  color: #fff;
+  pointer-events: none;
+}
+.note-mixup {
+  border-left: 4px solid #e08a00;
+  padding: 4px 8px;
+  background: color-mix(in srgb, #e08a00 10%, transparent);
+}
+.badge-mixup {
+  color: #b86e00;
+  font-weight: 600;
+}

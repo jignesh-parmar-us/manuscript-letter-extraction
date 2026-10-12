@@ -8,7 +8,7 @@ import { group } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { groups: vi.fn(), undo: vi.fn(), redo: vi.fn(), tesseract: vi.fn(), accuracy: vi.fn(),
-    referenceBooks: vi.fn() } };
+    referenceBooks: vi.fn(), checkThese: vi.fn() } };
 });
 
 const book: Book = {
@@ -49,10 +49,24 @@ describe("Review", () => {
     expect(screen.getByRole("button", { name: /Letter overview .* missing/ })).toBeInTheDocument();
   });
 
+  it("counts the possible mix-ups per group and lists those groups", async () => {
+    vi.mocked(api.checkThese).mockResolvedValue([
+      { sample_id: 7, group_id: 1, group_code: "g0001", label: "क", read: "फ", label_guj: "ક", read_guj: "ફ", prob: 0.95,
+        reviewed: true, locked: false, sample: {} as never },
+    ]);
+    render(<Review book={{ ...book, reader_id: 3 }} view={undefined} onChanged={() => {}} />);
+    expect(await screen.findByTitle(/1 possible mix-ups/)).toHaveTextContent("⚠1");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Show" }), "mixups");
+    const list = screen.getByLabelText("Groups");
+    expect(list).toHaveTextContent("ક");
+    expect(list).not.toHaveTextContent("g0002");
+  });
+
   it("filters and sorts groups", () => {
     expect(filterGroups(groups, "all").map((g) => g.id)).toEqual([1, 2]);
     expect(filterGroups(groups, "empty").map((g) => g.id)).toEqual([3]);
     expect(filterGroups(groups, "unlabelled").map((g) => g.id)).toEqual([2]);
+    expect(filterGroups(groups, "reviewed").map((g) => g.id)).toEqual([1]);
     expect(filterGroups(groups, "mixed").map((g) => g.id)).toEqual([2]);
     expect(sortGroups(groups, "size").map((g) => g.id)).toEqual([1, 2, 3]);
     expect(sortGroups(groups, "spread").map((g) => g.id)).toEqual([2, 1, 3]);

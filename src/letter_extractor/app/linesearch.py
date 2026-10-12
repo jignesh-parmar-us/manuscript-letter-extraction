@@ -112,6 +112,24 @@ def train_line_reader(lib: Library, book_id: int, progress: Optional[Callable[[s
 def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None, seed: int = 0):
     """The reader and its meta (letters, labels, typical width, each label's width), trained on the
     reviewed letters of the Training Data pages, those of `skip_files` left out."""
+    data = _training_set(lib, book_id, skip_files, progress, cancel, seed)
+    if progress:
+        progress(f"training on {len(data['X'])} windows")
+    reader = _fit(data, cancel)
+    return reader, data["meta"]
+
+
+def _fit(data: Dict, cancel=None, hidden: int = 0, epochs: int = EPOCHS) -> LetterReader:
+    reader = LetterReader(data["classes"], data["X"].shape[1], hidden=hidden)
+    reader.train(data["X"], data["y"], weights=data["weights"], epochs=epochs, cancel=cancel)
+    if cancel and cancel():
+        raise Cancelled("Cancelled; the line search reader was not changed.")
+    return reader
+
+
+def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None,
+                  seed: int = 0) -> Dict:
+    """The training windows (X, y, weights), the classes and the meta, before fitting."""
     rng = np.random.default_rng(seed)
     book = lib.get_book(book_id)
     letters = []
@@ -186,18 +204,13 @@ def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=
     weights = np.array([(NEG_WEIGHT * (len(per) - 1) if k == ci[NOT_A_LETTER] else 1.0) / per[int(k)] for k in y],
                        np.float32)
     weights *= len(weights) / weights.sum()
-    if progress:
-        progress(f"training on {len(X)} windows")
-    reader = LetterReader(classes, X.shape[1], hidden=0)
-    reader.train(X, y, weights=weights, epochs=EPOCHS, cancel=cancel)
-    if cancel and cancel():
-        raise Cancelled("Cancelled; the line search reader was not changed.")
     widths = defaultdict(list)
     for L in letters:
         widths[L["label"]].append(L["w"])
-    return reader, {"letters": len(letters), "labels": len(freq),
-                    "typical_width": float(np.median([L["w"] for L in letters])),
-                    "widths": {k: float(np.median(v)) for k, v in widths.items()}}
+    return {"X": X, "y": y, "weights": weights, "classes": classes,
+            "meta": {"letters": len(letters), "labels": len(freq),
+                     "typical_width": float(np.median([L["w"] for L in letters])),
+                     "widths": {k: float(np.median(v)) for k, v in widths.items()}}}
 
 
 def _load(lib: Library, book: Book):
@@ -309,8 +322,10 @@ def disagreements(aksharas: Sequence[str], search_dev: str) -> List[Optional[str
 
 
 def _chars(text: str) -> str:
-    """As scored: NFC code points, spaces and the border "|" left out (docs/TUNING_PHASE2.md)."""
-    return "".join(ch for ch in unicodedata.normalize("NFC", text) if not ch.isspace() and ch != "|")
+    """As scored: NFC code points, spaces, the border "|" and the invisible joiners (ZWNJ, ZWJ: typed text
+    may have them, no reader writes them) left out (docs/TUNING_PHASE2.md)."""
+    return "".join(ch for ch in unicodedata.normalize("NFC", text)
+                   if not ch.isspace() and ch not in "|\u200c\u200d")
 
 
 def _distance(a: str, b: str) -> int:

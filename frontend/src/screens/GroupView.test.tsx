@@ -9,7 +9,8 @@ import { findTiles, group, renderView, sample } from "./reviewTestUtils";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { groupSamples: vi.fn(), move: vi.fn(), newGroup: vi.fn(), deleteSamples: vi.fn(),
-    merge: vi.fn(), dissolve: vi.fn(), status: vi.fn(), label: vi.fn(), checkLabel: vi.fn() } };
+    merge: vi.fn(), dissolve: vi.fn(), status: vi.fn(), label: vi.fn(), checkLabel: vi.fn(), labelSamples: vi.fn(),
+    confirmSamples: vi.fn() } };
 });
 const ok = { undo: 1, redo: 0 };
 
@@ -18,6 +19,7 @@ describe("GroupView", () => {
     window.location.hash = "";
     vi.mocked(api.groupSamples).mockResolvedValue({ total: 3, offset: 0, samples: [sample(1), sample(2), sample(3)] });
     for (const f of [api.move, api.deleteSamples, api.merge, api.status, api.label]) vi.mocked(f).mockResolvedValue(ok);
+    vi.mocked(api.checkLabel).mockResolvedValue({} as never);              // the label box checks what is typed
   });
 
   it("says a group is System generated and how it is used, until a real letter joins it", async () => {
@@ -29,6 +31,29 @@ describe("GroupView", () => {
     await findTiles();
     expect(screen.queryByRole("note")).toBeNull();
     expect(screen.getByText("6 of its letters were made by the system; the rest are real letters.")).toBeInTheDocument();
+  });
+
+  it("outlines the possible mix-ups; moves them to their likely letters or marks them as no mix-up", async () => {
+    vi.mocked(api.labelSamples).mockResolvedValue(ok);
+    vi.mocked(api.confirmSamples).mockResolvedValue({ confirmed: 1 });
+    const mix = (id: number, read: string, read_guj: string) => ({ sample_id: id, group_id: 5, group_code: "g0005", label: "व",
+      read, label_guj: "વ", read_guj, prob: 0.97, reviewed: true, locked: false, sample: sample(id) });
+    const refresh = vi.fn();
+    renderView((ctx) => <GroupView group={group({ label_dev: "व", label_guj: "વ" })} ctx={ctx} />, [group()],
+      { mixups: new Map([[1, mix(1, "ब", "બ")], [3, mix(3, "च", "ચ")]]), refresh });
+    const tiles = await findTiles();
+    expect(tiles.map((t) => t.classList.contains("mixup"))).toEqual([true, false, true]);
+    expect(within(tiles[0]).getByText("બ?")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("2 possible mix-ups");
+    await userEvent.click(screen.getByRole("button", { name: "Select the possible mix-ups" }));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Move to their likely letters (2)" }));
+    expect(api.labelSamples).toHaveBeenCalledWith(1, [1], "ब");
+    expect(api.labelSamples).toHaveBeenCalledWith(1, [3], "च");
+    await userEvent.click(tiles[2]);
+    await userEvent.click(screen.getByRole("button", { name: "Not a mix-up (1)" }));
+    expect(api.confirmSamples).toHaveBeenCalledWith(1, [3]);
+    expect(refresh).toHaveBeenCalled();
   });
 
   it("moves the selected samples to Unsure", async () => {

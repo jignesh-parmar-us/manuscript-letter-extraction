@@ -7,9 +7,11 @@
 // Keys: Ctrl/Cmd+Z undo, Shift+Ctrl/Cmd+Z redo; the views add their own keys.
 // Label suggestions (C12): the panel in the side bar reads the book with Tesseract; the filters
 // "Suggested" and "Mixed readings" use the groups' votes and readings (see Suggestions.tsx).
+// Possible mix-ups: the letter reader's "Check these" letters (readers.check_list), highlighted in their
+// group (GroupView) with a ⚠ count in the list; the filter "Possible mix-ups" lists those groups.
 import { DndContext, DragEndEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionResult, api, Book, Group, isGenerated } from "../api";
+import { ActionResult, api, Book, CheckItem, Group, isGenerated } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import { emptySelection, Selection } from "../components/selection";
 import { forgetSpot } from "../components/returnSpot";
@@ -21,7 +23,8 @@ import CheckView from "./CheckView";
 import LetterOverview, { missingCount } from "./LetterOverview";
 import { isMixed, SuggestPanel } from "./Suggestions";
 
-type Filter = "all" | "unlabelled" | "labelled" | "unreviewed" | "mixed" | "suggested" | "readmixed" | "generated" | "empty";
+type Filter = "all" | "unlabelled" | "labelled" | "reviewed" | "unreviewed" | "mixed" | "mixups" | "suggested" | "readmixed"
+  | "generated" | "empty";
 type Sort = "code" | "label" | "size" | "spread" | "share";
 
 interface Props {
@@ -37,6 +40,8 @@ export interface ReviewContext {
   selection: Selection;
   setSelection: (s: Selection) => void;
   act: (run: () => Promise<ActionResult>) => Promise<ActionResult | null>;
+  mixups?: Map<number, CheckItem>; // possible mix-ups by sample id (the letter reader's Check these)
+  refresh?: () => void; // reload after a change that is not an undoable action ("Not a mix-up")
 }
 
 export default function Review({ book, view, onChanged }: Props) {
@@ -50,9 +55,20 @@ export default function Review({ book, view, onChanged }: Props) {
   const sidebar = useRef<HTMLElement>(null);
   useFitHeight(sidebar); // the group list scrolls by itself, the window does not
 
+  const [mixupList, setMixupList] = useState<CheckItem[]>([]);
   useEffect(() => {
     api.groups(book.id).then(setGroups, setError);
   }, [book.id, version]);
+  useEffect(() => {
+    if (book.reader_id) api.checkThese(book.id).then(setMixupList, setError);
+    else setMixupList([]);
+  }, [book.id, book.reader_id, version]);
+  const mixups = useMemo(() => new Map(mixupList.map((c) => [c.sample_id, c])), [mixupList]);
+  const mixupCount = useMemo(() => {
+    const n = new Map<number, number>();
+    mixupList.forEach((c) => n.set(c.group_id, (n.get(c.group_id) ?? 0) + 1));
+    return n;
+  }, [mixupList]);
   useEffect(() => setSelection(emptySelection()), [view]);
   useEffect(() => forgetSpot(), []); // back in the Review tab: the Pages tab's "Back" is done with
 
@@ -101,7 +117,10 @@ export default function Review({ book, view, onChanged }: Props) {
     setSelection(emptySelection());
   }
 
-  const shown = useMemo(() => sortGroups(filterGroups(groups, filter), sort), [groups, filter, sort]);
+  const shown = useMemo(
+    () => sortGroups(filter === "mixups" ? groups.filter((g) => mixupCount.has(g.id)) : filterGroups(groups, filter), sort),
+    [groups, filter, sort, mixupCount],
+  );
   const reload = useCallback(() => {
     setVersion((v) => v + 1);
     onChanged();
@@ -111,7 +130,7 @@ export default function Review({ book, view, onChanged }: Props) {
     if (f === "suggested") setSort("share");
   };
   const current = view && /^\d+$/.test(view) ? groups.find((g) => g.id === Number(view)) : undefined;
-  const ctx: ReviewContext = { bookId: book.id, version, groups, selection, setSelection, act };
+  const ctx: ReviewContext = { bookId: book.id, version, groups, selection, setSelection, act, mixups, refresh: reload };
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
@@ -159,8 +178,12 @@ export default function Review({ book, view, onChanged }: Props) {
               <option value="all">All groups</option>
               <option value="unlabelled">Without label</option>
               <option value="labelled">Labelled</option>
+              <option value="reviewed">Reviewed</option>
               <option value="unreviewed">Not reviewed</option>
               <option value="mixed">Possibly mixed</option>
+              <option value="mixups" disabled={!book.reader_id}>
+                Possible mix-ups{book.reader_id ? ` (${mixupCount.size})` : " (train a letter reader)"}
+              </option>
               <option value="suggested">Suggested</option>
               <option value="readmixed">Mixed readings</option>
               <option value="generated">System generated</option>
@@ -196,6 +219,11 @@ export default function Review({ book, view, onChanged }: Props) {
                   {isGenerated(g) && (
                     <span className="badge-generated" title="System generated: made from parts of other letters">
                       gen{" "}
+                    </span>
+                  )}
+                  {mixupCount.has(g.id) && (
+                    <span className="badge-mixup" title={`${mixupCount.get(g.id)} possible mix-ups: letters your letter reader reads as another letter`}>
+                      ⚠{mixupCount.get(g.id)}{" "}
                     </span>
                   )}
                   {g.samples}
@@ -252,6 +280,8 @@ export function filterGroups(groups: Group[], filter: Filter): Group[] {
   if (filter === "empty") return groups.filter((g) => g.samples === 0);
   if (filter === "unlabelled") return groups.filter((g) => g.samples > 0 && !g.label_dev);
   if (filter === "labelled") return groups.filter((g) => !!g.label_dev);
+  if (filter === "reviewed") return groups.filter((g) => g.samples > 0 && g.status !== "auto");
+  if (filter === "mixups") return groups;                            // chosen in Review with the mix-up list
   if (filter === "unreviewed") return groups.filter((g) => g.samples > 0 && g.status === "auto");
   if (filter === "suggested") return groups.filter((g) => g.samples > 0 && !g.label_dev && !!g.suggestion);
   if (filter === "readmixed") return groups.filter((g) => g.samples > 0 && isMixed(g));

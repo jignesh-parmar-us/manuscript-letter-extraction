@@ -158,6 +158,8 @@ class Sample(Base):
                                                     index=True, nullable=True)
     distance: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
+    # the user said it is no mix-up while its group had this label (readers.check_list then skips it)
+    confirmed_label: Mapped[str] = mapped_column(String(50), default="", server_default="")
 
     group: Mapped[Optional[LetterGroup]] = relationship(back_populates="samples")
 

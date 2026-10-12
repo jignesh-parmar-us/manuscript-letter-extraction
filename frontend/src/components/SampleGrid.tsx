@@ -5,6 +5,8 @@
 // clicking the badge removes that reading when it is wrong (onRemoveReading), and a green chip on the
 // left moves the sample to the group with that label when the reading is right (onMoveToReading). An
 // unsure sample shows its reading as a second suggestion (onAcceptReading).
+// Possible mix-ups (`mixups`): the letter reader reads the letter as another letter; the tile is outlined
+// and says which.
 import { useDraggable } from "@dnd-kit/core";
 import { MouseEvent } from "react";
 import { Sample } from "../api";
@@ -20,11 +22,12 @@ interface Props {
   onRemoveReading?: (sample: Sample) => void; // the badge's reading is wrong: remove it
   onMoveToReading?: (sample: Sample) => void; // the badge's reading is right: move it to that label's group
   marked?: number | null; // the letter come back to from its page (a dashed outline)
+  mixups?: Map<number, { read_guj: string; prob: number }>; // possible mix-ups: what the letter reads as
 }
 
 export default function SampleGrid(props: Props) {
-  const { samples, selected, onClick, onAccept, onOpen, expected, onAcceptReading, onRemoveReading, onMoveToReading, marked } =
-    props;
+  const { samples, selected, onClick, onAccept, onOpen, expected, onAcceptReading, onRemoveReading, onMoveToReading, marked,
+    mixups } = props;
   if (samples.length === 0) return <p className="muted">No samples.</p>;
   return (
     <div className="grid" role="listbox" aria-multiselectable="true" aria-label="Samples">
@@ -34,6 +37,7 @@ export default function SampleGrid(props: Props) {
           sample={s}
           selected={selected.has(s.id)}
           marked={marked === s.id}
+          mixup={mixups?.get(s.id)}
           onClick={onClick}
           onAccept={onAccept}
           onOpen={onOpen}
@@ -51,6 +55,7 @@ function Tile(props: {
   sample: Sample;
   selected: boolean;
   marked: boolean;
+  mixup?: { read_guj: string; prob: number };
   onClick: Props["onClick"];
   onAccept?: Props["onAccept"];
   onOpen?: Props["onOpen"];
@@ -75,7 +80,7 @@ function Tile(props: {
       role="option"
       aria-selected={selected}
       data-sample={s.id}
-      className={`tile ink-${s.ink}${selected ? " selected" : ""}${props.marked ? " marked" : ""}${isDragging ? " dragging" : ""}`}
+      className={`tile ink-${s.ink}${selected ? " selected" : ""}${props.marked ? " marked" : ""}${props.mixup ? " mixup" : ""}${isDragging ? " dragging" : ""}`}
       title={`${where}${s.distance !== null ? ` · distance ${s.distance}` : ""}${s.rules ? ` · ${s.rules}` : ""}${
         open ? "\nDouble-click to show it on its page" : ""
       }`}
@@ -83,6 +88,11 @@ function Tile(props: {
       onDoubleClick={open}
     >
       <img src={s.image} alt={`sample ${s.id}`} loading="lazy" draggable={false} />
+      {props.mixup && (
+        <span className="mixup-chip" title={`Possible mix-up: your letter reader reads it as ${props.mixup.read_guj} (${Math.round(props.mixup.prob * 100)}% sure)`}>
+          {props.mixup.read_guj}?
+        </span>
+      )}
       {s.suggestion && (
         <button
           className="suggestion"

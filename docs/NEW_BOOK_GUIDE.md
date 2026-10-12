@@ -60,7 +60,7 @@ Labels given by Tesseract or by other books are marked *not reviewed*. Check the
 - **Not every label is needed.** It learns only from labelled letters; labels with fewer letters than the minimum you choose (5 by default, down to 1) are left out and listed. Its report shows how many letters of pages it did not learn from it reads right, and the accuracy of every letter, so you see which ones need more samples.
 - **Wrong labels are the problem.** A group labelled ने that still holds ते letters teaches the reader that both are ने. That is why the review matters more than the number of labels.
 - **It learns only from groups you reviewed**, unless you tick *also groups not reviewed*.
-- **Check these** (Review groups, side bar) lists the letters the reader is sure are in the wrong group: **Move to …**, or **It is right** if the reader is wrong. Fix them, then train again.
+- **Check these** (Review groups, side bar) lists the letters the reader is sure are in the wrong group: **Move to …**, or **It is right** if the reader is wrong. The same letters are **outlined in their group** as possible mix-ups, with the letter each reads as (the list on the left shows ⚠ and a count; **Show → Possible mix-ups** lists those groups): **Select the possible mix-ups**, then **Move to their likely letters** or **Not a mix-up**. Fix them, then train again (the list is from the last training).
 - **The reader also reads the Read Book text** when you convert (section 7), on the letters it was taught: a big group you have not reviewed is a letter it does not know. Review the big groups, train again, then convert again.
 - **Good enough to start:** the big groups reviewed, and the mixed ones split.
 

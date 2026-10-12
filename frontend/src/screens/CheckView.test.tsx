@@ -7,7 +7,7 @@ import { renderView, sample } from "./reviewTestUtils";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { checkThese: vi.fn(), labelSamples: vi.fn() } };
+  return { ...real, api: { checkThese: vi.fn(), labelSamples: vi.fn(), confirmSamples: vi.fn() } };
 });
 
 const item = (id: number) => ({ sample_id: id, group_id: 5, group_code: "g0005", label: "या", read: "था", label_guj: "યા",
@@ -18,6 +18,7 @@ describe("CheckView", () => {
     localStorage.clear();
     vi.mocked(api.checkThese).mockResolvedValue([item(1), item(2)]);
     vi.mocked(api.labelSamples).mockResolvedValue({ undo: 1, redo: 0 });
+    vi.mocked(api.confirmSamples).mockResolvedValue({ confirmed: 1 });
     window.location.hash = "";
   });
 
@@ -29,9 +30,17 @@ describe("CheckView", () => {
     expect(api.labelSamples).toHaveBeenCalledWith(1, [1], "था");
     await userEvent.click(within(list).getAllByRole("button", { name: "It is right" })[1]);
     expect(screen.getByText("Check these")).toHaveTextContent("(1)");
-    expect(JSON.parse(localStorage.getItem("check-right-7")!)).toEqual([2]);
+    expect(api.confirmSamples).toHaveBeenCalledWith(1, [2]);                      // kept in the library
     await userEvent.click(within(list).getByRole("button", { name: "Open group" }));
     expect(window.location.hash).toBe("#/books/1/review/5");
+  });
+
+  it("sends the letters hidden in this browser before to the library, once", async () => {
+    localStorage.setItem("check-right-7", "[1]");
+    renderView((ctx) => <CheckView ctx={ctx} readerId={7} />);
+    await screen.findByLabelText("Letters to check");
+    expect(api.confirmSamples).toHaveBeenCalledWith(1, [1]);
+    expect(localStorage.getItem("check-right-7")).toBeNull();
   });
 
   it("explains when the book has no reader", () => {

@@ -575,6 +575,8 @@ export const api = {
   deleteReader: (readerId: number) => del<void>(`/api/readers/${readerId}`),
   useReader: (id: number, readerId: number | null) => post<Job>(`/api/books/${id}/reader`, { reader_id: readerId }),
   checkThese: (id: number) => get<CheckItem[]>(`/api/books/${id}/check`),
+  confirmSamples: (id: number, sampleIds: number[], ok = true) =>
+    post<{ confirmed: number }>(`/api/books/${id}/check/confirm`, { sample_ids: sampleIds, ok }),
   convert: (id: number, pageIds?: number[], mode: "letters" | "lines" = "letters") =>
     post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read", mode }),
   lineSearch: (id: number, pageIds?: number[], retrain = false) =>

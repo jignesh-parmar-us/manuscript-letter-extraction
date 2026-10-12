@@ -96,6 +96,11 @@ class BookTests(unittest.TestCase):
         found = {c["sample_id"]: c for c in check_list(self.lib, self.book)}
         self.assertIn(self.planted, found)
         self.assertEqual((found[self.planted]["label"], found[self.planted]["read"]), ("ख", "क"))
+        from letter_extractor.app.readers import confirm_samples
+        self.assertEqual(confirm_samples(self.lib, self.book, [self.planted]), 1)    # "Not a mix-up"
+        self.assertNotIn(self.planted, {c["sample_id"] for c in check_list(self.lib, self.book)})
+        confirm_samples(self.lib, self.book, [self.planted], ok=False)               # shown again
+        self.assertIn(self.planted, {c["sample_id"] for c in check_list(self.lib, self.book)})
         with self.lib.session() as s:                                          # moved since: no longer listed
             s.get(Sample, self.planted).group_id = self.groups[0]
         self.assertNotIn(self.planted, {c["sample_id"] for c in check_list(self.lib, self.book)})
@@ -147,6 +152,9 @@ class BookTests(unittest.TestCase):
         check = c.get(f"/api/books/{self.book}/check", headers=h).json()
         self.assertIn(self.planted, [x["sample_id"] for x in check])
         self.assertTrue(all("image" in x["sample"] for x in check))
+        r2 = c.post(f"/api/books/{self.book}/check/confirm", json={"sample_ids": [self.planted]}, headers=h).json()
+        self.assertEqual(r2, {"confirmed": 1})
+        self.assertNotIn(self.planted, [x["sample_id"] for x in c.get(f"/api/books/{self.book}/check", headers=h).json()])
         self.assertEqual(c.delete(f"/api/readers/{r['reader']}", headers=h).status_code, 204)
         c.close()
 

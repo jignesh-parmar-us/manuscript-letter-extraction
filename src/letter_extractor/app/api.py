@@ -54,7 +54,7 @@ from .centres import suggestions
 from .db import GENERATED, Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (AcceptSuggestions, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+from .schemas import (AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
@@ -464,6 +464,12 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/books/{book_id}/reader", dependencies=auth, status_code=202)
     def use_reader(book_id: int, body: ReaderChoice) -> Dict:
         return jobs.use_reader(book_id, body.reader_id).as_dict()
+
+    @app.post("/api/books/{book_id}/check/confirm", dependencies=auth)
+    def check_confirm(book_id: int, body: ConfirmSamples) -> Dict:
+        """Letters that are no mix-up (or are again, `ok` false): they leave Check these and the highlights."""
+        from .readers import confirm_samples
+        return {"confirmed": confirm_samples(library, book_id, body.sample_ids, body.ok)}
 
     @app.get("/api/books/{book_id}/check", dependencies=auth)
     def check_these(book_id: int) -> List[Dict]:

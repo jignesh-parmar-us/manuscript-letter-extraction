@@ -126,6 +126,12 @@ class ConvertRequest(BaseModel):
     mode: Literal["letters", "lines"] = "letters"     # "lines": Tesseract reads whole lines, no letter cutting
 
 
+class ConfirmSamples(BaseModel):
+    """Letters that are no mix-up (`ok`), or that should be shown as possible mix-ups again."""
+    sample_ids: List[int]
+    ok: bool = True
+
+
 class LineSearchRequest(BaseModel):
     """The line search's second opinion on pages read whole: the given pages, or every page of a part."""
     page_ids: Optional[List[int]] = None

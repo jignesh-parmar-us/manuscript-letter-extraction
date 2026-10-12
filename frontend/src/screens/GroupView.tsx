@@ -9,6 +9,8 @@
 // reading (it is wrong), the green chip on the left moves the letter to that reading's group (it is right).
 // One selected letter shows its line (LineContext); double-click opens it on its page, and the
 // Pages tab's "Back" returns here, to that letter (returnSpot.ts).
+// Possible mix-ups (the letter reader's Check these, ctx.mixups) are outlined with what they read as:
+// select them, then "Move to their likely letters" or "Not a mix-up" (remembered for this label).
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { api, Group, isGenerated, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
@@ -41,6 +43,10 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   // be removed (wrong) or followed to that letter's group (right); readings of the group's letter stay
   const readOther = samples.filter((s) => selection.ids.has(s.id) && s.reading && s.reading.label_dev !== expected);
   const withReading = readOther.map((s) => s.id);
+  // possible mix-ups in this group, and those among the selected letters
+  const mixups = [...(ctx.mixups?.values() ?? [])].filter((c) => c.group_id === group.id);
+  const mixupMap = new Map(mixups.map((c) => [c.sample_id, c]));
+  const chosenMixups = mixups.filter((c) => selection.ids.has(c.sample_id));
 
   const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
   const open = (s: Sample) =>
@@ -88,6 +94,24 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
     setSelection(emptySelection());
   }
 
+  /** Put possible mix-ups under the letters they read as: one action per letter. */
+  async function moveMixups(chosen: typeof mixups) {
+    const byLabel = new Map<string, number[]>();
+    chosen.forEach((c) => byLabel.set(c.read, [...(byLabel.get(c.read) ?? []), c.sample_id]));
+    for (const [label, sids] of byLabel) await act(() => api.labelSamples(bookId, sids, label));
+    setSelection(emptySelection());
+  }
+  async function notMixups(chosen: typeof mixups) {
+    try {
+      await api.confirmSamples(bookId, chosen.map((c) => c.sample_id));
+      setSelection(emptySelection());
+      ctx.refresh?.();
+    } catch (e) {
+      setFailed(e);
+    }
+  }
+  const [failed, setFailed] = useState<unknown>(null);
+
   async function moveTo(target: MoveTarget) {
     setPicking(false);
     await act(() =>
@@ -122,7 +146,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
           onClose={() => setMerging(false)}
         />
       )}
-      <ErrorBox error={error} />
+      <ErrorBox error={error ?? failed} onClose={failed ? () => setFailed(null) : undefined} />
       <div className="group-head">
         <div>
           <span className="big-letter">{group.label_guj || "—"}</span>{" "}
@@ -166,6 +190,15 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
             {group.generated} of its letters were made by the system; the rest are real letters.
           </p>
         )
+      )}
+      {mixups.length > 0 && (
+        <p className="note-mixup small" role="note">
+          ⚠ <strong>{mixups.length} possible mix-up{mixups.length > 1 ? "s" : ""}</strong> (outlined, with what each reads as):
+          letters your letter reader is sure are another letter. Select them, then move them or mark them as no mix-up.{" "}
+          <button className="link" onClick={() => setSelection({ ids: new Set(mixups.map((c) => c.sample_id)), anchor: null })}>
+            Select the possible mix-ups
+          </button>
+        </p>
       )}
       <SuggestionChip group={group} ctx={ctx} onChange={setChangeTo} />
       <ReadingsLine group={group} ctx={ctx} />
@@ -211,6 +244,24 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
           <button className="danger" disabled={locked || !ids.length} onClick={remove} title="Delete">
             Delete
           </button>
+          {mixups.length > 0 && (
+            <>
+              <button
+                disabled={locked || !chosenMixups.length}
+                onClick={() => moveMixups(chosenMixups)}
+                title="Move each selected possible mix-up to the group of the letter it reads as (a new group with that label if there is none)"
+              >
+                Move to their likely letters{chosenMixups.length ? ` (${chosenMixups.length})` : ""}
+              </button>
+              <button
+                disabled={!chosenMixups.length}
+                onClick={() => notMixups(chosenMixups)}
+                title="The selected letters belong in this group: no longer shown as possible mix-ups"
+              >
+                Not a mix-up{chosenMixups.length ? ` (${chosenMixups.length})` : ""}
+              </button>
+            </>
+          )}
           <button
             disabled={!withReading.length}
             onClick={() => act(() => api.removeReadings(bookId, withReading)).then(() => setSelection(emptySelection()))}
@@ -233,7 +284,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
       <SampleGrid samples={samples} selected={selection.ids} onClick={onClick} expected={expected}
         onRemoveReading={(s) => act(() => api.removeReadings(bookId, [s.id]))}
         onMoveToReading={locked ? undefined : (s) => moveToReadings([s])}
-        onOpen={open} marked={back.marked}
+        onOpen={open} marked={back.marked} mixups={mixupMap}
       />
       {samples.length < total && (
         <button onClick={more}>

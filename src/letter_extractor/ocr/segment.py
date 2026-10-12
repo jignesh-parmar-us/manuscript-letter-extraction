@@ -137,26 +137,33 @@ def candidates(mask: np.ndarray, step: int) -> List[int]:
     return merged
 
 
-def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, widths: Dict[str, float],
-              lm: Optional[LanguageModel], s: SearchSettings = SearchSettings()) -> Tuple[str, List[Step], Dict]:
-    """The text of one line's ink mask (rows x columns of the line), and the steps of the best path.
-    `reader`: a LetterReader whose last class is "not a letter"; `widths`: each label's usual width (px)."""
+@dataclass
+class Windows:
+    """A line cut into windows, before reading them: the candidate boundaries, the empty stretches
+    (edges to a later candidate with nothing to read) and each window with ink (its features)."""
+    cand: List[int]
+    empty_edges: List[Tuple[int, int, int]]          # (i, j, width) between candidates i < j
+    meta: List[Tuple[int, int, int]]                 # per window: (i, j, width)
+    X: np.ndarray                                    # per window: its features
+
+
+def line_windows(mask: np.ndarray, spacing: float, typical_width: float,
+                 s: SearchSettings = SearchSettings()) -> Optional[Windows]:
+    """Steps 1 and 2 (see the module notes): the line's windows and their features; None for no line."""
     cand = candidates(mask, s.step)
     n = len(cand)
-    stats = {"candidates": n, "windows": 0, "kept": 0}
     if n < 2:
-        return "", [], stats
+        return None
     empty = ~mask.any(axis=0)
     T = typical_width
-    edges: Dict[int, List[Tuple[int, str, float, int]]] = {i: [] for i in range(n)}
-    crops, meta = [], []
+    empty_edges, crops, meta = [], [], []
     for i in range(n):
         for j in range(i + 1, n):
             width = cand[j] - cand[i]
             if width > s.max_width * T:
                 break
             if empty[cand[i]:cand[j]].all():
-                edges[i].append((j, "", 0.0, width))
+                empty_edges.append((i, j, width))
                 continue
             if width < s.min_width * T:
                 continue
@@ -164,9 +171,33 @@ def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, wi
             if m is not None:
                 crops.append(m)
                 meta.append((i, j, width))
-    stats["windows"] = len(crops)
-    if crops:
-        P = reader.probabilities(features_batch(crops, spacing))
+    return Windows(cand, empty_edges, meta, features_batch(crops, spacing))
+
+
+def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, widths: Dict[str, float],
+              lm: Optional[LanguageModel], s: SearchSettings = SearchSettings()) -> Tuple[str, List[Step], Dict]:
+    """The text of one line's ink mask (rows x columns of the line), and the steps of the best path.
+    `reader`: a LetterReader whose last class is "not a letter"; `widths`: each label's usual width (px)."""
+    win = line_windows(mask, spacing, typical_width, s)
+    if win is None:
+        return "", [], {"candidates": len(candidates(mask, s.step)), "windows": 0, "kept": 0}
+    return search(win, reader.probabilities(win.X) if len(win.X) else None, reader.classes, typical_width,
+                  widths, lm, s)
+
+
+def search(win: Windows, P: Optional[np.ndarray], classes: Sequence[str], typical_width: float,
+           widths: Dict[str, float], lm: Optional[LanguageModel],
+           s: SearchSettings = SearchSettings()) -> Tuple[str, List[Step], Dict]:
+    """Steps 3 and 4: the best path through the windows, given each window's class probabilities `P`
+    (the last class "not a letter")."""
+    cand = win.cand
+    n = len(cand)
+    T = typical_width
+    stats = {"candidates": n, "windows": len(win.meta), "kept": 0}
+    edges: Dict[int, List[Tuple[int, str, float, int]]] = {i: [] for i in range(n)}
+    for i, j, width in win.empty_edges:
+        edges[i].append((j, "", 0.0, width))
+    if P is not None and len(P):
         letters = P[:, :-1]                                       # the last class is "not a letter"
         best = letters.max(axis=1)
         keep = np.flatnonzero(best >= s.min_prob)
@@ -174,9 +205,9 @@ def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, wi
         lp = np.log(np.maximum(letters[keep], 1e-9))
         top = np.argsort(-lp, axis=1)[:, :s.top_k]
         for row, ks, q in zip(lp, top, keep):
-            i, j, width = meta[q]
+            i, j, width = win.meta[q]
             for k in ks:
-                edges[i].append((j, reader.classes[int(k)], float(row[k]), width))
+                edges[i].append((j, classes[int(k)], float(row[k]), width))
     for i in range(n - 1):
         edges[i].append((i + 1, "?", s.unknown, cand[i + 1] - cand[i]))
 

@@ -276,7 +276,8 @@ def read_with_reader(lib: Library, book_id: int, reader_id: Optional[int] = None
 
 def check_list(lib: Library, book_id: int) -> List[Dict]:
     """The active reader's "Check these" letters of this book that are still where they were (same label,
-    not deleted): each with the label its group has and the one the reader read."""
+    not deleted) and not marked "Not a mix-up" for that label: each with the label its group has and the
+    one the reader read. The Review screens show them as possible mix-ups."""
     book = lib.get_book(book_id)
     if not book.reader_id:
         return []
@@ -289,10 +290,24 @@ def check_list(lib: Library, book_id: int) -> List[Dict]:
             if x is None or x.deleted or x.group_id is None:
                 continue
             g = s.get(LetterGroup, x.group_id)
-            if g is None or g.label_dev != c["label"]:
+            if g is None or g.label_dev != c["label"] or x.confirmed_label == g.label_dev:
                 continue
             out.append({**c, "group_id": g.id, "locked": g.locked})
         return out
+
+
+def confirm_samples(lib: Library, book_id: int, sample_ids: List[int], ok: bool = True) -> int:
+    """Mark letters "Not a mix-up" for their group's label (or undo it): they leave the possible mix-ups."""
+    n = 0
+    with lib.session() as s:
+        for sid in sample_ids:
+            x = s.get(Sample, sid)
+            if x is None or x.book_id != book_id:
+                continue
+            g = s.get(LetterGroup, x.group_id) if x.group_id is not None else None
+            x.confirmed_label = (g.label_dev if g is not None else "") if ok else ""
+            n += 1
+    return n
 
 
 def delete_reader(lib: Library, reader_id: int) -> None:

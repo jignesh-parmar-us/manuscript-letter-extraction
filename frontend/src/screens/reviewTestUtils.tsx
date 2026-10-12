@@ -19,11 +19,12 @@ export const sample = (id: number, over: Partial<Sample> = {}): Sample => ({
 });
 
 /** Renders a review view with a real selection state and a mocked `act`. */
-export function renderView(make: (ctx: ReviewContext) => ReactElement, groups: Group[] = [group()]) {
+export function renderView(make: (ctx: ReviewContext) => ReactElement, groups: Group[] = [group()],
+  extra: Partial<ReviewContext> = {}) {
   const act = vi.fn(async (run: () => Promise<ActionResult>) => run());
   function Host() {
     const [selection, setSelection] = useState<Selection>(emptySelection);
-    const ctx: ReviewContext = { bookId: 1, version: 0, groups, selection, setSelection, act };
+    const ctx: ReviewContext = { bookId: 1, version: 0, groups, selection, setSelection, act, ...extra };
     return <DndContext sensors={useDragSensors()}>{make(ctx)}</DndContext>;
   }
   return { ...render(<Host />), act };
