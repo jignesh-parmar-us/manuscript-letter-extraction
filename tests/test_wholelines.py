@@ -157,6 +157,24 @@ class WholeLineTests(unittest.TestCase):
             line = page_whole_lines(self.lib, self.page, engine)["lines"][0]
             self.assertEqual((line["edited_dev"], line["reviewed"]), ("नारायण भगवान", True))
 
+    def test_our_reader_reads_a_page_tesseract_never_read(self):
+        from letter_extractor.app import linesearch
+        from letter_extractor.ocr.segment import Step
+        steps = [Step(0, 10, "ना"), Step(10, 20, "रा")]
+        with mock.patch.object(linesearch, "_load", return_value=(None, {"typical_width": 30.0, "widths": {}})), \
+                mock.patch.object(linesearch, "read_line", return_value=("नारा", steps, {})):
+            linesearch.search_book(self.lib, self.book, [self.page])
+        got = page_whole_lines(self.lib, self.page, "search")
+        self.assertEqual(got["lines"][0]["text_dev"], "नारा")
+        self.assertEqual([x["uncertain"] for x in got["lines"][0]["aksharas"]], [False, False])   # nothing to compare
+        self.assertIsNone(page_whole_lines(self.lib, self.page))                 # still not read by Tesseract
+        self.assertEqual(book_whole_lines(self.lib, self.book, part="training"), [])
+        self.assertTrue(book_whole_lines(self.lib, self.book, part="training", engine="search"))
+        self.lib.set_book_config(self.book, Config(language_model=False))
+        read_book_lines(self.lib, self.book, [self.page], reader=lambda rgb: READ)   # Tesseract may read later
+        self.assertEqual(page_whole_lines(self.lib, self.page)["lines"][0]["text_dev"], "नारायव भग")
+        self.assertEqual(page_whole_lines(self.lib, self.page, "search")["lines"][0]["text_dev"], "नारा")
+
     def test_the_reader_says_when_the_reviewed_letters_changed(self):
         from letter_extractor.app import linesearch
         from letter_extractor.app.db import LetterGroup, Sample
@@ -171,6 +189,36 @@ class WholeLineTests(unittest.TestCase):
                          .where(LetterGroup.book_id == self.book, Sample.line_id.is_not(None)))
             g.label_dev, g.status = "क", "reviewed"
         self.assertTrue(linesearch.line_reader_info(self.lib, self.book)["changed"])
+
+    def test_a_page_at_another_scale_is_read_at_the_readers_scale(self):
+        import numpy as np
+        from letter_extractor.app import linesearch
+        self.assertEqual(linesearch.page_scale(105.0, 106.0), 1.0)           # a normal page is read as it is
+        self.assertEqual(linesearch.page_scale(0, 106.0), 1.0)               # no spacing known
+        self.assertEqual(linesearch.page_scale(42.0, 0), 1.0)                # no training pages
+        self.assertAlmostEqual(linesearch.page_scale(42.5, 106.0), 106.0 / 42.5)    # a photo of a card
+        self.assertAlmostEqual(linesearch.page_scale(212.0, 106.0), 0.5)             # a larger scan
+        m = np.zeros((10, 20), bool)
+        m[3:7, 5:15] = True
+        self.assertIs(linesearch._scaled(m, 1.0), m)
+        big = linesearch._scaled(m, 2.5)
+        self.assertEqual(big.shape, (25, 50))
+        self.assertTrue(big[12, 25] and not big[0, 0])
+
+    def test_lines_are_read_scaled_and_boxed_in_page_pixels(self):
+        import numpy as np
+        from letter_extractor.app import linesearch
+        from letter_extractor.ocr.segment import Step
+        with self.lib.session() as s:
+            lid = s.scalar(select(Line.id).where(Line.page_id == self.page))
+        c = np.ones((40, 100), bool)
+        with mock.patch.object(linesearch, "_line_ink", return_value=(c, 10, 20)) as ink, \
+                mock.patch.object(linesearch, "read_line", return_value=("क", [Step(0, 50, "क")], {})) as read:
+            got = linesearch._read_lines(self.lib, self.lib.get_book(self.book), [lid], 40.0,
+                                         (None, {"typical_width": 54.0, "widths": {}, "spacing": 100.0}), None)
+        self.assertEqual(ink.call_args[0][4], 2.5)                           # the ink is scaled by 100 / 40
+        self.assertEqual(read.call_args[0][1], 100.0)                        # the spacing with it
+        self.assertEqual(got[lid][1][0][2], [10, 20, 20, 16])                    # back in page pixels
 
     def test_the_measure_leaves_out_the_tested_pages(self):
         from letter_extractor.app import linesearch

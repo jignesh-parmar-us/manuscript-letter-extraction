@@ -171,6 +171,7 @@ def page_whole_lines(lib: Library, page_id: int, engine: str = "tesseract") -> O
         mapping = mapping_for(cfg)
         rows = s.execute(select(Line, WholeLine).outerjoin(WholeLine, WholeLine.line_id == Line.id)
                          .where(Line.page_id == page_id).order_by(Line.number)).all()
+        rows = [(ln, w if w is not None and w.engine != "search" else None) for ln, w in rows]
         if not any(w is not None for _, w in rows):
             return None
         lines, low, read_at = [], 0, None
@@ -238,8 +239,7 @@ def book_whole_lines(lib: Library, book_id: int, part: str = "read", engine: str
     with lib.session() as s:
         q = (select(Page.id, func.count(WholeLine.id)).join(Line, Line.page_id == Page.id)
              .join(WholeLine, WholeLine.line_id == Line.id).where(Page.book_id == book_id, Page.part == part))
-        if engine == "search":
-            q = q.where(WholeLine.search_at.is_not(None))
+        q = q.where(WholeLine.search_at.is_not(None)) if engine == "search" else q.where(WholeLine.engine != "search")
         rows = s.execute(q.group_by(Page.id)).all()
     return [{"page_id": pid, "lines": n} for pid, n in rows]
 

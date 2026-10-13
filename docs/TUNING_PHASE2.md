@@ -436,6 +436,23 @@ Same harness and lines as above (fold-fair, 99 checked lines), the reader learni
 
 The language model is needed (off: 16%) but overrules clear letters above 0.5; the curve between 0.25 and 0.5 is uneven (one character in 2,200 on the new pages separates 3.76% from 3.80%), so 0.35 is to be confirmed with more lines. The network and the close-ups do not help. The remaining errors are vowel signs: `SPLIT_READING_PLAN.md` (parked) describes reading the base and the marks separately.
 
+## Pages at another scale: photos of cards (2026-10-13)
+
+Book 6, Read Book pages `WhatsApp Image 2026-10-13 at 8.30.59 PM.jpeg` (line spacing 45) and `8.31.19 PM.jpeg` (41): letters about 25-29 px high against about 67 px on the training pages (spacing 106). Both are photos of the same card, so the first three lines have the same text. Scored on the 7 hand-checked lines (4 + 3), the reader trained **without both pages** (letters, corrections and language-model text left out; one copy of the library, one seed, language model on), ink not rescaled vs. rescaled to the training spacing:
+
+| Line | chars | before (no scale) | after (page scale) | Tesseract |
+|---|---|---|---|---|
+| 8.30.59 line 1 | 99 | 83 | 16 | 9 |
+| 8.30.59 line 2 | 93 | 75 | 7 | 8 |
+| 8.30.59 line 3 | 92 | 71 | 9 | 6 |
+| 8.30.59 line 4 | 88 | 70 | 10 | 11 |
+| 8.31.19 line 1 | 99 | 82 | 10 | 8 |
+| 8.31.19 line 2 | 93 | 75 | 9 | 5 |
+| 8.31.19 line 3 | 92 | 72 | 9 | 9 |
+| **all 7** | 656 | **80.5%** wrong | **10.7%** wrong | **8.5%** wrong |
+
+Only 7 lines of one card and one seed, but the gain is far beyond the ±1 point of a run. The remaining gap to Tesseract (2 points) is not shown to be real at this size. Pages near the training spacing (105-107, all other pages of the book) are read exactly as before (factor 1; unit test). Not measured: the 99 older checked lines again (their pages are not rescaled, so unchanged by construction); handwritten books (their training pages' spacing is 112; a page within 20% is not rescaled).
+
 ## Letters on no line: System generated letters (2026-10-13)
 
 Our reader learned only letters on a line (it cuts each letter's window from its line), so the System generated groups (letters made from parts of other letters, on no page) were left out. Now a reviewed letter on no line is learned from its picture and its varied copies (no "not a letter" pieces). A fresh copy of the library (after the user's व / वा cleanup; 17 reviewed generated groups with 99 letters, 110 unreviewed with 658), fold-fair, 99 checked lines, learning from corrections:

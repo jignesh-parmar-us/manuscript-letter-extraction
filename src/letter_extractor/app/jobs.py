@@ -193,16 +193,16 @@ class Jobs:
         """The line search's second opinion on the pages read whole (linesearch.py), training its reader
         first when the book has none."""
         from sqlalchemy import func, select
-        from .db import Line, Page, WholeLine
+        from .db import Line, Page, Sample
         from .linesearch import search_book
         self.lib.get_book(book_id)
         with self.lib.session() as s:
             q = (select(func.count(func.distinct(Page.id))).join(Line, Line.page_id == Page.id)
-                 .join(WholeLine, WholeLine.line_id == Line.id).where(Page.book_id == book_id))
+                 .join(Sample, Sample.line_id == Line.id).where(Page.book_id == book_id, Sample.deleted.is_(False)))
             q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
             total = s.scalar(q) or 0
         if not total:
-            raise LibraryError("No pages read whole yet: read the pages first (Read all pages).")
+            raise LibraryError("No pages with cut letters on their lines yet: cut the Read Book pages first.")
         return self.start(book_id, "line_search", lambda progress, cancel: search_book(
             self.lib, book_id, page_ids, part, retrain, progress, cancel), total=total)
 

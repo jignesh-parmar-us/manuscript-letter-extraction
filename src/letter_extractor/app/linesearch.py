@@ -29,6 +29,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from typing import Callable, Dict, List, Optional, Sequence
 
+import cv2
 import numpy as np
 from sqlalchemy import and_, or_, select
 
@@ -45,6 +46,7 @@ NOT_A_LETTER = "<not a letter>"
 NEG_WEIGHT = 0.25
 EPOCHS = 40                 # 15 before learning from corrections; 40 measured better (TUNING_PHASE2.md)
 BASE_EPOCHS = 15            # the reader that cuts the checked lines into their aksharas
+SCALE_TOLERANCE = 0.2       # a page whose line spacing is within this share of the training pages' is read as it is
 MIN_ALIGN = -3.0            # a checked line whose cut scores less per akshara is not learned from
 
 
@@ -149,17 +151,49 @@ def _checked_lines(lib: Library, book_id: int, skip_files: Sequence[str] = ()) -
         return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id, Line.number)).all()]
 
 
-def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float):
-    """A line's ink (its cut letters' masks pasted together, a page border at its edges cleared), with its
-    top left corner on the page; None for a line without letters."""
+def usual_spacing(lib: Library, book_id: int) -> float:
+    """The training pages' usual line spacing (px): the scale the reader's widths (typical width, each label's
+    width) are in; 0 when the book has no Training Data pages with lines."""
+    with lib.session() as s:
+        sp = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == book_id,
+                                                                    Page.part == "training")) if v]
+    return float(np.median(sp)) if sp else 0.0
+
+
+def page_scale(page_spacing: Optional[float], usual: Optional[float]) -> float:
+    """How much to enlarge (or shrink) a page's ink to the scale the reader was trained at: the ratio of the
+    training pages' line spacing to the page's. 1 for a page near the training scale (a photo of a card, a
+    book in a smaller print and a scan at another resolution differ; the windows and widths of the reader are
+    in training pixels and would not fit them)."""
+    if not page_spacing or not usual:
+        return 1.0
+    f = usual / page_spacing
+    return f if abs(f - 1.0) > SCALE_TOLERANCE else 1.0
+
+
+def _scaled(mask: np.ndarray, f: float) -> np.ndarray:
+    """A mask enlarged (shrunk) by `f`, strokes kept smooth: resized as a picture and thresholded again."""
+    if f == 1.0:
+        return mask
+    h, w = mask.shape
+    big = cv2.resize(mask.astype(np.uint8) * 255, (max(1, int(round(w * f))), max(1, int(round(h * f)))),
+                     interpolation=cv2.INTER_CUBIC)
+    return big > 127
+
+
+def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float, scale: float = 1.0):
+    """A line's ink (its cut letters' masks pasted together, scaled by `scale` to the reader's scale, a page
+    border at its edges cleared), with its top left corner on the page (in page pixels); None for a line
+    without letters."""
     with lib.session() as s:
         smps = s.scalars(select(Sample).where(Sample.line_id == line_id, Sample.deleted.is_(False))).all()
         if not smps:
             return None
         c, x0, _ = _paste(lib, book, smps)
         y0 = min(m.y for m in smps)
-        band = (float(np.median([m.y - y0 for m in smps])), float(np.median([m.y + m.h - y0 for m in smps])))
-        c, _ = clear_borders(c, typical_width, float(np.median([m.h for m in smps])), band)
+        band = (float(np.median([m.y - y0 for m in smps])) * scale,
+                float(np.median([m.y + m.h - y0 for m in smps])) * scale)
+        c, _ = clear_borders(_scaled(c, scale), typical_width, float(np.median([m.h for m in smps])) * scale, band)
     return c, x0, y0
 
 
@@ -177,10 +211,11 @@ def _learn_corrections(lib: Library, book_id: int, data: Dict, base: LetterReade
             raise Cancelled("Cancelled; the line search reader was not changed.")
         if progress and n % 10 == 1:
             progress(f"learning from the checked lines: {n} of {len(rows)}")
-        ink = _line_ink(lib, book, lid, T)
+        f = page_scale(spacing, data["meta"].get("spacing"))
+        ink = _line_ink(lib, book, lid, T, f)
         if ink is None:
             continue
-        win = line_windows(ink[0], spacing or 100.0, T)
+        win = line_windows(ink[0], (spacing or 100.0) * f, T)
         if win is None or not len(win.X):
             continue
         aks = [a for a in split_aksharas(_chars(text)) if a.strip() and a != "?"]
@@ -327,6 +362,7 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
     return {"X": X, "y": y, "weights": weights, "classes": classes,
             "meta": {"letters": len(letters), "labels": len(freq),
                      "typical_width": float(np.median([L["w"] for L in letters])),
+                     "spacing": usual_spacing(lib, book_id),
                      "widths": {k: float(np.median(v)) for k, v in widths.items()}}}
 
 
@@ -335,6 +371,7 @@ def _load(lib: Library, book: Book):
     if not (folder / "meta.json").is_file():
         return None
     meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    meta.setdefault("spacing", usual_spacing(lib, book.id))      # readers trained before the page scale existed
     return LetterReader.load(folder / "reader.npz"), meta
 
 
@@ -344,39 +381,43 @@ def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: floa
     reader, meta = model
     found = {}
     for lid in line_ids:
-        ink = _line_ink(lib, book, lid, meta["typical_width"])
+        f = page_scale(spacing, meta.get("spacing"))
+        ink = _line_ink(lib, book, lid, meta["typical_width"], f)
         if ink is None:
             continue
         c, x0, y0 = ink
-        text, steps, _ = read_line(c, spacing, reader, meta["typical_width"], meta["widths"], lm, settings)
+        text, steps, _ = read_line(c, spacing * f, reader, meta["typical_width"], meta["widths"], lm, settings)
         aks = []
         for st in steps:
             rows = np.flatnonzero(c[:, st.x0:st.x1].any(axis=1))
-            box = [int(x0 + st.x0), int(y0 + rows.min()), int(st.x1 - st.x0), int(rows.max() - rows.min() + 1)] \
-                if rows.size else None
+            box = [int(x0 + st.x0 / f), int(y0 + rows.min() / f), int(round((st.x1 - st.x0) / f)),
+                   int(round((rows.max() - rows.min() + 1) / f))] if rows.size else None
             aks.append([unicodedata.normalize("NFC", st.label), bool(st.space), box])
         found[lid] = (unicodedata.normalize("NFC", text), aks)
     return found
 
 
 def search_page(lib: Library, page_id: int, model, lm, settings: SearchSettings = SearchSettings()) -> Dict:
-    """Read every line of a page that was read whole again with the line search, and keep its reading."""
+    """Read every line of a page with the line search, and keep its reading. Tesseract need not have read
+    the page: a line without a whole-line row gets one of engine "search" (no Tesseract text, so the Tesseract
+    views leave it out)."""
     with lib.session() as s:
         page = s.get(Page, page_id)
         if page is None:
             raise NotFound(f"No page with id {page_id}.")
         book = s.get(Book, page.book_id)
         spacing = page.line_spacing or 100.0
-        line_ids = list(s.scalars(select(Line.id).join(WholeLine, WholeLine.line_id == Line.id)
-                                  .where(Line.page_id == page_id).order_by(Line.number)))
+        line_ids = list(s.scalars(select(Line.id).where(Line.page_id == page_id).order_by(Line.number)))
         file = page.file
     found = _read_lines(lib, book, line_ids, spacing, model, lm, settings)
     with lib.session() as s:
         for lid, (text, aks) in found.items():
             row = s.scalar(select(WholeLine).where(WholeLine.line_id == lid))
-            if row is not None:
-                row.search_dev, row.search_at = text, now()
-                row.search_aksharas = json.dumps(aks, ensure_ascii=False)
+            if row is None:
+                row = WholeLine(line_id=lid, engine="search", aksharas="[]")
+                s.add(row)
+            row.search_dev, row.search_at = text, now()
+            row.search_aksharas = json.dumps(aks, ensure_ascii=False)
     return {"page": file, "lines": len(found)}
 
 
@@ -387,12 +428,12 @@ def search_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] = 
     t0 = time.time()
     book = lib.get_book(book_id)
     with lib.session() as s:
-        q = (select(Page.id).join(Line, Line.page_id == Page.id).join(WholeLine, WholeLine.line_id == Line.id)
-             .where(Page.book_id == book_id).distinct())
+        q = (select(Page.id).join(Line, Line.page_id == Page.id).join(Sample, Sample.line_id == Line.id)
+             .where(Page.book_id == book_id, Sample.deleted.is_(False)).distinct())
         q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
         ids = list(s.scalars(q.order_by(Page.number, Page.id)))
     if not ids:
-        raise LibraryError("No pages read whole yet: read the pages first (Read all pages).")
+        raise LibraryError("No pages with cut letters on their lines yet: cut the Read Book pages first.")
     trained = None
     if retrain or _load(lib, book) is None:
         t = time.time()
@@ -489,7 +530,8 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
                                 LineTruth.text_dev, WholeLine.aksharas)
                          .join(Line, Line.page_id == Page.id).join(LineTruth, LineTruth.line_id == Line.id)
                          .join(WholeLine, WholeLine.line_id == Line.id)
-                         .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "")
+                         .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "",
+                                WholeLine.engine != "search")
                          .order_by(Page.number, Page.id, Line.number)).all()
     if not rows:
         raise LibraryError("No checked lines yet: correct lines in Whole lines and mark them reviewed (✓), "

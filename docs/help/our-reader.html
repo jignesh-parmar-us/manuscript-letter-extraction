@@ -44,7 +44,7 @@
         image as it is. It is the text you correct by default.</span></div>
     <div class="node" style="--c: var(--train)"><b>Our reader</b> (Whole lines (our reader))
       <span class="small">Learned only from this book: your reviewed groups and your checked lines. It reads the same
-        lines without Tesseract. Where the two read differently, the aksharas are highlighted in both tabs.</span></div>
+        lines without Tesseract, and does not need Tesseract to have read the page first. Where the two read differently (when Tesseract has read it too), the aksharas are highlighted in both tabs.</span></div>
   </div>
   <p>A correction or a ✓ belongs to the line, not to a reader: it is the same in both tabs, and every ✓ line becomes a
     <em>checked line</em> that both readers are measured on.</p>
@@ -161,6 +161,14 @@
       page. So the pages with checked lines are split into 4 groups; for each group a reader is trained without
       those pages (and without their checked lines) and reads them. That is four trainings, hence the time.</dd>
   </dl>
+
+  <h2>Photos and scans at another size</h2>
+  <p>The reader learned letters about 67 px high (line spacing about 106 px). A photo of a whole card, with letters
+    25&ndash;30 px high, used to be read almost entirely wrong, even though its coloured background is removed
+    correctly. Now our reader enlarges (or shrinks) the line to the size it learned at before it reads, when the
+    page's line spacing differs by more than 20%. On 7 checked lines of two WhatsApp photos the characters wrong fell
+    from 80.5% to 10.7% (Tesseract: 8.5%). Pages of the usual size are read as before. Letters cut from such a small
+    photo are still poor training samples; a sharper, larger picture is better still.</p>
 
   <h2>The numbers so far</h2>
   <table>
