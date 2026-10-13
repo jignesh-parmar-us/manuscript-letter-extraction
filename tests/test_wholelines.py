@@ -15,7 +15,7 @@ from letter_extractor.app.wholelines import book_whole_lines, page_whole_lines, 
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.ocr.language import LanguageModel             # noqa: E402
 from letter_extractor.ocr.tesseract import Char, LineReading, Word   # noqa: E402
-from sqlalchemy import select                                       # noqa: E402
+from sqlalchemy import func, select                                 # noqa: E402
 
 
 def reading(*words):
@@ -201,6 +201,35 @@ class WholeLineTests(unittest.TestCase):
         self.assertEqual([a[0] for a in trim_edges(aks)], ["ना", "।"])
         self.assertFalse(trim_edges(aks)[0][2])                                  # no gap before the first akshara
         self.assertEqual(trim_edges([["|", 40.0, False]]), [])
+
+    def test_letters_on_no_line_are_learned_from_their_picture(self):
+        from letter_extractor.app import linesearch
+        from letter_extractor.app.db import LetterGroup, Sample
+        with self.lib.session() as s:
+            rows = s.execute(select(LetterGroup.id).join(Sample, Sample.group_id == LetterGroup.id)
+                             .where(LetterGroup.book_id == self.book, Sample.line_id.is_not(None))
+                             .group_by(LetterGroup.id).order_by(func.count(Sample.id).desc())).all()
+            for (gid,), label in zip(rows[:3], ("क", "ख", "ग")):
+                g = s.get(LetterGroup, gid)
+                g.label_dev, g.status = label, "labelled"
+            like = s.scalars(select(Sample).where(Sample.group_id == rows[0][0])).first()
+            made = LetterGroup(book_id=self.book, code="g9999", label_dev="घ", status="labelled")
+            s.add(made)
+            s.flush()
+            s.add(Sample(book_id=self.book, page_id=None, line_id=None, x=0, y=0, w=like.w, h=like.h, source="generated",
+                         image=like.image, mask=like.mask, group_id=made.id))
+        without = linesearch._training_set(self.lib, self.book, unlined=False)
+        got = linesearch._training_set(self.lib, self.book)
+        self.assertNotIn("घ", without["classes"])
+        self.assertIn("घ", got["classes"])                                       # System generated: learned too
+        self.assertEqual(got["meta"]["letters"], without["meta"]["letters"] + 1)
+        ci = got["classes"].index("घ")
+        self.assertGreaterEqual(int((got["y"] == ci).sum()), 4)                  # its picture and varied copies
+        with self.lib.session() as s:
+            sig = linesearch._signature(s, self.book)
+            s.scalar(select(Sample).where(Sample.source == "generated")).deleted = True
+        with self.lib.session() as s:
+            self.assertNotEqual(linesearch._signature(s, self.book), sig)        # the notice sees it change
 
     def test_corrections_add_examples_and_new_labels(self):
         import numpy as np

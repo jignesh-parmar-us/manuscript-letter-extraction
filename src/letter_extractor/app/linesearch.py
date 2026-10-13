@@ -30,7 +30,7 @@ from collections import Counter, defaultdict
 from typing import Callable, Dict, List, Optional, Sequence
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from ..ocr.aksharas import split_aksharas
 from ..ocr.features import features, varied
@@ -61,9 +61,11 @@ def _signature(s, book_id: int) -> str:
                         .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "")
                         .order_by(LineTruth.line_id)).all()
     rows = s.execute(select(Sample.id, LetterGroup.label_dev, LetterGroup.status, Sample.x, Sample.w)
-                     .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
-                     .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
-                            Sample.line_id.is_not(None), LetterGroup.label_dev != "", LetterGroup.status != "auto")
+                     .join(LetterGroup, Sample.group_id == LetterGroup.id).outerjoin(Page, Sample.page_id == Page.id)
+                     .where(Sample.book_id == book_id, Sample.deleted.is_(False), LetterGroup.label_dev != "",
+                            LetterGroup.status != "auto",
+                            or_(and_(Page.part == "training", Sample.line_id.is_not(None)),
+                                and_(Sample.line_id.is_(None), Sample.mask != "")))   # also letters on no line
                      .order_by(Sample.id)).all()
     return hashlib.sha1(json.dumps([[list(r) for r in rows], [list(r) for r in checked]],
                                    ensure_ascii=False).encode()).hexdigest()
@@ -222,8 +224,10 @@ def _fit(data: Dict, cancel=None, hidden: int = 0, epochs: int = EPOCHS) -> Lett
 
 
 def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None,
-                  seed: int = 0) -> Dict:
-    """The training windows (X, y, weights), the classes and the meta, before fitting."""
+                  seed: int = 0, unlined: bool = True) -> Dict:
+    """The training windows (X, y, weights), the classes and the meta, before fitting. With `unlined`, the
+    reviewed letters that are on no line (System generated, uploaded) are learned from their picture alone
+    (and its varied copies): there is no line to cut windows or "not a letter" pieces from."""
     rng = np.random.default_rng(seed)
     book = lib.get_book(book_id)
     letters = []
@@ -255,6 +259,20 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
                 nxt = nxt_of.get(smp.id)
                 letters.append(dict(label=lab, x=smp.x, w=smp.w, mask=masks[smp.id], c=c, x0=x0,
                                     sp=spacing or 1.6 * smp.h, nxt=(nxt.x, nxt.w) if nxt is not None else None))
+        if unlined:
+            spacings = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == book_id,
+                                                                             Page.part == "training")) if v]
+            usual = float(np.median(spacings)) if spacings else 0.0
+            alone = s.execute(select(Sample, LetterGroup.label_dev)
+                              .join(LetterGroup, Sample.group_id == LetterGroup.id)
+                              .where(Sample.book_id == book_id, Sample.deleted.is_(False), Sample.line_id.is_(None),
+                                     Sample.mask != "", LetterGroup.label_dev != "",
+                                     LetterGroup.status != "auto")).all()
+            for smp, lab in alone:
+                if len(split_aksharas(lab)) != 1:
+                    continue
+                letters.append(dict(label=lab, x=smp.x, w=smp.w, mask=_sample_mask(lib, book, smp), c=None, x0=0,
+                                    sp=usual or 1.6 * smp.h, nxt=None))
     if len(letters) < 20 or len({L["label"] for L in letters}) < 2:
         raise LibraryError("The line search learns the letters from this book's reviewed Training Data: review "
                            "and label more groups first (at least 20 letters).")
@@ -265,6 +283,11 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
         if cancel and n % 500 == 0 and cancel():
             raise Cancelled("Cancelled; the line search reader was not changed.")
         x, w, c, x0, sp = L["x"], L["w"], L["c"], L["x0"], L["sp"]
+        if c is None:                                       # on no line: its picture and its varied copies
+            L["pos"] = [features(L["mask"], sp)] + [features(varied(L["mask"], rng), sp)
+                                                    for _ in range(max(3, min(30, -(-20 // freq[L["label"]]))))]
+            L["negs"] = []
+            continue
 
         def win(a, b):
             m = _crop(c, a - x0, b - x0)

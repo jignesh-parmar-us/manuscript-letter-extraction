@@ -418,3 +418,33 @@ Fold-fair, 4 folds by page, on 99 checked lines (8,961 characters; the user corr
 | Tesseract + language model (knows every page) | 3.78% | — |
 
 Why the reader lagged: 2.8% of the checked aksharas had no class (हे: its group not reviewed and its letters not on a line; क्ष्मी, त्सं, र्ष, र्ण, ई…); बा→वा, the most common confusion, came from ब / बा letters inside the व / वा groups (195 वा letters against 1 बा). Learning from corrections: each checked line cut into the aksharas of its text (`segment.align`), its windows added as examples (3,235–4,096 letters per fold, 33–45 new labels). Left: vowel signs (नी→नो 6, र→रे, री→रो, ती→तो, पा→पो), a few ब→व.
+
+## Language model weight, neural network, close-ups of the marks (2026-10-13)
+
+Same harness and lines as above (fold-fair, 99 checked lines), the reader learning from the other folds' corrections.
+
+| Variant | Characters wrong | New pages (52, 53) |
+|---|---|---|
+| linear, 40 epochs, language model 0 (off) | 16.38% | 13.23% |
+| linear, 40 epochs, language model 0.25 | 7.31% | 3.93% |
+| **linear, 40 epochs, language model 0.35** | **6.86%** | **3.76%** |
+| linear, 40 epochs, language model 0.5 (in the app) | 7.32% | 3.93% |
+| linear, 40 epochs, language model 1 / 1.5 / 2 / 3 | 9.36 / 11.34 / 12.97 / 16.38% | 4.72 / 5.50 / 6.59 / 8.30% |
+| one hidden layer (384), 20 epochs, language model 0.5 / 1 / 1.5 / 2 | 7.50 / 7.88 / 8.68 / 9.98% | 4.32 / 4.59 / 4.59 / 5.37% |
+| linear + close-ups (top 35% and bottom 30% of the window at 16 × 8, its right 35% at 8 × 16: 384 more numbers), language model 0.25 / 0.5 | 8.43 / 7.96% | 5.55 / 5.15% |
+| Tesseract | 4.69% | 3.80% |
+
+The language model is needed (off: 16%) but overrules clear letters above 0.5; the curve between 0.25 and 0.5 is uneven (one character in 2,200 on the new pages separates 3.76% from 3.80%), so 0.35 is to be confirmed with more lines. The network and the close-ups do not help. The remaining errors are vowel signs: `SPLIT_READING_PLAN.md` (parked) describes reading the base and the marks separately.
+
+## Letters on no line: System generated letters (2026-10-13)
+
+Our reader learned only letters on a line (it cuts each letter's window from its line), so the System generated groups (letters made from parts of other letters, on no page) were left out. Now a reviewed letter on no line is learned from its picture and its varied copies (no "not a letter" pieces). A fresh copy of the library (after the user's व / वा cleanup; 17 reviewed generated groups with 99 letters, 110 unreviewed with 658), fold-fair, 99 checked lines, learning from corrections:
+
+| Our reader | Language model 0.35 | 0.5 | New pages (0.5) |
+|---|---|---|---|
+| without letters on no line | 7.62% | 7.88% | 5.33% |
+| **+ reviewed generated letters** (in the app) | 7.00% | **6.94%** | **4.15%** |
+| + all generated letters, reviewed or not | 7.04% | 6.97% | 4.37% |
+| Tesseract | 4.69% | | 3.80% |
+
+Reviewing the generated groups is what makes them useful; the unreviewed ones add nothing. The language model weight stays 0.5 (0.35 was better on the earlier copy, 0.5 on this one: noise). Open: without letters on no line the reader is worse on this copy (7.88%) than on the copy of 2026-10-12 (7.32%) with the same checked lines; to be explained (the groups changed, and page preparation changed: headlines are no longer taken for ruled lines).
