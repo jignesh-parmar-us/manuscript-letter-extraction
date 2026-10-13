@@ -109,7 +109,7 @@
   <table>
     <tr><th>Weight of the language model</th><th class="num">Characters wrong</th><th>What happens</th></tr>
     <tr><td>0 (off)</td><td class="num">16.4%</td><td>every unsure letter is a guess</td></tr>
-    <tr><td>0.35</td><td class="num">6.9%</td><td>the best measured (to be confirmed)</td></tr>
+    <tr><td>0.35</td><td class="num">6.9%</td><td>one run; within the chance of a run (about 1 point)</td></tr>
     <tr><td>0.5 (as now)</td><td class="num">7.3%</td><td></td></tr>
     <tr><td>1</td><td class="num">9.4%</td><td rowspan="2">it starts to overrule clear letters with common ones</td></tr>
     <tr><td>3</td><td class="num">16.4%</td></tr>
@@ -168,10 +168,12 @@
     <tr><td>Our reader, first version (11 Oct)</td><td class="num">10.2%</td><td class="num">—</td></tr>
     <tr><td>+ page borders removed, 26 more checked lines (12 Oct)</td><td class="num">8.4%</td><td class="num">4.9%</td></tr>
     <tr><td>+ learning from your corrections (in the app now)</td><td class="num">7.3%</td><td class="num">3.9%</td></tr>
-    <tr><td>+ language model weight 0.35 (being confirmed)</td><td class="num">6.9%</td><td class="num">3.8%</td></tr>
+    <tr><td>three runs with different random starts (average)</td><td class="num">7.3%</td><td class="num">4.2–5.3%</td></tr>
     <tr><td>Tesseract</td><td class="num">4.7%</td><td class="num">3.8%</td></tr>
   </table>
-  <p class="small">Measured on a copy of the library taken before you cleaned the व and वा groups. Checked text
+  <p class="small">One training run can differ from another by about 1 point by chance (its random start), so
+    differences smaller than that in this table are not certain. Measured on a copy of the library taken before
+    you cleaned the व and वा groups. Checked text
     typed from one reader's reading favours that reader a little: your first 73 lines were typed from
     Tesseract's.</p>
 

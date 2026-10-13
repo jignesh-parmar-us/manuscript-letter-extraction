@@ -447,4 +447,16 @@ Our reader learned only letters on a line (it cuts each letter's window from its
 | + all generated letters, reviewed or not | 7.04% | 6.97% | 4.37% |
 | Tesseract | 4.69% | | 3.80% |
 
-Reviewing the generated groups is what makes them useful; the unreviewed ones add nothing. The language model weight stays 0.5 (0.35 was better on the earlier copy, 0.5 on this one: noise). Open: without letters on no line the reader is worse on this copy (7.88%) than on the copy of 2026-10-12 (7.32%) with the same checked lines; to be explained (the groups changed, and page preparation changed: headlines are no longer taken for ruled lines).
+**Corrected the same day: these are single runs, and a run moves by up to about 1 point by chance.** The same variants with other random seeds (`LetterReader` start and training order; `tools/harness/run.py --seed`), language model 0.5:
+
+| Seed | Copy of 2026-10-12, without letters on no line | Fresh copy, without | Fresh copy, + reviewed generated letters |
+|---|---|---|---|
+| 0 | 7.32% | 7.88% | 6.94% |
+| 1 | 7.23% | 7.03% | 7.08% |
+| 2 | 7.58% | 6.87% | 7.67% |
+| **average** | **7.38%** | **7.26%** | **7.23%** |
+
+- The reviewed generated letters have **no measurable effect** (7.26% against 7.23%). They stay in the training: no harm, and a reviewed group of even one letter must be usable.
+- The "drop" between the two copies was one unlucky run: the 99 checked lines are identical in both (ink and text); the training letters differ by about 20 per fold (the user's व / वा cleanup), and on average the fresh copy is slightly better.
+- The language model weights 0.35 and 0.5 (and the earlier single-run comparisons of about half a point) are within this noise: the app stays at 0.5.
+- From now on: compare a variant over at least three seeds, and trust only differences clearly larger than about 1 point.

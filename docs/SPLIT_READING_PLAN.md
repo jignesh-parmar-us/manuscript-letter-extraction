@@ -13,7 +13,7 @@ Status: **parked** (2026-10-13). Proposed by Claude when the remaining errors tu
 | Reader | Characters wrong | Untitled-52, 53 (newest pages) |
 |---|---|---|
 | Our reader: linear, learning from corrections, language model 0.5 (in the app) | 7.32% | 3.93% |
-| same, language model 0.35 | 6.86% | 3.76% |
+| same, language model 0.35 (one run; runs differ by about 1 point by chance) | 6.86% | 3.76% |
 | Tesseract, whole lines | 4.69% | 3.80% |
 
 **The errors left are mostly vowel signs**: नी→नो (6), र→रे, री→रो, ती→तो, पा→पो, न→ने, त→ता, कों→को, ई→इ. The letter is right, the small mark is wrong.
@@ -31,7 +31,7 @@ Status: **parked** (2026-10-13). Proposed by Claude when the remaining errors tu
 
 After the cheaper steps, if our reader is still behind Tesseract on the checked lines:
 1. the language model weight (0.35 looked best; to be confirmed with more lines);
-2. learning the System generated letters (being measured, 2026-10-13);
+2. learning the System generated letters (measured 2026-10-13: no measurable effect over three seeds, kept);
 3. more checked lines (every corrected page adds about 4,000 training letters and makes the measure surer).
 
 ## 3. The idea
