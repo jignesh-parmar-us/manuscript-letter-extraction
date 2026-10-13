@@ -84,7 +84,6 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   const ours = engine === "search";
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [read, setRead] = useState<Map<number, number>>(new Map()); // page id -> lines read (by this engine)
-  const [readByTesseract, setReadByTesseract] = useState<Set<number>>(new Set()); // our reader needs these
   const [state, setState] = useState<LineSearchState | null>(null); // our reader: training and measure
   const [text, setText] = useState<WholeLines | null>(null);
   const [script, setScript] = useState<Script>("gujarati");
@@ -106,7 +105,6 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
     api.pages(book.id, "read").then(setPages, setError);
     api.bookWholeLines(book.id, engine).then((ps) => setRead(new Map(ps.map((p) => [p.page_id, p.lines]))), setError);
     if (ours) {
-      api.bookWholeLines(book.id).then((ps) => setReadByTesseract(new Set(ps.map((p) => p.page_id))), setError);
       api.lineSearchReader(book.id).then(setState, setError);
     }
   }, [book.id, version, engine, ours]);
@@ -436,12 +434,12 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         </button>
         {ours ? (
           <>
-            <button disabled={running || !page || !readByTesseract.has(page.id)} onClick={() => page && readOurs([page.id])}
-              title="Our reader reads this page's lines (they must be read by Tesseract first: it uses the same lines)">
+            <button disabled={running || !page} onClick={() => page && readOurs([page.id])}
+              title="Our reader reads this page's lines (no Tesseract needed; the page must be cut into lines and letters)">
               {isRead ? "Read this page again" : "Read this page"}
             </button>
-            <button disabled={running || !readByTesseract.size} onClick={() => readOurs()}
-              title="Our reader reads every page read whole by Tesseract (about 7 s per line). The first time, it learns the letters first (a few minutes).">
+            <button disabled={running || !pages.length} onClick={() => readOurs()}
+              title="Our reader reads every page of this part (about 7 s per line). The first time, it learns the letters first (a few minutes).">
               Read all pages
             </button>
           </>
@@ -492,9 +490,6 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             Measure
           </button>
         </div>
-      )}
-      {ours && !readByTesseract.size && (
-        <p className="muted small">Our reader reads the lines found for Whole lines (Tesseract): read the pages there first.</p>
       )}
       {ours && state?.measure && <MeasureResult m={state.measure} />}
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
