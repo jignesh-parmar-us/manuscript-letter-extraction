@@ -194,6 +194,8 @@ If `npm install` fails with `EACCES` on `~/.npm`, an earlier `sudo npm` left roo
 
 For screen development: `npm run dev` in `frontend/` serves the screen with live reload and passes API calls to a backend on port 8765 (`python -m letter_extractor.app --browser --port 8765`). `npm test` runs the screen tests, `npm run typecheck` the type check.
 
+**Using the app from another device** (a tablet or another computer on the same Wi-Fi): start it with `--host 0.0.0.0`, for example `PYTHONPATH=src .venv/bin/python -m letter_extractor.app --browser --port 8675 --host 0.0.0.0`. It prints the address to open on the other device (`Other devices on this network: http://192.168.x.x:8675/`). The first time, macOS may ask whether Python may accept incoming connections: choose Allow. Anyone on that network who opens the address can view and change the library, so use it only on a network you trust (home Wi-Fi, not a café). Without `--host` the app listens on this computer only.
+
 ## Reading lines with Tesseract (Phase 2, C10)
 
 Printed books can be read by [Tesseract](https://github.com/tesseract-ocr/tesseract) to suggest labels. Since C11 the app reads a whole book in the background and votes a suggested label for each group from its samples' readings; C12 shows them in the Review tab (see above). Tesseract is a separate install: see [docs/INSTALL_TESSERACT.md](docs/INSTALL_TESSERACT.md). To read one line image and see its aksharas with their boxes:
@@ -207,7 +209,7 @@ Tesseract reads print well (about 5% wrong characters on the sample book) but ha
 
 ## The backend API (C5c)
 
-The review app's screens (C5d-C5f) talk to a local web API (FastAPI) that can already be used on its own. It covers books, capture in the background with progress and cancel, adding new pages and cutting one page again without losing review work, the review actions (move samples to a group or to unsure, new group, merge, dissolve, label in Devanagari or Gujarati, reviewed / locked, delete / restore) with **undo and redo**, suggested groups for unsure samples, and the letter, line and page images. It listens on `127.0.0.1` only and every request needs the session token. The route list is at the top of [app/api.py](src/letter_extractor/app/api.py); while it runs, FastAPI also shows interactive documentation at `/docs` (a developer aid; that page loads its scripts from the internet, the app itself does not).
+The review app's screens (C5d-C5f) talk to a local web API (FastAPI) that can already be used on its own. It covers books, capture in the background with progress and cancel, adding new pages and cutting one page again without losing review work, the review actions (move samples to a group or to unsure, new group, merge, dissolve, label in Devanagari or Gujarati, reviewed / locked, delete / restore) with **undo and redo**, suggested groups for unsure samples, and the letter, line and page images. It listens on `127.0.0.1` only (unless started with `--host`, see above) and every request needs the session token. The route list is at the top of [app/api.py](src/letter_extractor/app/api.py); while it runs, FastAPI also shows interactive documentation at `/docs` (a developer aid; that page loads its scripts from the internet, the app itself does not).
 
 ## Tests
 

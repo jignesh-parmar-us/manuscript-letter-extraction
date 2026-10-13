@@ -13,7 +13,7 @@ import appbook                                                      # noqa: E402
 from fastapi.testclient import TestClient                           # noqa: E402
 from letter_extractor.app.api import create_app                    # noqa: E402
 from letter_extractor.app.main import (AppContext, free_port, library_dir, load_settings,   # noqa: E402
-                                       save_settings)
+                                       network_url, save_settings)
 
 TOKEN = "tok"
 H = {"X-Token": TOKEN}
@@ -45,6 +45,12 @@ class LauncherTests(unittest.TestCase):
     def test_free_port(self):
         port = free_port()
         self.assertTrue(1024 < port < 65536)
+
+    def test_network_url(self):
+        self.assertIsNone(network_url("127.0.0.1", 8675), "this computer only: no address for other devices")
+        self.assertIsNone(network_url("localhost", 8675))
+        self.assertEqual(network_url("0.0.0.0", 8675, lan="192.168.1.5"), "http://192.168.1.5:8675/")
+        self.assertEqual(network_url("192.168.1.9", 8675), "http://192.168.1.9:8675/")
 
 
 class ScreenTests(unittest.TestCase):

@@ -1,8 +1,9 @@
-"""Start the review app (C5d): backend on 127.0.0.1, screen in its own window or in the browser.
+"""Start the review app (C5d): backend on 127.0.0.1 (or --host), screen in its own window or in the browser.
 
     python -m letter_extractor.app                 own window (pywebview), browser if not available
     python -m letter_extractor.app --browser       the default web browser
     python -m letter_extractor.app --library DIR   use / create this library folder (remembered)
+    python -m letter_extractor.app --host 0.0.0.0  also reachable from other devices on the same network
 
 The library folder is remembered in the user's settings file (`settings_path()`); the default is
 `Documents/Manuscript Letters`. A random session token is created at every start and written into the
@@ -64,10 +65,29 @@ def library_dir(arg: Optional[str] = None, settings: Optional[Path] = None) -> P
     return Path(remembered) if remembered else default_library_dir()
 
 
-def free_port() -> int:
+def free_port(host: str = "127.0.0.1") -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
+        s.bind((host, 0))
         return s.getsockname()[1]
+
+
+def lan_address() -> Optional[str]:
+    """This computer's address on the local network, or None (no network)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        try:
+            s.connect(("192.0.2.1", 80))                    # no packet is sent; only picks the outgoing interface
+            return s.getsockname()[0]
+        except OSError:
+            return None
+
+
+def network_url(host: str, port: int, lan: Optional[str] = None) -> Optional[str]:
+    """The address other devices open, or None when the app listens on this computer only."""
+    if host in ("127.0.0.1", "localhost", "::1"):
+        return None
+    if host in ("0.0.0.0", "::", ""):
+        host = lan or lan_address()
+    return f"http://{host}:{port}/" if host else None
 
 
 def open_path(path: Path) -> None:
@@ -98,9 +118,9 @@ def build(library_path: Path, token: str, context: AppContext):
     return create_app(lib, token, context=context), lib
 
 
-def _serve(app, port: int):
+def _serve(app, port: int, host: str = "127.0.0.1"):
     import uvicorn
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, name="backend", daemon=True)
     thread.start()
@@ -115,7 +135,10 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="letter-extractor-app", description="Manuscript letter review app.")
     p.add_argument("--browser", action="store_true", help="open in the default web browser, not in a window")
     p.add_argument("--library", help="library folder (created if missing; remembered for next time)")
-    p.add_argument("--port", type=int, default=0, help="port on 127.0.0.1 (default: any free port)")
+    p.add_argument("--port", type=int, default=0, help="port (default: any free port)")
+    p.add_argument("--host", default="127.0.0.1",
+                   help="address to listen on (default 127.0.0.1: this computer only; 0.0.0.0: also other "
+                        "devices on the same network, which can then view and change the library)")
     args = p.parse_args(argv)
 
     lib_path = library_dir(args.library)
@@ -125,7 +148,7 @@ def main(argv=None) -> int:
         print("The screen is not built yet: run 'npm run build' in frontend/.", file=sys.stderr)
         return 2
     token = secrets.token_urlsafe(24)
-    port = args.port or free_port()
+    port = args.port or free_port(args.host)
     url = f"http://127.0.0.1:{port}/"
 
     webview = None
@@ -138,8 +161,12 @@ def main(argv=None) -> int:
 
     context = AppContext(mode="window" if webview else "browser")
     app, lib = build(lib_path, token, context)
-    server, thread = _serve(app, port)
+    server, thread = _serve(app, port, args.host)
     print(f"Library: {lib_path}\nApp: {url}", flush=True)
+    other = network_url(args.host, port)
+    if other:
+        print(f"Other devices on this network: {other}\n"
+              "Anyone on this network can open it and change the library.", flush=True)
 
     if webview is not None:
         window = webview.create_window("Manuscript Letters", url, width=1400, height=900, min_size=(900, 600))

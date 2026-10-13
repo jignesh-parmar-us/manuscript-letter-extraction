@@ -1,6 +1,6 @@
 """The backend API of the review app (C5c), a FastAPI application.
 
-`create_app(library, token)` returns the app. It is meant to listen on 127.0.0.1 only (see main.py,
+`create_app(library, token)` returns the app. It listens on 127.0.0.1 only unless started with --host (see main.py,
 C5d). Every request must carry the session token, created when the app starts: in the `X-Token`
 header, or as `?token=` for images (an <img> tag cannot send headers). Other web pages open in the
 same browser therefore cannot use the API.
