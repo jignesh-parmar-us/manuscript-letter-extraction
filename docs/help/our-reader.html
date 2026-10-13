@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How our reader reads</title>
+<!--
+  Help page, served at /help/our-reader.html (linked from parts.html, tech.html and new-book.html): Text →
+  Whole lines (our reader) in plain words, with examples from the printed 1933 book: the two readers of a
+  line, the steps of the line search, the language model, linear and neural network letter readers, what
+  the reader learns from, Retrain / Read / Measure, and what "the cache" of the experiments is. Numbers are
+  from TUNING_PHASE2.md and SEGMENTATION_PLAN.md (fold-fair, 99 checked lines, 2026-10-12/13).
+-->
+<link rel="stylesheet" href="tech.css">
+<style>
+  .ex { font: 22px/1.5 "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; }
+  .path { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 15px; }
+  .path .ex { font-size: 19px; }
+  .good { color: var(--ok); font-weight: 600; }
+  .bad { color: #b3261e; font-weight: 600; }
+  .windows { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .windows span { border: 1px dashed var(--muted); border-radius: 6px; padding: 2px 8px; font-size: 14px; background: var(--panel); }
+  .windows span.win { border: 2px solid var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Help pages">
+    <a href="new-book.html">Guide</a>
+    <a href="workflow.html">The steps in order</a>
+    <a href="parts.html">The parts explained</a>
+    <a class="here" href="our-reader.html">How our reader reads</a>
+    <a href="tech.html">How it works (technical)</a>
+  </nav>
+  <h1>How our reader reads</h1>
+  <p class="lead">Text → <strong>Whole lines (our reader)</strong> explained in plain words, with examples from the
+    printed Vachnamrut (book 6): how a line becomes text, what the language model and the letter reader do, what it
+    learns from, and how it is measured.</p>
+
+  <h2>Two readers of the same line</h2>
+  <div class="row2">
+    <div class="node" style="--c: var(--read)"><b>Tesseract</b> (Whole lines (Tesseract))
+      <span class="small">A ready-made reader for printed Devanagari. It has never seen this book; it reads each line
+        image as it is. It is the text you correct by default.</span></div>
+    <div class="node" style="--c: var(--train)"><b>Our reader</b> (Whole lines (our reader))
+      <span class="small">Learned only from this book: your reviewed groups and your checked lines. It reads the same
+        lines without Tesseract. Where the two read differently, the aksharas are highlighted in both tabs.</span></div>
+  </div>
+  <p>A correction or a ✓ belongs to the line, not to a reader: it is the same in both tabs, and every ✓ line becomes a
+    <em>checked line</em> that both readers are measured on.</p>
+  <div class="box note"><strong>Not to be confused:</strong> Training Data → Readers trains another <em>letter
+    reader</em>. That one reads letters that are already cut out (Cut letters) and finds the <em>possible mix-ups</em>
+    in your groups. Our reader has its own letter reader inside, trained with Retrain, because it has to look at
+    pieces of a whole line, including pieces that are not letters at all.</div>
+
+  <h2>How our reader reads a line, step by step</h2>
+  <p>Example: the line on Untitled-26 that has <span class="ex">पग उपर्य पगने</span> (“leg over leg”). Tesseract
+    reads <span class="ex">उपरय</span> there; the <span class="ex">र्य</span> of this print is wide and flat, a र beside
+    a य.</p>
+
+  <div class="flow">
+    <div class="stage data"><div class="title">0 · The line's ink</div>
+      The line's cut letters are pasted back together into one black-and-white picture of the line. A page border
+      caught at the line's edge (thin, broken, taller than the letters, as on Untitled-51 and 52) is removed first; a
+      danda (। ॥) is solid and no taller than the letters, so it stays.</div>
+    <div class="arrow">↓</div>
+    <div class="stage data"><div class="title">1 · Places where a letter could start or end</div>
+      A place every 9 pixels along the line, plus every gap between letters and every thin point under the headline.
+      About 300 places on a long line.</div>
+    <div class="arrow">↓</div>
+    <div class="stage data"><div class="title">2 · Windows</div>
+      Every stretch between two places that is between 0.2 and 2.4 times as wide as a usual letter is a
+      <em>window</em>: about 7,600 per line. Each window is cut to its ink and turned into numbers (its
+      <em>features</em>: the picture at 20 × 20, the directions of its strokes, its size).
+      <div class="windows"><span>उ</span><span>उप</span><span>प</span><span>पर</span><span class="win">र्य</span><span>र</span><span>य</span><span>half of य</span><span>य + प</span></div>
+      <span class="small">A few of the windows around उपर्य.</span></div>
+    <div class="arrow">↓</div>
+    <div class="stage read"><div class="title">3 · The letter reader looks at every window</div>
+      For each window it gives how likely each letter is, and how likely it is <em>not a letter</em> (half a letter,
+      two letters, a letter with its neighbour). For the wide window above, a reader that has learned this wide
+      र्य gives <span class="ex">र्य</span> most of its probability and the other letters and “not a letter” little.
+      Windows whose best letter is unlikely are dropped (about 2,300 of the 7,600 are kept).</div>
+    <div class="arrow">↓</div>
+    <div class="stage read"><div class="title">4 · The search: the best way to cut the whole line</div>
+      There are millions of ways to cut a line into letters. The search walks from left to right and keeps the ten
+      best ways so far. Each letter on a way adds up: how sure the letter reader is, a bonus per letter, a penalty
+      when the window is much wider or narrower than that letter usually is, and the language model's opinion
+      (below).
+      <div class="path">
+        <span class="good">kept</span><span class="ex">उ · प · र्य</span>
+        <span class="bad">lost</span><span class="ex">उ · प · र · य</span>
+        <span></span><span class="small">र and य read as two letters fit less well: the reader has learned this wide
+          र्य (your र्य group, and your corrected lines with उपर्य).</span>
+      </div></div>
+    <div class="arrow">↓</div>
+    <div class="stage read"><div class="title">5 · The text</div>
+      The letters of the best way, with a space where a gap is wide, and each akshara's place on the page (so you can
+      click it). About 7 seconds per line.</div>
+  </div>
+
+  <h2>The language model (not a reader)</h2>
+  <p>The language model never looks at the ink. It only knows <strong>which aksharas follow each other</strong> in
+    this book: from the labels of your Training Data pages in reading order, the lines you proofread in Cut letters, and your
+    word lists (Read Book → Dictionary). Your checked lines are not in it (yet): they teach the letter reader. For two or three aksharas in a row it knows how often the next one comes.</p>
+  <p>Example (from your book's language model): after <span class="ex">भग</span> it has seen
+    <span class="ex">वा</span> (भगवान) nearly every time and <span class="ex">बा</span> practically never, so when the letter reader is unsure between वा and बा there, it tips the
+    choice to वा. Where the shape is clear, the letter reader wins.</p>
+  <p>How much it counts is its <em>weight</em> (0.5 now). Measured on your checked lines:</p>
+  <table>
+    <tr><th>Weight of the language model</th><th class="num">Characters wrong</th><th>What happens</th></tr>
+    <tr><td>0 (off)</td><td class="num">16.4%</td><td>every unsure letter is a guess</td></tr>
+    <tr><td>0.35</td><td class="num">6.9%</td><td>the best measured (to be confirmed)</td></tr>
+    <tr><td>0.5 (as now)</td><td class="num">7.3%</td><td></td></tr>
+    <tr><td>1</td><td class="num">9.4%</td><td rowspan="2">it starts to overrule clear letters with common ones</td></tr>
+    <tr><td>3</td><td class="num">16.4%</td></tr>
+  </table>
+  <p>It learns from your labels, so it is only as good as they are: while the व group held ब letters, it learned
+    that वा is even more common than it is. Clean groups and checked lines help it too.</p>
+
+  <h2>The letter reader: linear or neural network</h2>
+  <p>Both turn a window's features (about 1,300 numbers) into a score for every letter.</p>
+  <div class="row2">
+    <div class="node"><b>Linear reader (used now)</b>
+      <span class="small">Every letter has one weight per feature: “ink here makes क more likely, ink there makes it
+        less likely”. The scores are sums. Simple, fast, and hard to fool with little data.</span></div>
+    <div class="node"><b>Neural network reader</b>
+      <span class="small">First 384 “combinations” of features (for example “a hook on top <em>and</em> a bar on the
+        right”), then the letters from those. It can learn more complicated shapes, but needs more examples and
+        trains several times slower.</span></div>
+  </div>
+  <p>On your book the neural network has not been better: 7.50% against 7.32% for the linear reader (both learning
+    from your corrections). So the linear one stays.</p>
+  <p><strong>Why vowel signs are the hardest:</strong> नी and नो, री and रो, पा and पो differ by a small mark, but a
+    window is shrunk to 20 × 20 pixels, so the mark gets only a few pixels. Close-ups of the top strip, the bottom
+    strip and the right side of each window are being tried (see TUNING_PHASE2.md).</p>
+
+  <h2>What our reader learns from</h2>
+  <table>
+    <tr><th>From</th><th>What it gives</th><th>Example</th></tr>
+    <tr><td>Your reviewed groups (Training Data)</td><td>each letter as a window in its own line, a little shifted
+      and varied: about 9,000 letters</td><td>the र्य group: both its narrow and its wide shape</td></tr>
+    <tr><td>Made-up “not a letter” pieces</td><td>halves of letters, a letter with its neighbour, windows shifted too
+      far: so it knows what is <em>not</em> a letter</td><td>the left half of य, or य with the next प</td></tr>
+    <tr><td>Your checked lines (learning from corrections)</td><td>each checked line is cut into the aksharas of your
+      text (the same search, forced to give your text), and each piece becomes an example: about 3,000–4,000 more
+      letters, also letters no group has</td><td>हे (its group is not reviewed), क्ष्मी, ई</td></tr>
+  </table>
+  <p>Every label counts the same in total, however many letters it has: वा with 195 letters does not outweigh बा with
+    1. What matters is that the letters in a group are right, and that there are real examples of each shape.</p>
+
+  <h2>Retrain, Read and Measure</h2>
+  <dl>
+    <dt>Retrain (about half an hour)</dt>
+    <dd>Learns again from your reviewed groups and every checked line. It does not read: the pages keep their
+      reading until you read them again. The tab says when your groups or checked lines changed since it learned.</dd>
+    <dt>Read all pages / Read this page (about 7 s per line)</dt>
+    <dd>Reads with the reader as it is. New pages need no retraining.</dd>
+    <dt>Measure (about 2 hours)</dt>
+    <dd>Scores our reader on your checked lines, beside Tesseract. It must not score a page the reader learned
+      from (that would be like marking an exam the pupil has seen), and every Read Book page is also a Training Data
+      page. So the pages with checked lines are split into 4 groups; for each group a reader is trained without
+      those pages (and without their checked lines) and reads them. That is four trainings, hence the time.</dd>
+  </dl>
+
+  <h2>The numbers so far</h2>
+  <table>
+    <tr><th>On the checked lines, fairly measured</th><th class="num">All 99 lines</th><th class="num">Untitled-52, 53</th></tr>
+    <tr><td>Our reader, first version (11 Oct)</td><td class="num">10.2%</td><td class="num">—</td></tr>
+    <tr><td>+ page borders removed, 26 more checked lines (12 Oct)</td><td class="num">8.4%</td><td class="num">4.9%</td></tr>
+    <tr><td>+ learning from your corrections (in the app now)</td><td class="num">7.3%</td><td class="num">3.9%</td></tr>
+    <tr><td>+ language model weight 0.35 (being confirmed)</td><td class="num">6.9%</td><td class="num">3.8%</td></tr>
+    <tr><td>Tesseract</td><td class="num">4.7%</td><td class="num">3.8%</td></tr>
+  </table>
+  <p class="small">Measured on a copy of the library taken before you cleaned the व and वा groups. Checked text
+    typed from one reader's reading favours that reader a little: your first 73 lines were typed from
+    Tesseract's.</p>
+
+  <h2>“The cache” (in the experiments, not in the app)</h2>
+  <p>Trying one idea fairly means four trainings and reading 99 lines: about two hours. Most of that time goes into
+    computing the features of the training letters and of every window of every checked line, and those are the
+    same for every idea about the reader or the search. So for the experiments they are computed once per group of
+    pages and kept in files (about 5 GB), a <em>cache</em>; then a new idea, such as another language model weight,
+    takes minutes instead of hours.</p>
+  <p>The app keeps no such cache: Retrain and Measure compute the features each time, from your groups and lines as
+    they are then. What the app keeps is the trained reader (<code>line-search/reader.npz</code> in the book folder),
+    the last measure (<code>line-search/measure.json</code>) and each line's reading in the library.</p>
+</main>
+</body>
+</html>

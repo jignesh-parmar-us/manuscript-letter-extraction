@@ -143,6 +143,15 @@ class WholeLineTests(unittest.TestCase):
         self.assertIsNotNone(first["aksharas"][0]["box"])                      # its place on the page
         self.assertEqual(first["aksharas"][4]["box"][0] - first["aksharas"][0]["box"][0], 60)
         self.assertTrue(book_whole_lines(self.lib, self.book, part="training", engine="search"))
+        import io, zipfile
+        c = TestClient(create_app(self.lib, "t"))
+        for fmt in ("txt", "docx"):                                           # downloads: our reader's text
+            r = c.get(f"/files/texts/{self.book}?format={fmt}&readers=search&part=training&marker=none"
+                      f"&script=devanagari&page_id={self.page}&token=t")
+            got = r.text if fmt == "txt" else zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode()
+            self.assertIn("नारायण", got)
+            self.assertNotIn("नारायव", got)                                    # not Tesseract's
+        c.close()
         set_whole_line(self.lib, self.lines, text="नारायण भगवान", reviewed=True)    # one correction per line
         for engine in ("tesseract", "search"):
             line = page_whole_lines(self.lib, self.page, engine)["lines"][0]

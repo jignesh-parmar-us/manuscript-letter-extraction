@@ -171,6 +171,12 @@ describe("Whole lines", () => {
     expect(api.bookWholeLines).toHaveBeenCalledWith(4, "search");
     expect(screen.queryByLabelText("With the language model")).toBeNull();
     expect(screen.getByRole("link", { name: "Page .txt" }).getAttribute("href")).toMatch(/readers=search&page_id=9/);
+    expect(screen.getByRole("link", { name: "Page Word" }).getAttribute("href")).toMatch(/format=docx.*readers=search/);
+    window.print = vi.fn();
+    vi.mocked(api.wholeLines).mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Page PDF" }));
+    expect(api.wholeLines).toHaveBeenCalledWith(9, "search");                    // the PDF prints this tab's reading
+    await waitFor(() => expect(window.print).toHaveBeenCalled());
     await userEvent.click(within(pane).getByText("ણ"));
     expect(screen.getByText(/our reader · Tesseract: વ/)).toBeInTheDocument();
     expect(screen.getByText(/Reader trained on 8946 reviewed letters and 99 checked lines/)).toBeInTheDocument();

@@ -284,7 +284,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   async function printPdf(whole: boolean) {
     try {
       const ids = whole ? pages.filter((p) => read.has(p.id)).map((p) => p.id) : pageId ? [pageId] : [];
-      setPrinting(await Promise.all(ids.map((id) => api.wholeLines(id))));
+      setPrinting(await Promise.all(ids.map((id) => api.wholeLines(id, engine))));   // the reading of this tab
     } catch (e) {
       setError(e);
     }
