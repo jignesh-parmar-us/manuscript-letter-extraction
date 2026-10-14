@@ -89,6 +89,22 @@ describe("GroupView", () => {
     }
   });
 
+  it("moves through the samples with the arrow keys; Shift extends the selection, also in a locked group", async () => {
+    renderView((ctx) => <GroupView group={group({ locked: true })} ctx={ctx} />);
+    const tiles = await findTiles();
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowRight}");                 // nothing selected: the first sample
+    expect(tiles[0]).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");   // stops at the last
+    expect(tiles[2]).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    await user.keyboard("{ArrowLeft}");
+    expect(tiles[1]).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(tiles[0]).toHaveAttribute("aria-selected", "true");
+  });
+
   it("moves the selected samples to Unsure", async () => {
     renderView((ctx) => <GroupView group={group()} ctx={ctx} />);
     const tiles = await findTiles();

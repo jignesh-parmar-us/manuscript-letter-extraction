@@ -4,6 +4,7 @@
 // Deleted: select samples and restore them (they come back as unsure).
 // On printed books read with Tesseract (C12), unsure samples with a confident reading show it as a
 // second chip: accepting it puts the sample in the group with that label, or a new group that gets it.
+// ← → ↑ ↓ select the next sample (Shift extends the selection).
 // One selected letter shows its line; double-click opens it on its page, and "Back" there returns here.
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { api, Sample } from "../api";
@@ -12,6 +13,7 @@ import LineContext from "../components/LineContext";
 import { openOnPage, useArrive, useComeBack } from "../components/returnSpot";
 import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
+import { useArrowKeys } from "../components/useArrowKeys";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
 import GroupPicker, { MoveTarget } from "./GroupPicker";
@@ -30,6 +32,7 @@ export default function SamplesView({ kind, ctx }: { kind: "unsure" | "deleted";
   const [picking, setPicking] = useState(false); // the "Move to…" picker is open
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
+  useArrowKeys(order, selection, setSelection);
 
   const single = ids.length === 1 ? samples.find((s) => s.id === ids[0]) ?? null : null;
   const open = (s: Sample) => openOnPage(bookId, s, samples, kind === "unsure" ? "Unsure" : "Deleted samples");

@@ -4,7 +4,7 @@
 // letters made by the system are marked "gen" (SampleGrid); "Make variants" adds some to a small group; merge another group into it (chosen in the letter
 // table, GroupPicker.tsx); dissolve it.
 // Keys: U = selected to Unsure, N = new group from selection, Delete = delete selection,
-//       Ctrl/Cmd+A = select all, Esc = clear selection.
+//       Ctrl/Cmd+A = select all, Esc = clear selection, ← → ↑ ↓ = next sample (Shift: extend; also when locked).
 // With OCR readings (C11, C12): the suggested label to accept, change or reject; what the samples
 // were read as; and a badge on each sample whose reading differs from the group's: × removes the
 // reading (it is wrong), the green chip on the left moves the letter to that reading's group (it is right).
@@ -21,6 +21,7 @@ import LineContext from "../components/LineContext";
 import { openOnPage, useArrive, useComeBack } from "../components/returnSpot";
 import SampleGrid from "../components/SampleGrid";
 import { emptySelection, select } from "../components/selection";
+import { useArrowKeys } from "../components/useArrowKeys";
 import { usePagedSamples } from "../components/usePagedSamples";
 import { go } from "../route";
 import { isTyping, ReviewContext } from "./Review";
@@ -43,6 +44,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
   const [dialog, confirm] = useConfirm();
   const ids = [...selection.ids];
   const order = samples.map((s) => s.id);
+  useArrowKeys(order, selection, setSelection);
   const expected = expectedReading(group);
   // selected letters read as another letter than the group's (the ones with a badge): their reading can
   // be removed (wrong) or followed to that letter's group (right); readings of the group's letter stay
