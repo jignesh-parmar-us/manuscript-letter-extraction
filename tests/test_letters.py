@@ -58,6 +58,20 @@ class RulesTests(unittest.TestCase):
             lines[y:y + h, x:x + w] += ln.mask
         self.assertEqual(int(seen.sum()), int(lines.sum()))
 
+    def test_i_stem_at_the_search_edge(self):
+        """A short-i stem exactly split_search_ratio x typical right of its letter's left edge leaves
+        no column to cut at; the letter stays as it is (once failed whole pages with ValueError)."""
+        from letter_extractor.letters import _Group, _move_i_stems
+        label = np.zeros((40, 50), np.int32)
+        label[20:, 0:20] = 1                       # letter under the stem
+        label[20:, 22:41] = 2                      # next letter, under the curl
+        line_mask = label > 0
+        line_mask[10:20, 12:41] = True             # the i-mark: its stem starts at column 12 = 0.3 x 40
+        groups = {1: _Group(0, 20), 2: _Group(22, 41)}
+        live = _move_i_stems(label, line_mask, groups, [1, 2], np.ones_like(line_mask), 40.0, Config())
+        self.assertEqual(live, [1, 2])
+        self.assertEqual(int((label == 1).sum()), 20 * 20)
+
 
 class OutputTests(unittest.TestCase):
     def test_letter_images_and_samples_csv(self):

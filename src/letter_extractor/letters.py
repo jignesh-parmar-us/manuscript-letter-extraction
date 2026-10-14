@@ -141,7 +141,9 @@ def _move_i_stems(label: np.ndarray, line_mask: np.ndarray, groups: Dict[int, _G
             continue
         # cut at the emptiest column between the letter body and the stem
         lo, hi = a0 + int(cfg.split_search_ratio * typical), first
-        ink = (lower & (label == a))[:, lo:hi].sum(axis=0)
+        if hi <= lo:                                   # stem right at the search edge: no column to cut at
+            continue
+        ink =(lower & (label == a))[:, lo:hi].sum(axis=0)
         cut = lo + int(np.flatnonzero(ink == ink.min())[-1])
         moved = (label == a)
         moved[:, :cut] = False
