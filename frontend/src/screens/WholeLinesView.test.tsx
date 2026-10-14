@@ -216,4 +216,24 @@ describe("Whole lines", () => {
     expect(await screen.findByText(/not converted yet/)).toBeInTheDocument();
     expect(localStorage.getItem("text-mode")).toBe("letters");
   });
+  it("reads only the pages not read yet, with Tesseract and with our reader", async () => {
+    const job = { id: "j", book_id: 4, status: "running", done: 0, total: 1, current: "", pages: [], result: null, error: "", seconds: 0 };
+    vi.mocked(api.convert).mockResolvedValue({ ...job, kind: "convert" } as never);
+    vi.mocked(api.lineSearch).mockResolvedValue({ ...job, kind: "line_search" } as never);
+    vi.mocked(api.lineSearchReader).mockResolvedValue({ reader: null, measure: null });
+    const { unmount } = render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Read unread pages (1)" }));
+    expect(api.convert).toHaveBeenCalledWith(4, [10], "lines");                  // page 9 is read already
+    unmount();
+    localStorage.setItem("text-mode", "search");
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Read unread pages (1)" }));
+    expect(api.lineSearch).toHaveBeenCalledWith(4, [10]);
+  });
+
+  it("has nothing to read when every page is read", async () => {
+    vi.mocked(api.bookWholeLines).mockResolvedValue([{ page_id: 9, lines: 2 }, { page_id: 10, lines: 1 }]);
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    expect(await screen.findByRole("button", { name: "Read unread pages (0)" })).toBeDisabled();
+  });
 });

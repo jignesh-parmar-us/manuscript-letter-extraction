@@ -175,6 +175,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   const prev = at > 0 ? pages[at - 1] : undefined;
   const next = at >= 0 && at < pages.length - 1 ? pages[at + 1] : undefined;
   const nRead = pages.filter((p) => read.has(p.id)).length;
+  const unread = pages.filter((p) => !read.has(p.id)).map((p) => p.id);
   const source: TextSource = ours ? "search" : lm ? "lines_lm" : "lines";
   const reader = state?.reader ?? null;
   const lines = text?.lines ?? [];
@@ -442,6 +443,10 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
               title="Our reader reads every page of this part (about 7 s per line). The first time, it learns the letters first (a few minutes).">
               Read all pages
             </button>
+            <button disabled={running || !unread.length} onClick={() => readOurs(unread)}
+              title="Our reader reads only the pages it has not read yet (about 7 s per line)">
+              Read unread pages ({unread.length})
+            </button>
           </>
         ) : (
           <>
@@ -450,6 +455,10 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             </button>
             <button disabled={running || !pages.length} onClick={() => readPages()}>
               Read all pages
+            </button>
+            <button disabled={running || !unread.length} onClick={() => readPages(unread)}
+              title="Read only the pages that are not read yet">
+              Read unread pages ({unread.length})
             </button>
           </>
         )}
