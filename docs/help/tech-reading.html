@@ -54,7 +54,7 @@
     own alternatives for it (hOCR lstm choices), weighted by their confidences; the same beam search and minimum gain (3)
     choose. On the 73 checked lines: 5.06% of the characters wrong, 4.45% with the language model, against 6.1% for the
     cut-letter text (Tesseract only) and 7.5% with the reader and language model.</p>
-  <p><strong>Second opinion (line search)</strong> (<code>app/linesearch.py</code>, <code>ocr/segment.py</code>,
+  <p><strong>The line search and its second opinion</strong> (<code>app/linesearch.py</code>, <code>ocr/segment.py</code>,
     <code>docs/SEGMENTATION_PLAN.md</code>): each line's ink (its cut samples' masks pasted together) is read again
     without Tesseract. Candidate boundaries every 9 px plus empty columns and thin points below the headline; every
     stretch 0.2–2.4 × the typical letter width is a window, read by a linear reader with a <em>not a letter</em> class
@@ -62,9 +62,9 @@
     halves, letter + neighbour and 25–45% shifts as not a letter; balanced weights, negatives at 0.25); windows whose
     best letter is under 5% are dropped; a beam search (10) scores log p + 4 per letter − a width penalty + 0.5 ×
     the language model. Its reading (<code>search_dev</code>) is aligned with Tesseract's aksharas (difflib) and each
-    differing akshara is uncertain. On the 73 checked lines: 10.2% wrong alone, 6.6 s per line; the marks cover 19.4%
+    differing akshara is uncertain: these marks are the <em>second opinion</em>. They show in both Whole lines tabs and never change the text of either. On the 73 checked lines: 10.2% wrong alone, 6.6 s per line; the marks cover 19.4%
     of the aksharas and 88% of the mistakes left by Tesseract + language model.</p>
-  <p><strong>Whole lines (our reader)</strong>: the line search's reading with each akshara's columns on the line and
+  <p><strong>Whole lines (our reader)</strong> is the same line search shown as a tab of its own, with its own text instead of only marks (it needs only the cut pages, not Tesseract's reading): the line search's reading with each akshara's columns on the line and
     its ink rows as a box on the page (<code>whole_line.search_aksharas</code>), shown like Tesseract's; corrections
     and reviews are per line, shared. The reader keeps a hash of the reviewed letters it learned (label and place):
     when they change, Retrain is offered. <strong>Measure</strong> (<code>linesearch.measure</code>): every Read Book

@@ -252,7 +252,7 @@
       Data, where its letters go to Unsure to be labelled.</li>
   </ol>
   <ol class="steps" start="5">
-    <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span> or <span class="ui">Cut
+    <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span>, <span class="ui">Whole lines (our reader)</span> or <span class="ui">Cut
       letters</span> at the top. <strong>Whole lines</strong> (the best on the checked lines): <span class="ui">Read all
       pages</span>; Tesseract reads each line image as it is, no letters are cut; <em>With the language model</em> applies
       the corrections of Read Book → Dictionary (underlined). <span class="ui">Whole page</span> shows the page
@@ -261,10 +261,10 @@
       (◀ ▶). <span class="ui">Aligned text</span> puts each akshara under its letter (untick it for plain text). Click an akshara to see it on the page; ← → move between aksharas,
       ↑ ↓ between lines. <span class="ui">✎ Correct</span> a line and <span class="ui">Save</span>; <span class="ui">✓</span>
       marks it reviewed (a reviewed line is also a checked line in Line truth). <strong>Whole lines (our reader)</strong>
-      (after Tesseract has read the pages): <span class="ui">Read all pages</span>: our reader (the line search) reads the
+      (it needs only the cut pages; Tesseract need not have read them): <span class="ui">Read all pages</span>: our reader (the line search) reads the
       same lines without Tesseract, from this book's reviewed letters (the first time it learns them, a few minutes; then
-      about 7 s per line). Its text is shown in the same views; the aksharas where Tesseract reads differently are
-      highlighted in both tabs, and clicking one shows what the other read. On the checked lines the marks fall on about
+      about 7 s per line). Its text is shown in the same views; the aksharas where the two readers differ (the <em>second opinion</em>: the places most likely to be wrong) are
+      highlighted in both tabs, while the text of each tab stays that reader's own, and clicking one shows what the other read. On the checked lines the marks fall on about
       a fifth of the aksharas and catch 88% of Tesseract's remaining mistakes. When groups were reviewed or changed since
       it learned, it says so: <span class="ui">Retrain</span>. Retrain learns from your reviewed groups <em>and every
       checked line</em> (it finds which ink is which akshara of your text, so it also learns letters no group has yet;
