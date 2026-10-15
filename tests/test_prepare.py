@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import synthetic                                                    # noqa: E402
 from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
+from letter_extractor.pipeline import process_page                  # noqa: E402
 from letter_extractor.prepare import prepare_page, ruled_lines      # noqa: E402
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
@@ -52,6 +53,52 @@ class SyntheticPrepareTests(unittest.TestCase):
             self.assertEqual(self.page.ink[:, x0:x0 + 44].sum(), 0)
 
 
+class BorderTests(unittest.TestCase):
+    """Faint, broken side borders close to the text (BORDER_PLAN.md): the cut stays between them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rgb, cls.truth = synthetic.make_page(broken_borders=True)
+        off = Config()
+        off.border_clip = False
+        cls.old = prepare_page(cls.rgb, off)
+        cls.page = prepare_page(cls.rgb, Config())
+
+    def _border_ink(self, page):
+        return sum(int(page.ink[:, x0:x1].sum()) for x0, x1 in synthetic.BROKEN_BORDERS)
+
+    def test_without_the_clip_the_border_is_cut(self):
+        self.assertGreater(self._border_ink(self.old), 1000, "the test page must show the problem")
+
+    def test_border_is_not_ink(self):
+        self.assertEqual(self._border_ink(self.page), 0)
+        left, right = self.page.borders
+        self.assertTrue(205 <= left < 230, self.page.borders)
+        self.assertTrue(1160 < right <= 1182, self.page.borders)
+
+    def test_text_is_kept_and_the_folio_dropped(self):
+        truth = self.truth["red"] | self.truth["black"]
+        self.assertGreater((self.page.ink & truth).sum() / truth.sum(), 0.90)
+        self.assertGreater(self.page.block[0], synthetic.FOLIO[2])
+
+    def test_no_letter_is_cut_from_the_border(self):
+        d = process_page(self.rgb, Config())
+        for L in d.letters:
+            x, _, w, _ = L.box
+            for x0, x1 in synthetic.BROKEN_BORDERS:
+                self.assertFalse(x < x1 and x + w > x0 and L.mask[:, max(0, x0 - x):x1 - x].any(), (L.box, L.rules))
+
+    def test_pages_without_such_borders_do_not_change(self):
+        off = Config()
+        off.border_clip = False
+        rgb, _ = synthetic.make_page()
+        ruled = rgb.copy()
+        ruled[100:600, 700:704] = synthetic.BLACK_INK      # a rule between two text columns: never a border
+        lines, _, _ = synthetic.make_lines_page()
+        for img in (rgb, ruled, lines, synthetic.make_letters_page()[0]):
+            self.assertEqual(prepare_page(img, Config()).block, prepare_page(img, off).block)
+
+
 class RuledLineTests(unittest.TestCase):
     def test_a_long_headline_is_not_a_rule(self):
         ink = np.zeros((400, 1000), bool)
@@ -81,8 +128,9 @@ class SamplePageTests(unittest.TestCase):
 
     def _check_block(self, page):
         x, y, w, h = page.block
-        # text spans about x 400-3260, y 250-1520; folio numbers lie left of x 390 and right of x 3290
-        self.assertTrue(370 <= x <= 420 and 3240 <= x + w <= 3290, page.block)
+        # text spans about x 430-3215, y 250-1520, between the inner red rules (about x 428 and 3225 on
+        # the raw scans: the block stops there, BORDER_PLAN.md); folio numbers lie left of x 390 and right of x 3290
+        self.assertTrue(370 <= x <= 435 and 3215 <= x + w <= 3290, page.block)
         self.assertTrue(220 <= y <= 270 and 1500 <= y + h <= 1560, page.block)
 
     def test_page1_red_and_black(self):

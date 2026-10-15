@@ -41,6 +41,11 @@ class Config:
     block_row_frac: float = 0.05      # same for rows (low: gaps between lines must not split the block)
     block_gap_px: int = 60            # gaps up to this wide do not split the text block
     block_pad_px: int = 15            # margin added around the text block (matras at the edges)
+    border_clip: bool = True          # cut only between the left and right page borders (BORDER_PLAN.md)
+    border_max_rel_l: float = 0.8     # lighter ink mask used only to find borders (grey, broken border lines)
+    border_max_break_px: int = 6      # breaks up to this tall in a border column are bridged
+    border_min_run_frac: float = 0.12 # a column is a border if its ink runs this x page height (text: < 0.07)
+    border_search_px: int = 150       # a border counts only up to this far inside the text block's edge
 
     # ---- line detection (C2, FR-3) ------------------------------------------------
     line_spacing_px: int = 0          # line pitch; 0 = estimate per page (about 110 px on the samples)

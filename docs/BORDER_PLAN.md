@@ -1,12 +1,13 @@
 # Cutting only between the page borders
 
-A plan, not built. Page preparation (`prepare.py`, Phase 1 C1) erases border lines and cuts inside the
+Page preparation (`prepare.py`, Phase 1 C1) erases border lines and cuts inside the
 densest rectangle of ink. On pages with faint, broken borders the border is not erased, the rectangle
 grows to take it in, and every line ends (or starts) with a sliver of border cut as a "letter". This
 plan finds the borders another way, cuts only between them, and cuts the affected Read Book pages
 again, except pages with hand-checked work.
 
-Status: **plan, answered, not built** (2026-10-14).
+Status: **code built, pages not cut again yet** (2026-10-15). Section 8 records what changed from the
+plan and what is still to do.
 
 ---
 
@@ -142,3 +143,37 @@ Left out of this plan:
 1. **Training Data pages** with the same slivers: not counted, not cut again.
 2. **WhatsApp 8.31.19 PM**: stays protected and keeps its slivers.
 3. **WhatsApp 8.32.43 PM** (photo, dark page edge kept): not handled here.
+
+## 8. Changes from the plan (2026-10-15)
+
+- **A border is found by how far its ink runs, not by narrowness and a paper gap (3a).** Measured with
+  the lighter mask (0.8 × paper): coverage alone does not separate borders from text (Untitled-55's
+  border covers 0.3–0.5 of the rows, like text). Run length does: with breaks up to 6 px bridged, text
+  strokes run at most 94–123 px (printed 1944, 1933 samples, handwritten 1939), border columns
+  280–1600 px. A column is a border when its ink runs for `border_min_run_frac` (0.12) of the page
+  height, about 220 px. The narrowness and gap tests were dropped as not needed.
+- **Settings:** `border_clip` (true), `border_max_rel_l` (0.8), `border_max_break_px` (6),
+  `border_min_run_frac` (0.12), `border_search_px` (150: only columns outside the block or up to
+  150 px inside its edge count, so a rule or crease inside the text never clips it). In place of
+  `border_min_cover`, `border_max_width_px`, `border_min_gap_px`.
+- **Borders drawn in orange** on the debug image (3c).
+- **The raw sample pages and the handwritten book change too:** their red rules are removed, but rule
+  remains kept the block 20–30 px past the inner rule; the block now stops at it (checked by eye on
+  samples/page1, page2 and handwritten page 30). `tests/test_prepare.py` expects the new edges.
+  Training Data is not cut again (section 7); the change applies to pages cut from now on.
+- **The cached page ink** (`app/samples.py`, used to crop, join and split samples by hand) gets
+  version 3, so it is computed again with the borders.
+- Not fixed, seen while checking: 28.jpg has a crease running down through the middle of the text
+  (kept as before; it is not a border).
+
+### Still to do (stopped 2026-10-15 at the user's request)
+
+- **Reading quality on the checked lines (section 5) was not finished.** Set up on a scratchpad copy:
+  the 15 pages with line truth (now also 1, 4 and 37.jpg: 119 lines) cut again with the fix, all 119
+  lines put back on the same line numbers, read by Tesseract again, both caches built; the two scoring
+  runs (`tools/harness/run.py`, the same language model for both) were stopped before they printed.
+- **Read Book pages not cut again (section 4).** Nothing in the library changed. The step: back up,
+  then for every unprotected Read Book page of book 6 whose block changes, `Library.recut_page`, and
+  count the letters outside the new block before and after.
+- `docs/TUNING.md`: the numbers, once measured.
+

@@ -125,6 +125,7 @@ class PreparedPage:            # prepare.py (C1)
     rgb: np.ndarray            # the page as loaded, never modified
     paper, black, red, rules: np.ndarray   # bool masks: paper, black ink, red ink, removed ruled lines
     block: tuple | None        # text block x, y, w, h
+    borders: tuple             # inner columns of the left / right side borders found, or None
 
 @dataclass
 class Line:                    # lines.py (C2)
@@ -197,6 +198,7 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
   - black ink: lightness below 0.62 x the local paper lightness, and not red.
 - **Ruled lines:** straight ink runs longer than 15% of the page height or width are border rules and are removed from the ink masks, except a horizontal run with letters hanging from it (ink in the 22 px below it in at least half of its columns): that is the headline of a long printed word.
 - **Text block:** the main run of ink-dense columns, then of rows; folio numbers cover only a few lines, so they fall outside it.
+- **Side borders (added later, `docs/BORDER_PLAN.md`):** the block is narrowed to lie between the left and right border lines.
 - Remove specks smaller than `min_speck_px` (separately for red and black).
 
 **Output:** `debug/<page>_ink.png` (black ink in black, red ink in red, removed rules in blue, outside the block greyed out, block outlined in green).
@@ -207,6 +209,7 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
 - **The median window is 151 px, not 51.** With 51 px the window is about one letter wide; inside dense red text the "paper" estimate was pulled towards red (`a*` 150 instead of 134), so the red headlines and light strokes were lost. With 151 px paper and red ink separate cleanly (paper at 0, red ink at about +40 in `a*` difference).
 - **Ruled lines are removed by shape**, which the plan did not mention. On raw scans the red rules are red ink too; removing them is what lets the text block exclude them. Letters that cross a rule lose the crossing pixels, so pages cleaned by the border remover are still preferred.
 - **Headlines are not rules (added later).** On printed pages a long word's headline is as straight as a rule and often longer than 15% of the width, so it was erased and its letters were cut without it (about 6% of the samples of the printed books, on 14 of 23 pages). A horizontal run is now a rule only if nothing hangs from it: headlines measured 0.73-1.0 of their columns with ink just below, rules about 0. On every page of the seven books only headlines came back; vertical borders and the handwritten book's border frames are still removed. Samples already cut are given their headline back by `app/headlines.py` (list, fix, undo, with a backup), not by cutting again, so the review is kept. The cached page ink (`cache/<page>_ink.npz`) carries a version and is computed again after such a change.
+- **Cut only between the side borders (added 2026-10-15, `docs/BORDER_PLAN.md`).** Faint, broken borders (the 1944 printed book: a thin and a thick grey line in dashes of 10-230 px) were not removed as rules, and the text block took them in: 49 of 85 Read Book pages had a sliver of border cut as a letter at the end or start of most lines. A border is now found as a column whose ink, in a lighter mask (0.8 × paper) with breaks up to 6 px bridged, runs for 12% of the page height (text: at most 7%); the innermost one on each side, outside the block or up to 150 px inside it, limits the block. Pages without such a border keep their block. The raw sample pages and the handwritten book's pages now stop at the inner red rule instead of 20-30 px beyond it (rule remains were inside). Setting `border_clip` (off: the old block).
 
 ### C2. Line detection (FR-3)
 
@@ -654,6 +657,7 @@ The main settings as implemented (see `src/letter_extractor/config.py` for all o
 | `black_max_rel_l`, `red_min_da`, `red_min_dl` | C1 | 0.62, 14, 8 |
 | `rule_min_frac` | C1 | 0.15 of the page |
 | `rule_below_gap_px`, `rule_below_px`, `rule_headline_frac` | C1 | 3, 22, 0.5 (a run with letters hanging from it is a headline) |
+| `border_clip`, `border_max_rel_l`, `border_max_break_px`, `border_min_run_frac`, `border_search_px` | C1 | on, 0.8, 6, 0.12 of the page height, 150 (side borders limit the block) |
 | `min_speck_px` | C1 | 8 / 5 |
 | `line_spacing_px` | C2 | 0 = auto (≈ 112) |
 | `headline_min_run_px` | C2 | 25 |

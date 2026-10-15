@@ -2,7 +2,8 @@
 
 Works on raw scans and on pages already cleaned by the border remover. Ruled border lines are
 removed from the ink masks by shape (long straight runs), and the margin folio numbers, scanner
-background and tape marks fall outside the text block.
+background and tape marks fall outside the text block. Faint, broken side borders that survive as
+dashes limit the text block (vertical_borders), so nothing outside them is cut.
 """
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ class PreparedPage:
     red: np.ndarray                   # bool: red ink inside the text block
     rules: np.ndarray                 # bool: ruled-line pixels removed from the ink masks
     block: Optional[Box]              # text block, None if no text was found
+    borders: Tuple[Optional[int], Optional[int]] = (None, None)   # inner columns of the left and right
+                                                                   # border lines found (vertical_borders)
 
     @property
     def ink(self) -> np.ndarray:
@@ -135,6 +138,45 @@ def text_block(ink: np.ndarray, cfg: Config) -> Optional[Box]:
     return int(x0), int(y0), int(x1 - x0), int(y1 - y0)
 
 
+def _longest_runs(m: np.ndarray) -> np.ndarray:
+    """Longest vertical run of True in every column."""
+    best = np.zeros(m.shape[1], np.int32)
+    cur = np.zeros(m.shape[1], np.int32)
+    for row in m:
+        cur = np.where(row, cur + 1, 0)
+        np.maximum(best, cur, out=best)
+    return best
+
+
+def vertical_borders(faint: np.ndarray, block: Box, cfg: Config) -> Tuple[Optional[int], Optional[int]]:
+    """Inner columns of the left and right border lines next to the text block, or None. Faint, broken
+    borders survive `ruled_lines` as dashes; here a border is a column whose (lightly thresholded) ink
+    runs for `border_min_run_frac` of the page height once small breaks are bridged. Text never runs
+    that long: its strokes stop between lines. Only columns outside the block or up to
+    `border_search_px` inside its edge count, so a rule between two text columns never clips text."""
+    H, W = faint.shape
+    x, _, w, _ = block
+    m = cv2.dilate(faint.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_RECT, (max(1, cfg.rule_slant_px), 1)))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (1, cfg.border_max_break_px + 1)))
+    min_run = cfg.border_min_run_frac * H
+    a = max(0, min(W, x + cfg.border_search_px))
+    left = np.flatnonzero(_longest_runs(m[:, :a] > 0) >= min_run)
+    b = max(0, min(W, x + w - cfg.border_search_px))
+    right = np.flatnonzero(_longest_runs(m[:, b:] > 0) >= min_run) + b
+    return (int(left[-1]) if left.size else None), (int(right[0]) if right.size else None)
+
+
+def clip_to_borders(block: Box, borders: Tuple[Optional[int], Optional[int]]) -> Box:
+    """The block narrowed to lie between the borders (never widened)."""
+    x, y, w, h = block
+    x0, x1 = x, x + w
+    if borders[0] is not None:
+        x0 = max(x0, borders[0] + 1)
+    if borders[1] is not None:
+        x1 = min(x1, borders[1])
+    return x0, y, max(0, x1 - x0), h
+
+
 def remove_specks(mask: np.ndarray, params: InkParams) -> np.ndarray:
     n, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
     keep = stats[:, cv2.CC_STAT_AREA] >= params.min_speck_px
@@ -158,18 +200,24 @@ def prepare_page(rgb: np.ndarray, cfg: Config) -> PreparedPage:
     black &= ~rules
 
     block = text_block(red | black, cfg)
+    borders: Tuple[Optional[int], Optional[int]] = (None, None)
+    if block is not None and cfg.border_clip:
+        faint = (paper & (L < cfg.border_max_rel_l * paper_L)) | red | black | rules
+        borders = vertical_borders(faint, block, cfg)
+        block = clip_to_borders(block, borders)
     inside = np.zeros_like(paper)
     if block is not None:
         x, y, w, h = block
         inside[y:y + h, x:x + w] = True
     red = remove_specks(red & inside, cfg.red)
     black = remove_specks(black & inside, cfg.black)
-    return PreparedPage(rgb=rgb, paper=paper, black=black, red=red, rules=rules, block=block)
+    return PreparedPage(rgb=rgb, paper=paper, black=black, red=red, rules=rules, block=block, borders=borders)
 
 
 def ink_overlay(page: PreparedPage) -> np.ndarray:
     """Debug view: black ink in black, red ink in red, removed ruled lines in blue, everything
-    outside the text block or the paper greyed out, text block outlined in green."""
+    outside the text block or the paper greyed out, text block outlined in green, page borders that
+    limit the cut (vertical_borders) as orange lines."""
     H, W = page.paper.shape
     out = np.full((H, W, 3), 245, np.uint8)
     faded = (0.35 * page.rgb.astype(np.float32) + 0.65 * 160).astype(np.uint8)
@@ -185,4 +233,7 @@ def ink_overlay(page: PreparedPage) -> np.ndarray:
     if page.block is not None:
         x, y, w, h = page.block
         cv2.rectangle(out, (x, y), (x + w - 1, y + h - 1), (0, 170, 0), 3)
+    for bx in page.borders:
+        if bx is not None:
+            cv2.line(out, (bx, 0), (bx, H - 1), (240, 140, 0), 3)
     return out

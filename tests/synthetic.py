@@ -25,15 +25,31 @@ def _border(img, x0, mirror=False):
         img[SCANNER + 10:H - SCANNER - 10, x0 + a:x0 + b] = c
 
 
-def make_page(seed=0):
-    """Return (rgb, truth) where truth maps 'red' / 'black' to the bool mask of the drawn text."""
+# broken borders (make_page(broken_borders=True)): x ranges of the thin and thick line on each side
+BROKEN_BORDERS = [(198, 205), (209, 212), (1175, 1178), (1182, 1189)]
+
+
+def _broken_border(img, x0, x1):
+    """A border line as the 1944 scans show it: dashes with short breaks, none long enough for a rule."""
+    for y in range(40, H - 40, 74):
+        img[y:y + 70, x0:x1] = BLACK_INK
+
+
+def make_page(seed=0, broken_borders=False):
+    """Return (rgb, truth) where truth maps 'red' / 'black' to the bool mask of the drawn text.
+    `broken_borders`: instead of the ruled red/yellow borders, faint broken thin + thick lines close to
+    the text on both sides (BROKEN_BORDERS), which survive rule removal as dashes."""
     rng = np.random.default_rng(seed)
     img = np.empty((H, W, 3), np.float32)
     img[:] = PAPER
     img += np.linspace(-10, 10, W)[None, :, None]           # uneven paper tone
     img += rng.normal(0, 3.0, (H, W, 1))                     # paper grain
-    _border(img, 150)
-    _border(img, W - 150 - 44, mirror=True)
+    if broken_borders:
+        for x0, x1 in BROKEN_BORDERS:
+            _broken_border(img, x0, x1)
+    else:
+        _border(img, 150)
+        _border(img, W - 150 - 44, mirror=True)
     truth = {"red": np.zeros((H, W), np.uint8), "black": np.zeros((H, W), np.uint8)}
     x0, y0, x1, y1 = BLOCK
     for i, y in enumerate(range(y0 + 20, y1, LINE_PITCH)):

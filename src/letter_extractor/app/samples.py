@@ -35,7 +35,7 @@ from .db import Book, Line, Page, Sample
 from .library import Library, NotFound, file_sha256
 
 Box = Tuple[int, int, int, int]
-INK_VERSION = 2       # raised when page preparation changes the ink (2: headlines are not rules)
+INK_VERSION = 3       # raised when page preparation changes the ink (2: headlines are not rules; 3: side borders)
 
 
 # ---- the ink of a page ----------------------------------------------------------------------------

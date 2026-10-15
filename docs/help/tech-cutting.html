@@ -27,7 +27,7 @@
   <div class="flow">
     <div class="stage data">
       <div class="title">Per page</div>
-      <div class="node"><b>1. Prepare the page</b><span class="small">paper vs scanner background · paper tone · black / red ink masks · ruled lines · text block · specks</span></div>
+      <div class="node"><b>1. Prepare the page</b><span class="small">paper vs scanner background · paper tone · black / red ink masks · ruled lines · text block · side borders · specks</span></div>
       <div class="arrow">↓</div>
       <div class="node"><b>2. Find the lines</b><span class="small">headline peaks · traced headlines · boundaries · ink blobs to lines · line images</span></div>
       <div class="arrow">↓</div>
@@ -68,6 +68,12 @@
     <li><strong>Text block:</strong> column and row ink profiles, smoothed over 41 px; the longest run of columns with at
       least 20 % of a typical text column's ink (gaps up to 60 px allowed), then the same for rows (5 %), plus a 15 px
       margin. Margin numbers and tape marks fall outside.</li>
+    <li><strong>Side borders:</strong> faint or broken border lines are not long enough to be removed as ruled lines,
+      and used to end up inside the text block, cut as a "letter" at the end of every line. A lighter ink mask
+      (L below 0.8 × the paper's L) is widened by 5 px and its breaks of up to 6 px are bridged; a column whose ink then
+      runs for 12 % of the page height is a border (text strokes stop between lines: under 7 %). The innermost such
+      column on each side, outside the block or up to 150 px inside its edge, limits the block: nothing beyond it is
+      cut. A page without such a border keeps its block. The debug image draws the borders as orange lines.</li>
     <li><strong>Specks:</strong> ink components smaller than 8 px (black) or 5 px (red) are removed.</li>
   </ol>
 
