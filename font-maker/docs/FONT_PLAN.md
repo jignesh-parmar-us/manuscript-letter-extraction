@@ -411,6 +411,8 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 
 ## 6. Left for later (Phase 2+)
 
+**Phase 2 is planned in `FONT_PLAN_PHASE2.md` (F7–F13, 2026-10-16)**, with a letter writer on the Try it tab first.
+
 - **Generate** for missing characters: vowel signs, the virama and half-letters cut out of the aksharas, or
   shapes generated in the book's style. Then aksharas without their own group can be put together properly
   (half forms, reph, vowel-sign placement over every consonant).
