@@ -1,12 +1,13 @@
-// One font (F1): its name (rename at any time; it is used from the next build on), its book, the group
-// statuses it uses, and Delete. Glyphs (F2), Build (F5) and Try it (F6) come here later.
+// One font, in tabs: Glyphs (F2, Glyphs.tsx) and Settings (F1: its name, renamed at any time and used from
+// the next build on; the group statuses it uses; Delete). Build (F5) and Try it (F6) come here later.
 import { FormEvent, useEffect, useState } from "react";
 import { api, deleteMessage, Font, Source, Status, usable } from "./api";
 import { useConfirm } from "./Confirm";
+import Glyphs from "./Glyphs";
 import StatusChoice from "./StatusChoice";
 import { go } from "./route";
 
-export default function FontView({ fontId }: { fontId: string }) {
+export default function FontView({ fontId, tab }: { fontId: string; tab: string }) {
   const [font, setFont] = useState<Font | null>(null);
   const [source, setSource] = useState<Source | undefined>();
   const [name, setName] = useState("");
@@ -61,6 +62,16 @@ export default function FontView({ fontId }: { fontId: string }) {
             {usable(source, font.statuses)} groups can become glyphs.{" "}
             {font.last_build ? `Last built ${new Date(font.last_build).toLocaleString()}.` : "Not built yet."}
           </p>
+          <nav className="tabs">
+            {[["glyphs", "Glyphs"], ["settings", "Settings"]].map(([t, text]) => (
+              <button key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => go(`/fonts/${fontId}/${t}`)}>
+                {text}
+              </button>
+            ))}
+          </nav>
+          {tab === "glyphs" && <Glyphs key={font.statuses.join()} fontId={fontId} />}
+          {tab === "settings" && (
+          <>
           <div className="card">
             <form className="row" onSubmit={rename}>
               <label className="field">
@@ -81,6 +92,8 @@ export default function FontView({ fontId }: { fontId: string }) {
           <button className="danger" onClick={remove}>
             Delete font
           </button>
+          </>
+          )}
         </>
       )}
     </>

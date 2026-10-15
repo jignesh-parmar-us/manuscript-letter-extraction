@@ -3,6 +3,7 @@
 ```
 <library>/fonts/f0001/
   font.json     name, sources (book ids), group statuses, choices (F2-F5), build number
+  glyphs/       the glyph images and glyphs.json (F2, glyphs.py)
   builds/       the built fonts (F5)
 ```
 
@@ -109,8 +110,8 @@ class Projects:
         self._write(folder, {
             "id": font_id, "name": name, "sources": [int(s) for s in sources],
             "statuses": statuses,
-            "left_out": [], "picks": {}, "filled": [],             # choices made in F2 / F5
-            "settings": {"copies": 8, "mark_filled": True},
+            "picks": {}, "left_out": {}, "filled": [],             # choices made in F2 / F5
+            "settings": {"copies": 8, "min_agree": 0.6, "mark_filled": True},
             "build": 0, "created_at": now, "updated_at": now})
         return self.get(font_id)
 
@@ -125,6 +126,14 @@ class Projects:
         data["updated_at"] = _now()
         self._write(folder, data)
         return self.get(font_id)
+
+    def set_choices(self, font_id: str, picks: Dict, left_out: Dict) -> None:
+        """Your picks and left-out groups (F2), each kept with its group id and label:
+        picks {group id: {"group", "label", "sample"}}, left_out {group id: {"group", "label"}}."""
+        folder = self._folder(font_id)
+        data = self._read(folder)
+        data.update(picks=picks, left_out=left_out, updated_at=_now())
+        self._write(folder, data)
 
     def delete(self, font_id: str) -> None:
         folder = self._folder(font_id)

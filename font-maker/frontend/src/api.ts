@@ -12,7 +12,7 @@ export function token(): string {
   return window.__TOKEN__ ?? new URLSearchParams(window.location.search).get("token") ?? "";
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
@@ -70,6 +70,50 @@ export interface Font {
   updated_at: string;
 }
 
+// One glyph (font_maker/glyphs.py): made from the group's copies ("average" / "copy") or your "pick".
+export interface Glyph {
+  group: number;
+  book: number;
+  code: string;
+  kind: string;
+  status: Status;
+  label_dev: string;
+  label_guj: string;
+  method: "average" | "copy" | "pick";
+  agree: number;
+  used: number[];
+  count: number; // copies in the group
+  image: string;
+  left_out: boolean;
+  lost: boolean; // your pick was lost: the system pick is used again
+}
+
+export interface LostPick {
+  group: number;
+  label: string;
+  sample: number;
+  reason: string;
+}
+
+export interface GlyphState {
+  job: { running: boolean; done: number; total: number; error: string | null };
+  glyphs: Glyph[];
+  cut_errors: { group: number; code: string; label_dev: string; label_guj: string }[];
+  lost: LostPick[];
+}
+
+export interface Copy {
+  id: number;
+  book: number;
+  image: string;
+}
+
+export type Choice = "system" | "copy" | "left_out" | "keep";
+
+// Files are loaded by <img> tags, which cannot send the token header: it goes in the address.
+export const glyphUrl = (fontId: string, g: Glyph) => `/files/fonts/${fontId}/glyphs/${g.image}?token=${token()}`;
+export const copyUrl = (c: Copy) => `/files/books/${c.book}/${c.image}?token=${token()}`;
+
 export const api = {
   app: () => request<AppInfo>("GET", "/api/app"),
   sources: () => request<Source[]>("GET", "/api/sources"),
@@ -80,6 +124,11 @@ export const api = {
   changeFont: (id: string, change: { name?: string; statuses?: Status[] }) =>
     request<Font>("PATCH", `/api/fonts/${id}`, change),
   deleteFont: (id: string) => request<void>("DELETE", `/api/fonts/${id}`),
+  checkGlyphs: (id: string) => request<GlyphState>("POST", `/api/fonts/${id}/glyphs/check`),
+  glyphs: (id: string) => request<GlyphState>("GET", `/api/fonts/${id}/glyphs`),
+  copies: (id: string, group: number) => request<Copy[]>("GET", `/api/fonts/${id}/glyphs/${group}/copies`),
+  choose: (id: string, group: number, choice: Choice, sample?: number) =>
+    request<{ glyph: Glyph | null; lost: LostPick[] }>("PUT", `/api/fonts/${id}/glyphs/${group}/choice`, { choice, sample }),
 };
 
 // How many groups of a book a font with these statuses can use.

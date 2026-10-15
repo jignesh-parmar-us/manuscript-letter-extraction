@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing ક (or क
 draws the book's own ક. Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** F0 and F1 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F2.
+**Status:** F0, F1 and F2 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F3.
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -254,6 +254,26 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
   copy when copies disagree; a pick is stored with group and label, and a deleted sample turns it into
   "your pick was lost"; a second open with nothing changed recomputes **no** glyph (counted, not timed); a pick
   remakes exactly one glyph; the library database unchanged.
+
+**Done (2026-10-15).** As planned, with these differences:
+- **How much copies agree** is the median overlap (IoU) of **every pair** of aligned copies, not the overlap of
+  each copy with the average. With only two copies the average holds both shapes, so that comparison always
+  looked good (the test caught a square and a bar being averaged). Below `min_agree` (0.6, in the font's
+  settings) the single best copy is used.
+- Choices: `system`, `copy` (one copy), `left_out`, `keep` (use in the font again). `picks` and `left_out` in
+  `font.json` are keyed by group id; each entry keeps the group id and the label. Choosing again on a glyph
+  whose pick was lost forgets that pick (unless the choice is a new copy). The "lost" list has a **Forget**
+  button.
+- Opening the Glyphs tab runs the check in the background (`POST …/glyphs/check`); the screen asks for
+  progress once a second only while it runs. When nothing changed, no file is written.
+- Filters in Phase 1 F2: all, your picks, copies disagree, left out, not reviewed, your pick was lost.
+  *Missing* and *filled* come with F5, where those characters are found.
+- Groups without any copy are skipped (book 6: 532 of the 544 usable groups have copies).
+- Check on book 6, read-only, written only to the scratchpad: 40 glyphs in 0.28 s (all 532 ≈ 4 s, once);
+  28 averaged, 12 one copy. The shapes are clean. Book 6 is printed in Devanagari letter shapes (with the
+  headline), so its font shows these shapes for Gujarati and Devanagari typing alike.
+- Tests: 3 backend tests (images; counted remaking, a pick, a lost pick; the API with files), 1 screen smoke
+  test. The whole `font-maker/tests` run takes ≈ 1 s.
 
 ### F3: Metrics (≈ 2 h)
 - `font_maker/metrics.py`: baseline, scale, vertical offset and advance width (section 3, steps 6–7).

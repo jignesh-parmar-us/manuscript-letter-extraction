@@ -5,7 +5,8 @@ draws the book's own letters. A small separate app in this project. It reads the
 (`library.db`) **read-only** and writes only into `<library>/fonts/`.
 
 Plan and status: [docs/FONT_PLAN.md](docs/FONT_PLAN.md) (F0–F6). Done: F0 (the skeleton: app, screen, tests) and F1 (the main page: pick a book, create, rename and
-delete fonts; a font's files are in `<library>/fonts/<id>/`).
+delete fonts; a font's files are in `<library>/fonts/<id>/`) and F2 (Glyphs: one image per
+group from its best copies; pick a copy yourself or leave a group out).
 
 ## Run (macOS, zsh, from the project folder)
 
@@ -32,7 +33,8 @@ The reading app's tests (`discover -s tests`, `npm test`) do not run these, and 
 ## Layout
 
 ```
-src/font_maker/   main.py (start), api.py (backend), store.py (read-only library), projects.py (font projects)
+src/font_maker/   main.py (start), api.py (backend), store.py (read-only library),
+                  projects.py (font projects), glyphs.py (glyph images)
 frontend/         the screen (React); uses the reading app's stylesheet (../frontend/src/styles.css)
 tests/            backend tests
 docs/             the plan; help pages from F6
