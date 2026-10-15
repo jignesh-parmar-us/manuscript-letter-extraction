@@ -1,0 +1,5 @@
+# Font Maker runs in the project's .venv, on top of the main requirements.txt (fastapi, uvicorn,
+# sqlalchemy, pywebview, httpx are already there). Packages it adds come with later chunks:
+#   fontTools, potracer   (F4/F5: outlines and the .ttf)
+#   uharfbuzz             (F5 tests only: shaping check)
+-r ../requirements.txt

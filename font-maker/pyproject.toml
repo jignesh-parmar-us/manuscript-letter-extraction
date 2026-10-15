@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "font-maker"
+version = "0.1.0"
+description = "Build an installable font from a book's letter groups (reads the letter-extractor library read-only)."
+requires-python = ">=3.10"
+# fontTools and potracer come with F4/F5 (font-maker/docs/FONT_PLAN.md)
+dependencies = ["letter-extractor", "fastapi>=0.110", "uvicorn>=0.29", "sqlalchemy>=2.0"]
+
+[project.optional-dependencies]
+test = ["httpx>=0.27"]
+
+[project.gui-scripts]
+font-maker = "font_maker.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"font_maker" = ["static/*.html", "static/assets/*", "data/*"]

@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing ક (or क
 draws the book's own ક. Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** a plan, not built. Written 2026-10-15; decisions answered the same day (section 7). Next: F0.
+**Status:** F0 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F1.
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -183,6 +183,17 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - `frontend/` (Vite + React + TypeScript), built into `src/font_maker/static/`.
 - `tests/` with the import-separation test and the read-only check.
 - A short pointer in the root `CLAUDE.md` and `README.md`.
+
+**Done (2026-10-15).** As planned, with these differences:
+- `requirements.txt` adds nothing yet (it only includes the main one): fontTools and potracer come with F4/F5,
+  uharfbuzz with the F5 tests.
+- The screen's packages are pinned to the exact versions of the reading app's screen, and its
+  `package-lock.json` started as a copy of that one. Plain `^` ranges made npm fail on vitest's optional
+  browser plugins.
+- The built screen (`src/font_maker/static/`) and `node_modules/` are not committed (`font-maker/.gitignore`).
+- The library is opened through Python's `sqlite3` with a `file:` address and `mode=ro`, so a library path
+  with spaces works.
+- Tests: 4 backend tests (0.4 s), 1 screen smoke test.
 
 ### F1: Main page: books and font projects (≈ 2.5 h)
 - `GET /api/sources`: the books with writing type and group counts per status (and how many can become glyphs).

@@ -11,6 +11,9 @@ in `frontend/`, SQLite library at `~/Documents/Manuscript Letters`.
 - Backend tests: `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests`
 - Screen tests and type check: `npm test`, `npm run typecheck`
 - The Mac is Intel. Give macOS commands for zsh (`set VAR=x` is Windows syntax).
+- **Font Maker** is a separate app in `font-maker/` (own code, screen, tests; reads the library read-only).
+  Its commands, plan and rules are in `font-maker/README.md` and `font-maker/docs/FONT_PLAN.md`. Keep its
+  tests few and light; font-maker-only changes never need the main suites.
 
 ## Commits
 - One commit per task or fix. Commit only when I say "commit" (or "implement + commit").

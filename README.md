@@ -25,6 +25,9 @@ set PYTHONPATH=src
 
 Stop the app by closing its window, or with Ctrl+C in the Terminal in browser mode. More about the app: [The app](#the-app-c5d).
 
+**Font Maker** (a separate small app that builds an installable font from a book's letter groups):
+[font-maker/README.md](font-maker/README.md).
+
 **Step by step through a new book** (printed or handwritten, with the least hand work): [docs/NEW_BOOK_GUIDE.md](docs/NEW_BOOK_GUIDE.md). The same guide opens from the **Help** link in the app's header ([docs/help/new-book.html](docs/help/new-book.html)).
 
 ## Install
