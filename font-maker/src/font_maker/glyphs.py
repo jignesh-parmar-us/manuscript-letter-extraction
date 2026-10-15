@@ -37,6 +37,7 @@ from letter_extractor.ocr.aksharas import split_aksharas
 from .metrics import Lines, estimate, measure
 from .projects import ProjectError, Projects
 from .store import Store
+from .trace import svg_path, trace
 
 ALGO = 2                    # raise when the way a glyph is made changes: every glyph is then remade
                             # (2: glyphs keep their copies' ink boxes, for F3)
@@ -185,6 +186,7 @@ class GlyphMaker:
         self.jobs: Dict[str, Dict] = {}       # font id -> {"running", "done", "total", "error"}
         self.lock = threading.Lock()
         self.made = 0                         # glyph images made since start (counted by the tests)
+        self.traced = 0                       # outlines traced since start (F4, counted by the tests)
 
     def _dir(self, font_id: str) -> Path:
         return self.projects.dir / font_id / "glyphs"
@@ -208,6 +210,12 @@ class GlyphMaker:
                                    "metrics": state["metrics"]},
                                   ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, folder / "glyphs.json")
+
+    def _remove(self, font_id: str, image: str) -> None:
+        """A glyph image that is no longer used, with its outline (F4)."""
+        folder = self._dir(font_id)
+        (folder / image).unlink(missing_ok=True)
+        (folder / (image + ".outline.json")).unlink(missing_ok=True)
 
     def forget(self, font_id: str) -> None:
         """The font was deleted: drop what is kept in memory."""
@@ -268,7 +276,7 @@ class GlyphMaker:
             name = f"{g.book_id}-{g.code}-{fp}.png"
             cv2.imwrite(str(folder / name), np.where(img, 0, 255).astype(np.uint8))
             if old and old.get("image") and old["image"] != name:
-                (folder / old["image"]).unlink(missing_ok=True)
+                self._remove(font_id, old["image"])
             self.made += 1
             glyph = {"fp": fp, "image": name, "method": method, "agree": round(agree, 3), "used": used,
                      "size": [int(img.shape[1]), int(img.shape[0])],
@@ -294,7 +302,7 @@ class GlyphMaker:
         estimate(list(out.values()), SCALE)                      # glyphs made only from generated letters
         for gid, old in st["glyphs"].items():                    # groups no longer in the font
             if gid not in out and old.get("image"):
-                (self._dir(font_id) / old["image"]).unlink(missing_ok=True)
+                self._remove(font_id, old["image"])
         changed = (out, cut_errors, lost, lines.summary) != (st["glyphs"], st["cut_errors"], st["lost"], st["metrics"])
         st.update(glyphs=out, cut_errors=cut_errors, lost=lost, metrics=lines.summary)
         if changed or not (self._dir(font_id) / "glyphs.json").is_file():
@@ -358,6 +366,32 @@ class GlyphMaker:
             estimate(list(st["glyphs"].values()), SCALE)
         self._save(font_id)
         return {"glyph": st["glyphs"].get(group_id), "lost": st["lost"]}
+
+    def outline(self, font_id: str, group_id: int) -> Dict:
+        """The glyph's outline (F4): traced the first time it is asked for, then read from its file."""
+        glyph = self._loaded(font_id)["glyphs"].get(group_id)
+        if glyph is None:
+            raise ProjectError(f"Group {group_id} has no glyph in this font.")
+        return {"contours": self.contours(font_id, glyph), "size": [glyph["size"][0] / SCALE, glyph["size"][1] / SCALE]}
+
+    def contours(self, font_id: str, glyph: Dict) -> List[Dict]:
+        folder = self._dir(font_id)
+        path = folder / (glyph["image"] + ".outline.json")
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+        img = cv2.imread(str(folder / glyph["image"]), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise ProjectError(f"The image of {glyph['label_dev']} is missing; open the Glyphs tab to make it again.")
+        contours = trace(img < 128, SCALE)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(contours), encoding="utf-8")
+        os.replace(tmp, path)
+        self.traced += 1
+        return contours
+
+    def svg(self, font_id: str, group_id: int) -> Dict:
+        out = self.outline(font_id, group_id)
+        return {"d": svg_path(out["contours"]), "size": out["size"], "contours": len(out["contours"])}
 
     def copies(self, font_id: str, group_id: int, limit: int = 120) -> List[Dict]:
         """A group's copies, best first, to pick one from (their images are the library's files)."""

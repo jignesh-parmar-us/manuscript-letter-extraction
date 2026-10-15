@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F2). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F4). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -10,6 +10,7 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
            GET  /api/fonts/{id}/glyphs         the glyphs, kept in memory, and the progress (F2, glyphs.py)
            GET  /api/fonts/{id}/glyphs/{group}/copies   a group's copies to pick from
            PUT  /api/fonts/{id}/glyphs/{group}/choice   system pick / one copy / left out / keep
+           GET  /api/fonts/{id}/glyphs/{group}/outline  the traced outline as an SVG path (F4, trace.py)
   files    GET /files/fonts/{id}/glyphs/{name} (a glyph image), GET /files/books/{id}/{path} (a copy's image)
 """
 from __future__ import annotations
@@ -114,6 +115,10 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
     @app.get("/api/fonts/{font_id}/glyphs/{group_id}/copies", dependencies=auth)
     def copies(font_id: str, group_id: int) -> List[Dict]:
         return maker.copies(font_id, group_id)
+
+    @app.get("/api/fonts/{font_id}/glyphs/{group_id}/outline", dependencies=auth)
+    def outline(font_id: str, group_id: int) -> Dict:
+        return maker.svg(font_id, group_id)
 
     @app.put("/api/fonts/{font_id}/glyphs/{group_id}/choice", dependencies=auth)
     def choose(font_id: str, group_id: int, body: Choice) -> Dict:

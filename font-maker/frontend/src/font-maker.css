@@ -33,6 +33,9 @@
   background: #fff;
   border: 1px solid var(--line);
 }
+svg.glyph-big path {
+  fill: #000;
+}
 .grid.copies .tile img {
   height: 48px;
 }

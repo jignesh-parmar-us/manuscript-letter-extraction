@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing क in Word
 draws the book's own क. **Devanagari only** (decided 2026-10-15, see section 7, decision 5). Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** F0–F3 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F4.
+**Status:** F0–F4 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F5.
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -311,6 +311,25 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 ### F4: Tracing (≈ 2 h)
 - `font_maker/trace.py`: image → curves (potrace), in font units, with holes the right way round (ઠ, ઢ, ૦).
 - Tests: a ring traces to an outer and an inner curve. A filled square has the expected area.
+
+**Done (2026-10-15).** As planned, with these details:
+- **Traced at 2× the page size**, not at the glyph images' 4×: on book 6, 34 ms a glyph instead of 60 ms
+  (all 532 glyphs: ≈ 18 s instead of 32 s), and the outlines cover the image as well (overlap 0.96 both;
+  checked by eye on ठ श्री कु ह्म द्ध ष्ट क ढ). Specks smaller than 10 traced pixels are dropped.
+- **Traced only when needed:** when a glyph's dialog opens, and in F5's build. The outline is saved next to
+  its image (`<image>.outline.json`) and goes with it when the glyph changes, so a glyph is traced once. The
+  Glyphs tab stays as fast as in F2/F3.
+- `potracer` takes `False` as ink: the image is passed inverted.
+- **Direction:** each curve's depth (inside how many others) decides outer or hole; it is turned round when
+  needed (TrueType: outer clockwise, holes counter-clockwise, y up). Book 6: ठ ढ क ह्म = one outer + one hole,
+  श्री = one outer + three holes; all convert to TrueType quadratic curves with fontTools' `Cu2QuPen`.
+- Outlines are kept in page pixels from the image's top-left; `trace.draw` turns them into font units with
+  F3's `top` (y up, baseline 0) for F5.
+- Screen: the glyph dialog shows the outline next to the image, filled by the "nonzero" rule like a font, so
+  a hole running the wrong way would show filled.
+- Packages: `fonttools`, `potracer` in `font-maker/requirements.txt` and `pyproject.toml`.
+- Tests: 3 backend tests (square area; ring = outer + hole running the other way; an outline is traced once
+  and removed with its image); the whole `font-maker/tests` run ≈ 1 s. The screen smoke test checks the outline.
 
 ### F5: Build the font, missing and filled (≈ 4 h)
 - `font_maker/build.py`: base glyphs, akshara glyphs, GSUB ligature rules for Devanagari (short-i order), names,

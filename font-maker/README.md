@@ -7,12 +7,14 @@ browser draws the book's own letters (Devanagari only; see the plan, section 7).
 Plan and status: [docs/FONT_PLAN.md](docs/FONT_PLAN.md) (F0–F6). Done: F0 (the skeleton: app, screen, tests) and F1 (the main page: pick a book, create, rename and
 delete fonts; a font's files are in `<library>/fonts/<id>/`) and F2 (Glyphs: one image per
 group from its best copies; pick a copy yourself or leave a group out) and F3 (where each glyph sits
-on the line, its width, letter gap and word space; view "On the line").
+on the line, its width, letter gap and word space; view "On the line") and F4 (each glyph traced into
+outlines when needed, shown in its dialog).
 
 ## Run (macOS, zsh, from the project folder)
 
 ```sh
 npm --prefix font-maker/frontend install        # once
+.venv/bin/python -m pip install -r font-maker/requirements.txt     # once (fontTools, potracer)
 npm --prefix font-maker run build               # build the screen (again after changes in font-maker/frontend/)
 PYTHONPATH=src:font-maker/src .venv/bin/python -m font_maker --browser          # port 8676
 PYTHONPATH=src:font-maker/src .venv/bin/python -m font_maker --library DIR      # another library folder
@@ -35,7 +37,8 @@ The reading app's tests (`discover -s tests`, `npm test`) do not run these, and 
 
 ```
 src/font_maker/   main.py (start), api.py (backend), store.py (read-only library),
-                  projects.py (font projects), glyphs.py (glyph images), metrics.py (places)
+                  projects.py (font projects), glyphs.py (glyph images), metrics.py (places),
+                  trace.py (outlines)
 frontend/         the screen (React); uses the reading app's stylesheet (../frontend/src/styles.css)
 tests/            backend tests
 docs/             the plan; help pages from F6

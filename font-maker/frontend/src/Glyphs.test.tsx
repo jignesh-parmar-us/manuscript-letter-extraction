@@ -13,6 +13,7 @@ test("pick a glyph and leave it out", async () => {
   const calls: { method: string; url: string; body?: string }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
     calls.push({ method: init.method ?? "GET", url, body: init.body as string | undefined });
+    if (url.endsWith("/outline")) return new Response(JSON.stringify({ d: "M0 0L50 0L50 77Z", size: [50, 77], contours: 1 }));
     if (url.endsWith("/copies")) return new Response(JSON.stringify([{ id: 1, book: 6, image: "letters/a.png" }]));
     if (init.method === "PUT") return new Response(JSON.stringify({ glyph: { ...GLYPH, left_out: true }, lost: [] }));
     return new Response(JSON.stringify(STATE));
@@ -21,6 +22,7 @@ test("pick a glyph and leave it out", async () => {
   fireEvent.click(await screen.findByTitle("कि કિ: average of 3"));
   expect(await screen.findByLabelText("Use copy 1")).toBeInTheDocument();
   expect(screen.getByText("21 px below the line, 77 px tall, 50 px wide.")).toBeInTheDocument();
+  expect(await screen.findByTitle("Outline")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Leave out of the font" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Use in the font again" })).toBeInTheDocument());
   const put = calls.find((c) => c.method === "PUT")!;

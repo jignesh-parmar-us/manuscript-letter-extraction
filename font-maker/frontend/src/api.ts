@@ -143,6 +143,8 @@ export const api = {
   deleteFont: (id: string) => request<void>("DELETE", `/api/fonts/${id}`),
   checkGlyphs: (id: string) => request<GlyphState>("POST", `/api/fonts/${id}/glyphs/check`),
   glyphs: (id: string) => request<GlyphState>("GET", `/api/fonts/${id}/glyphs`),
+  outline: (id: string, group: number) =>
+    request<{ d: string; size: [number, number]; contours: number }>("GET", `/api/fonts/${id}/glyphs/${group}/outline`),
   copies: (id: string, group: number) => request<Copy[]>("GET", `/api/fonts/${id}/glyphs/${group}/copies`),
   choose: (id: string, group: number, choice: Choice, sample?: number) =>
     request<{ glyph: Glyph | null; lost: LostPick[] }>("PUT", `/api/fonts/${id}/glyphs/${group}/choice`, { choice, sample }),

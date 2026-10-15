@@ -163,9 +163,15 @@ export default function Glyphs({ fontId }: { fontId: string }) {
 function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph, c: Choice, s?: number) => void; onClose: () => void }) {
   const g = props.glyph;
   const [copies, setCopies] = useState<Copy[] | null>(null);
+  const [outline, setOutline] = useState<{ d: string; size: [number, number] } | null>(null);
   useEffect(() => {
     api.copies(props.fontId, g.group).then(setCopies, () => setCopies([]));
   }, [props.fontId, g.group]);
+  useEffect(() => {
+    // the outline the font will get (F4), traced the first time it is asked for
+    setOutline(null);
+    api.outline(props.fontId, g.group).then(setOutline, () => setOutline(null));
+  }, [props.fontId, g.group, g.image]);
   return (
     <div className="backdrop" onClick={props.onClose}>
       <div className="dialog glyph-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -177,6 +183,14 @@ function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph,
         </div>
         <div className="row">
           <img className="glyph-big" src={glyphUrl(props.fontId, g)} alt={g.label_dev} />
+          {outline && (
+            // filled like a font fills it: a hole running the wrong way would show up filled
+            <svg className="glyph-big" viewBox={`0 0 ${outline.size[0]} ${outline.size[1]}`}
+                 style={{ aspectRatio: `${outline.size[0]} / ${outline.size[1]}` }} role="img">
+              <title>Outline</title>
+              <path d={outline.d} fillRule="nonzero" />
+            </svg>
+          )}
           <div>
             <p>
               {methodText(g)}
