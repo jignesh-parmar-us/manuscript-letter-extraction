@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing ક (or क
 draws the book's own ક. Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** F0 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F1.
+**Status:** F0 and F1 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F2.
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -202,6 +202,20 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Font project: **Rename** at any time (the folder keeps its id). **Delete** asks for confirmation (section 2).
 - API: `GET/POST /api/fonts`, `GET/PATCH/DELETE /api/fonts/{id}`.
 - Tests: create / rename / delete only touch `fonts/`. The library database is unchanged (checksum).
+
+**Done (2026-10-15).** As planned, with these details:
+- `font_maker/projects.py` keeps the font projects. `font.json` already holds the later choices, still
+  empty: `left_out`, `picks`, `filled`, and `settings` with `copies: 8, mark_filled: true`. Font names are
+  unique (case does not matter), because two installed fonts with the same name would clash in Word. Every
+  check runs before the folder is made, so a refused "New font" leaves nothing behind.
+- `store.sources()` counts the groups per status and the **usable** ones (a label of exactly one akshara,
+  checked with `ocr.aksharas.split_aksharas`). Book 6 on 2026-10-15: 550 labelled groups, 544 usable;
+  172 auto groups, 11 of them with a label.
+- Screen: `#/` Fonts (list with Delete, and New font), `#/fonts/<id>` one font (Rename, Groups to use,
+  Delete). Delete asks first and says the book's groups are not changed. The confirm dialog is a copy of
+  the reading app's, because the two screens share no code.
+- Tests: 2 backend tests (sources; create / refuse / rename / delete, database checksum unchanged) and
+  2 screen smoke tests (name prefilled from the book; Delete asks first).
 
 ### F2: Glyph images (≈ 3.5 h)
 - `font_maker/glyphs.py`: steps 1–5 of section 3. Results saved in `glyphs/`. Pure numpy/OpenCV.
