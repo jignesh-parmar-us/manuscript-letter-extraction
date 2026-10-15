@@ -3,7 +3,7 @@
 Phase 1 (F0–F6, `FONT_PLAN.md`) builds a working Devanagari font from a book's letter groups. Phase 2 makes it
 easier to try, fills its gaps **in the book's own style** instead of from Noto, and makes words join cleanly.
 
-**Status:** F7 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F8; built when you say so, possibly several chunks in one go.
+**Status:** F7 and F8 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F9.
 Same rules as Phase 1 (`FONT_PLAN.md`, section 1): everything in `font-maker/`, the library read-only, light
 tests (tiny made-up images, no full-book runs in tests), only the changed module's tests while building.
 
@@ -180,6 +180,29 @@ higher or lower and is a little thicker or thinner than its neighbour's. In a wo
 
 Tests: a made-up glyph with its bar 2 px off moves to the font's line; a glyph without a bar is left alone.
 Judged by eye on the Try it tab (words of the test texts) and on the "On the line" view.
+
+**Done (2026-10-16).** Different from the plan, found on book 6:
+- **Gaps in the headline stay.** The first version drew one straight bar across each glyph and turned **भ into
+  म, थ into प and ध into घ**: the gap in the headline is what tells them apart (seen by eye on a test line). Now
+  the bar is redrawn only in the columns that *are* the bar (ink in at least 60 % of the band's rows,
+  `bar_columns`); gaps, and the letter's strokes reaching up into the band, stay exactly as printed. A test
+  keeps a gap.
+- **The band is the rows nearly as full as the fullest row** (85 % of it, and at least 60 % of the width). This
+  print's headline is thick (9 px at a line height of 121 px), and with "more than half full" the band of थ
+  ran 27 px down into the letter.
+- The headline of each glyph is measured from its image once and kept in `glyphs.json` (`headline`, with
+  the finder's `headline_v`, so it is measured again when the finder changes); the font's headline (median
+  top and thickness, each glyph once) is in the measurements. Book 6: 531 of 532 glyphs have one (not ८);
+  9 px thick, its top 54.9 px above the baseline.
+- The headline is evened **when the outline is traced** (F4), not in the glyph images: the glyph images and
+  the Glyphs tab stay as cut, and the outline files carry the headline they were made with
+  (`<image>.h3_<top>_<thickness>.outline.json`), so a changed headline or `even` traces again. First build
+  with the even headline: ≈ 22 s (all outlines once), then as before.
+- Screen: Build tab, **Even the headline** (setting `clean_headline`, on); the glyph dialog, **Even this
+  glyph's headline** (`headline_off` in font.json), its outline next to the image shows before / after.
+- Tests: 4 backend tests (finding the band and the font's median; a bar 2 px off moves and the stem stays
+  joined, also above the image; a gap stays; no headline, no change); the whole run ≈ 2.4 s. The Glyphs
+  smoke test checks the opt-out box.
 
 ## 4. F9: Vowel signs, marks and the virama in the book's style (≈ 9 h)
 

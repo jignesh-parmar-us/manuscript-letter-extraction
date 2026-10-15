@@ -39,6 +39,7 @@ from . import build as builder
 from .metrics import Lines, estimate, measure
 from .projects import ProjectError, Projects
 from .store import Store
+from . import headline as hl
 from .trace import svg_path, trace
 
 ALGO = 2                    # raise when the way a glyph is made changes: every glyph is then remade
@@ -217,7 +218,8 @@ class GlyphMaker:
         """A glyph image that is no longer used, with its outline (F4)."""
         folder = self._dir(font_id)
         (folder / image).unlink(missing_ok=True)
-        (folder / (image + ".outline.json")).unlink(missing_ok=True)
+        for outline in folder.glob(image + "*.outline.json"):   # plain, and with an even headline (F8)
+            outline.unlink(missing_ok=True)
 
     def forget(self, font_id: str) -> None:
         """The font was deleted: drop what is kept in memory."""
@@ -230,8 +232,11 @@ class GlyphMaker:
         self.projects.get(font_id)                               # 404 for an unknown font
         st = self._loaded(font_id)
         job = self.jobs.get(font_id, {"running": False, "done": 0, "total": 0, "error": None})
+        font = self.projects.get(font_id)
         return {"job": dict(job), "glyphs": list(st["glyphs"].values()), "cut_errors": st["cut_errors"],
-                "lost": st["lost"], "metrics": st["metrics"]}
+                "lost": st["lost"], "metrics": st["metrics"],
+                "clean_headline": font.get("settings", {}).get("clean_headline", True),
+                "headline_off": font.get("headline_off", [])}
 
     def _check_busy(self, font_id: str) -> None:
         if self.jobs.get(font_id, {}).get("running"):
@@ -302,6 +307,15 @@ class GlyphMaker:
             if progress:
                 progress(n, len(groups))
         estimate(list(out.values()), SCALE)                      # glyphs made only from generated letters
+        for g in out.values():                                   # F8: each glyph's headline, from its image once
+            if g.get("headline_v") != hl.VERSION:                 # (again when the way it is found changes)
+                img = cv2.imread(str(self._dir(font_id) / g["image"]), cv2.IMREAD_GRAYSCALE)
+                band = hl.find(img < 128) if img is not None else None
+                g["headline"] = [round(band[0] / SCALE, 2), round((band[1] - band[0]) / SCALE, 2)] if band else None
+                g["headline_v"] = hl.VERSION
+        lines.summary["headline"] = hl.font_headline(
+            (g["top"] + g["headline"][0], g["headline"][1]) for g in out.values()
+            if g.get("headline") and g.get("top") is not None and not g.get("left_out"))
         for gid, old in st["glyphs"].items():                    # groups no longer in the font
             if gid not in out and old.get("image"):
                 self._remove(font_id, old["image"])
@@ -350,7 +364,9 @@ class GlyphMaker:
         job = self.jobs.get(font_id, {"running": False, "done": 0, "total": 0, "error": None, "phase": ""})
         return {"job": dict(job), "report": report, "builds": font["builds"],
                 "coverage": builder.coverage(list(st["glyphs"].values()), font.get("filled", [])),
-                "mark_filled": font.get("settings", {}).get("mark_filled", True)}
+                "mark_filled": font.get("settings", {}).get("mark_filled", True),
+                "clean_headline": font.get("settings", {}).get("clean_headline", True),
+                "headline": st["metrics"].get("headline")}
 
     def build(self, font_id: str, step=None) -> Dict:
         """Bring the glyphs up to date, then write the next build; returns its report."""
@@ -364,7 +380,7 @@ class GlyphMaker:
         report = builder.build(font["name"], number, f"FontMaker{font_id}", list(st["glyphs"].values()),
                                st["metrics"], font.get("filled", []),
                                font.get("settings", {}).get("mark_filled", True),
-                               lambda g: self.contours(font_id, g), out,
+                               lambda g, target=self.headline_target(font_id): self.contours(font_id, g, target), out,
                                lambda d, t: step(d, t, "outlines"))
         for path in (self._report_path(font_id), out.with_name(out.name + ".report.json")):   # F7: per build too
             tmp = path.with_suffix(".tmp")
@@ -434,17 +450,40 @@ class GlyphMaker:
         glyph = self._loaded(font_id)["glyphs"].get(group_id)
         if glyph is None:
             raise ProjectError(f"Group {group_id} has no glyph in this font.")
-        return {"contours": self.contours(font_id, glyph), "size": [glyph["size"][0] / SCALE, glyph["size"][1] / SCALE]}
+        return {"contours": self.contours(font_id, glyph, self.headline_target(font_id)),
+                "size": [glyph["size"][0] / SCALE, glyph["size"][1] / SCALE]}
 
-    def contours(self, font_id: str, glyph: Dict) -> List[Dict]:
+    def headline_target(self, font_id: str) -> Optional[Dict]:
+        """The font's headline when it is to be evened (F8: setting `clean_headline`, on by default), else None."""
+        font = self.projects.get(font_id)
+        if not font.get("settings", {}).get("clean_headline", True):
+            return None
+        target = self._loaded(font_id)["metrics"].get("headline")
+        return {**target, "off": set(font.get("headline_off", []))} if target else None
+
+    def contours(self, font_id: str, glyph: Dict, target: Optional[Dict] = None) -> List[Dict]:
+        """The glyph's outline (F4), with the font's even headline when `target` is given (F8). Kept in a
+        file named after the headline it was made with, so a change of headline traces it again."""
         folder = self._dir(font_id)
-        path = folder / (glyph["image"] + ".outline.json")
+        even = (target is not None and glyph.get("headline") and glyph.get("top") is not None
+                and glyph["group"] not in target["off"])
+        key = f".h{hl.VERSION}_{target['top']:g}_{target['thickness']:g}" if even else ""
+        path = folder / (glyph["image"] + key + ".outline.json")
         if path.is_file():
             return json.loads(path.read_text(encoding="utf-8"))
         img = cv2.imread(str(folder / glyph["image"]), cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise ProjectError(f"The image of {glyph['label_dev']} is missing; open the Glyphs tab to make it again.")
-        contours = trace(img < 128, SCALE)
+        ink, pad = (img < 128), 0
+        if even:
+            ink, pad = hl.even(ink, glyph["top"], target, SCALE)
+        contours = trace(ink, SCALE)
+        if pad:                                                  # rows added on top: keep the glyph where it was
+            for c in contours:
+                c["start"][1] -= pad / SCALE
+                for s in c["segs"]:
+                    for i in range(2, len(s), 2):
+                        s[i] -= pad / SCALE
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(contours), encoding="utf-8")
         os.replace(tmp, path)
@@ -453,7 +492,18 @@ class GlyphMaker:
 
     def svg(self, font_id: str, group_id: int) -> Dict:
         out = self.outline(font_id, group_id)
-        return {"d": svg_path(out["contours"]), "size": out["size"], "contours": len(out["contours"])}
+        ys = [c["start"][1] for c in out["contours"]] + [s[i] for c in out["contours"] for s in c["segs"] for i in range(2, len(s), 2)]
+        top = min([0.0] + ys)
+        bottom = max([out["size"][1]] + ys)
+        return {"d": svg_path(out["contours"]), "size": out["size"], "contours": len(out["contours"]),
+                "box": [0, round(top, 1), out["size"][0], round(bottom - top, 1)]}
+
+    def set_headline(self, font_id: str, group_id: int, on: bool) -> Dict:
+        """Opt one glyph out of the even headline (F8), or back in."""
+        font = self.projects.get(font_id)
+        off = [g for g in font.get("headline_off", []) if g != group_id] + ([] if on else [group_id])
+        self.projects.set_fields(font_id, headline_off=off)
+        return self.svg(font_id, group_id)
 
     def copies(self, font_id: str, group_id: int, limit: int = 120) -> List[Dict]:
         """A group's copies, best first, to pick one from (their images are the library's files)."""

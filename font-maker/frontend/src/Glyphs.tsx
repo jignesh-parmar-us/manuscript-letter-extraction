@@ -2,7 +2,7 @@
 // yourself, go back to the system pick, or leave the group out. Your choices never change the group.
 // Opening the tab brings the glyphs up to date: only glyphs whose group changed are made again.
 import { useEffect, useState } from "react";
-import { api, Copy, copyUrl, Glyph, GlyphState, glyphUrl, Choice, Metrics } from "./api";
+import { api, Copy, copyUrl, Glyph, GlyphState, glyphUrl, Choice, Metrics, Outline } from "./api";
 
 type Filter = "all" | "pick" | "copy" | "generated" | "estimated" | "left_out" | "auto" | "lost";
 const FILTERS: [Filter, string, (g: Glyph) => boolean][] = [
@@ -155,15 +155,23 @@ export default function Glyphs({ fontId }: { fontId: string }) {
           {state.cut_errors.map((c) => c.label_dev).join(", ")}.
         </p>
       )}
-      {open && <GlyphDialog fontId={fontId} glyph={open} onChoose={choose} onClose={() => setOpen(null)} />}
+      {open && <GlyphDialog fontId={fontId} glyph={open} onChoose={choose} onClose={() => setOpen(null)}
+                            evenHeadline={state.clean_headline !== false && !!open.headline}
+                            headlineOff={(state.headline_off ?? []).includes(open.group)}
+                            onHeadline={(on) => api.setHeadline(fontId, open.group, on).then(() =>
+                              setState((s) => s && { ...s, headline_off: on ? (s.headline_off ?? []).filter((g) => g !== open.group)
+                                                                           : [...(s.headline_off ?? []), open.group] }))} />}
     </>
   );
 }
 
-function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph, c: Choice, s?: number) => void; onClose: () => void }) {
+function GlyphDialog(props: {
+  fontId: string; glyph: Glyph; onChoose: (g: Glyph, c: Choice, s?: number) => void; onClose: () => void;
+  evenHeadline: boolean; headlineOff: boolean; onHeadline: (on: boolean) => void;
+}) {
   const g = props.glyph;
   const [copies, setCopies] = useState<Copy[] | null>(null);
-  const [outline, setOutline] = useState<{ d: string; size: [number, number] } | null>(null);
+  const [outline, setOutline] = useState<Outline | null>(null);
   useEffect(() => {
     api.copies(props.fontId, g.group).then(setCopies, () => setCopies([]));
   }, [props.fontId, g.group]);
@@ -171,7 +179,7 @@ function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph,
     // the outline the font will get (F4), traced the first time it is asked for
     setOutline(null);
     api.outline(props.fontId, g.group).then(setOutline, () => setOutline(null));
-  }, [props.fontId, g.group, g.image]);
+  }, [props.fontId, g.group, g.image, props.headlineOff]);
   return (
     <div className="backdrop" onClick={props.onClose}>
       <div className="dialog glyph-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -185,8 +193,8 @@ function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph,
           <img className="glyph-big" src={glyphUrl(props.fontId, g)} alt={g.label_dev} />
           {outline && (
             // filled like a font fills it: a hole running the wrong way would show up filled
-            <svg className="glyph-big" viewBox={`0 0 ${outline.size[0]} ${outline.size[1]}`}
-                 style={{ aspectRatio: `${outline.size[0]} / ${outline.size[1]}` }} role="img">
+            <svg className="glyph-big" viewBox={(outline.box ?? [0, 0, ...outline.size]).join(" ")}
+                 style={{ aspectRatio: `${(outline.box ?? [0, 0, ...outline.size])[2]} / ${(outline.box ?? [0, 0, ...outline.size])[3]}` }} role="img">
               <title>Outline</title>
               <path d={outline.d} fillRule="nonzero" />
             </svg>
@@ -198,6 +206,12 @@ function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph,
               {g.generated && <span className="badge warn"> made by the system</span>}
             </p>
             <p className="muted small">{placeText(g)}.</p>
+            {props.evenHeadline && (
+              <label className="small">
+                <input type="checkbox" checked={!props.headlineOff} onChange={(e) => props.onHeadline(e.target.checked)} />
+                Even this glyph's headline (the outline on the right shows it)
+              </label>
+            )}
             <p className="muted small">
               {g.count} copies in the group{g.count > 1 ? `; they agree ${Math.round(g.agree * 100)}%` : ""}.
             </p>

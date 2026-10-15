@@ -52,6 +52,15 @@ export default function Build({ fontId }: { fontId: string }) {
       </div>
 
       <div className="card">
+        <label className="small">
+          <input type="checkbox" checked={state.clean_headline !== false}
+                 onChange={(e) => api.changeFont(fontId, { clean_headline: e.target.checked }).then(() => api.buildState(fontId)).then(setState, fail)} />
+          Even the headline: one straight headline through a word
+          {state.headline && <span className="muted"> ({Math.round(state.headline.thickness)} px thick, measured on {state.headline.glyphs} glyphs; gaps such as in भ थ ध stay)</span>}
+        </label>
+      </div>
+
+      <div className="card">
         <div className="row between">
           <h2>Missing ({c.missing.length})</h2>
           {c.missing.length > 0 && <button onClick={() => fill(c.missing, true)}>Fill all from normal font</button>}

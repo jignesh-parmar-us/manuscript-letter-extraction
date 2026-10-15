@@ -75,7 +75,9 @@ class FlowTest(unittest.TestCase):
             maker = GlyphMaker(store, projects)
             maker.refresh(font)
             st = maker.state(font)
-            self.assertEqual(st["metrics"], {"lines": 1, "line_height": 40.0, "letter_gap": 2, "word_space": 22})
+            m = st["metrics"]
+            self.assertEqual({k: m[k] for k in ("lines", "line_height", "letter_gap", "word_space")},
+                             {"lines": 1, "line_height": 40.0, "letter_gap": 2, "word_space": 22})
             ka = next(g for g in st["glyphs"] if g["label_dev"] == "क")   # squares: ink rows 2-6 of a 10 px box
             self.assertEqual((ka["bottom"], ka["top"], ka["width"]), (-4, -8, 4))
             self.assertEqual(maker.refresh(font), 0)                    # measuring again remakes no image

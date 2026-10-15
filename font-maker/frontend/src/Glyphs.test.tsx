@@ -5,9 +5,10 @@ import Glyphs from "./Glyphs";
 const GLYPH = {
   group: 7, book: 6, code: "g0007", kind: "letter", status: "labelled", label_dev: "कि", label_guj: "કિ",
   method: "average", agree: 0.9, used: [1, 2, 3], count: 12, image: "6-g0007-abc.png", left_out: false, lost: false,
-  generated: false, size: [200, 300], bottom: 20.5, top: -56.5, width: 50, placed: "measured",
+  generated: false, size: [200, 300], bottom: 20.5, top: -56.5, width: 50, placed: "measured", headline: [0.5, 9],
 };
-const STATE = { job: { running: false, done: 0, total: 0, error: null }, glyphs: [GLYPH], cut_errors: [], lost: [] };
+const STATE = { job: { running: false, done: 0, total: 0, error: null }, glyphs: [GLYPH], cut_errors: [], lost: [],
+                clean_headline: true, headline_off: [] };
 
 test("pick a glyph and leave it out", async () => {
   const calls: { method: string; url: string; body?: string }[] = [];
@@ -23,6 +24,7 @@ test("pick a glyph and leave it out", async () => {
   expect(await screen.findByLabelText("Use copy 1")).toBeInTheDocument();
   expect(screen.getByText("21 px below the line, 77 px tall, 50 px wide.")).toBeInTheDocument();
   expect(await screen.findByTitle("Outline")).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: /Even this glyph's headline/ })).toBeChecked();   // F8
   fireEvent.click(screen.getByRole("button", { name: "Leave out of the font" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Use in the font again" })).toBeInTheDocument());
   const put = calls.find((c) => c.method === "PUT")!;

@@ -111,12 +111,12 @@ class Projects:
             "id": font_id, "name": name, "sources": [int(s) for s in sources],
             "statuses": statuses,
             "picks": {}, "left_out": {}, "filled": [],             # choices made in F2 / F5
-            "settings": {"copies": 8, "min_agree": 0.6, "mark_filled": True},
+            "settings": {"copies": 8, "min_agree": 0.6, "mark_filled": True, "clean_headline": True},
             "build": 0, "created_at": now, "updated_at": now})
         return self.get(font_id)
 
     def update(self, font_id: str, name: Optional[str] = None, statuses: Optional[List[str]] = None,
-               mark_filled: Optional[bool] = None) -> Dict:
+               mark_filled: Optional[bool] = None, clean_headline: Optional[bool] = None) -> Dict:
         folder = self._folder(font_id)
         data = self._read(folder)
         if name is not None:
@@ -126,6 +126,8 @@ class Projects:
             data["statuses"] = _clean_statuses(statuses)
         if mark_filled is not None:
             data.setdefault("settings", {})["mark_filled"] = bool(mark_filled)
+        if clean_headline is not None:
+            data.setdefault("settings", {})["clean_headline"] = bool(clean_headline)
         data["updated_at"] = _now()
         self._write(folder, data)
         return self.get(font_id)
@@ -146,6 +148,14 @@ class Projects:
         if on:
             filled += [c for c in chars if len(c) == 1]
         data.update(filled=filled, updated_at=_now())
+        self._write(folder, data)
+        return self.get(font_id)
+
+    def set_fields(self, font_id: str, **fields) -> Dict:
+        """Choices kept in font.json by later chunks (F8: headline_off; F9-F11: generated, drawn)."""
+        folder = self._folder(font_id)
+        data = self._read(folder)
+        data.update(fields, updated_at=_now())
         self._write(folder, data)
         return self.get(font_id)
 

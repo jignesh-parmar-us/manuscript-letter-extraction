@@ -93,6 +93,7 @@ export interface Glyph {
   top: number | null;
   width: number | null;
   placed?: "measured" | "estimated";
+  headline?: [number, number] | null; // F8: its headline's top (in the image) and thickness, page pixels
 }
 
 // F3: measured over the font's book (page pixels)
@@ -101,6 +102,7 @@ export interface Metrics {
   line_height?: number;
   letter_gap?: number | null;
   word_space?: number | null;
+  headline?: { top: number; thickness: number; glyphs: number } | null; // F8: the font's headline
 }
 
 export interface LostPick {
@@ -116,6 +118,8 @@ export interface GlyphState {
   cut_errors: { group: number; code: string; label_dev: string; label_guj: string }[];
   lost: LostPick[];
   metrics: Metrics;
+  clean_headline?: boolean; // F8
+  headline_off?: number[];
 }
 
 export interface Copy {
@@ -123,6 +127,14 @@ export interface Copy {
   book: number;
   image: string;
   generated: boolean;
+}
+
+// F4/F8: a glyph's outline as an SVG path (page pixels; `box` is x, y, width, height of what it covers)
+export interface Outline {
+  d: string;
+  size: [number, number];
+  contours: number;
+  box?: [number, number, number, number];
 }
 
 export type Choice = "system" | "copy" | "left_out" | "keep";
@@ -183,6 +195,8 @@ export interface BuildState {
   coverage: Coverage;
   builds: number;
   mark_filled: boolean;
+  clean_headline?: boolean; // F8
+  headline?: { top: number; thickness: number; glyphs: number } | null;
 }
 
 // Files are loaded by <img> tags, which cannot send the token header: it goes in the address.
@@ -197,7 +211,7 @@ export const api = {
   font: (id: string) => request<Font>("GET", `/api/fonts/${id}`),
   createFont: (name: string, bookId: number, statuses: Status[]) =>
     request<Font>("POST", "/api/fonts", { name, book_id: bookId, statuses }),
-  changeFont: (id: string, change: { name?: string; statuses?: Status[]; mark_filled?: boolean }) =>
+  changeFont: (id: string, change: { name?: string; statuses?: Status[]; mark_filled?: boolean; clean_headline?: boolean }) =>
     request<Font>("PATCH", `/api/fonts/${id}`, change),
   deleteFont: (id: string) => request<void>("DELETE", `/api/fonts/${id}`),
   texts: (id: string) => request<TestText[]>("GET", `/api/fonts/${id}/texts`),
@@ -227,8 +241,9 @@ export const api = {
   fill: (id: string, chars: string[], filled: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/filled`, { chars, filled }),
   checkGlyphs: (id: string) => request<GlyphState>("POST", `/api/fonts/${id}/glyphs/check`),
   glyphs: (id: string) => request<GlyphState>("GET", `/api/fonts/${id}/glyphs`),
-  outline: (id: string, group: number) =>
-    request<{ d: string; size: [number, number]; contours: number }>("GET", `/api/fonts/${id}/glyphs/${group}/outline`),
+  outline: (id: string, group: number) => request<Outline>("GET", `/api/fonts/${id}/glyphs/${group}/outline`),
+  setHeadline: (id: string, group: number, on: boolean) =>
+    request<Outline>("PUT", `/api/fonts/${id}/glyphs/${group}/headline`, { on }),
   copies: (id: string, group: number) => request<Copy[]>("GET", `/api/fonts/${id}/glyphs/${group}/copies`),
   choose: (id: string, group: number, choice: Choice, sample?: number) =>
     request<{ glyph: Glyph | null; lost: LostPick[] }>("PUT", `/api/fonts/${id}/glyphs/${group}/choice`, { choice, sample }),

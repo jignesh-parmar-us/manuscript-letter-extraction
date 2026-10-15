@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F7). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F8). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -11,6 +11,7 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
            GET  /api/fonts/{id}/glyphs/{group}/copies   a group's copies to pick from
            PUT  /api/fonts/{id}/glyphs/{group}/choice   system pick / one copy / left out / keep
            GET  /api/fonts/{id}/glyphs/{group}/outline  the traced outline as an SVG path (F4, trace.py)
+           PUT  /api/fonts/{id}/glyphs/{group}/headline even this glyph's headline or not (F8, headline.py)
   build    GET  /api/fonts/{id}/build    the newest build's report, the coverage now, the build job (F5)
            POST /api/fonts/{id}/build    build the next version (in the background)
            PUT  /api/fonts/{id}/filled   fill missing characters from the normal font, or take the fill out
@@ -56,6 +57,11 @@ class FontChange(BaseModel):
     name: Optional[str] = None
     statuses: Optional[List[str]] = None
     mark_filled: Optional[bool] = None
+    clean_headline: Optional[bool] = None
+
+
+class HeadlineChoice(BaseModel):
+    on: bool
 
 
 class TryText(BaseModel):
@@ -129,7 +135,8 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
 
     @app.patch("/api/fonts/{font_id}", dependencies=auth)
     def change_font(font_id: str, body: FontChange) -> Dict:
-        return projects.update(font_id, name=body.name, statuses=body.statuses, mark_filled=body.mark_filled)
+        return projects.update(font_id, name=body.name, statuses=body.statuses, mark_filled=body.mark_filled,
+                               clean_headline=body.clean_headline)
 
     @app.delete("/api/fonts/{font_id}", dependencies=auth, status_code=204)
     def delete_font(font_id: str) -> Response:
@@ -153,6 +160,10 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
     @app.get("/api/fonts/{font_id}/glyphs/{group_id}/outline", dependencies=auth)
     def outline(font_id: str, group_id: int) -> Dict:
         return maker.svg(font_id, group_id)
+
+    @app.put("/api/fonts/{font_id}/glyphs/{group_id}/headline", dependencies=auth)
+    def headline_choice(font_id: str, group_id: int, body: HeadlineChoice) -> Dict:
+        return maker.set_headline(font_id, group_id, body.on)
 
     @app.put("/api/fonts/{font_id}/glyphs/{group_id}/choice", dependencies=auth)
     def choose(font_id: str, group_id: int, body: Choice) -> Dict:

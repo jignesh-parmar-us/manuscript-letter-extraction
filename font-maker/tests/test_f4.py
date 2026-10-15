@@ -61,8 +61,7 @@ class OutlineFlowTest(unittest.TestCase):
             self.assertTrue(svg["d"].startswith("M") and svg["contours"] >= 1)
             maker.svg(font, glyph["group"])
             self.assertEqual(maker.traced, 1)                                      # the second time: from its file
-            outline = store.fonts_dir / font / "glyphs" / (glyph["image"] + ".outline.json")
-            self.assertTrue(outline.is_file())
+            (outline,) = (store.fonts_dir / font / "glyphs").glob(glyph["image"] + "*.outline.json")
             maker.choose(font, glyph["group"], "copy", maker.copies(font, glyph["group"])[1]["id"])
             self.assertFalse(outline.exists())                                     # a new image: the old outline goes
             store.close()
