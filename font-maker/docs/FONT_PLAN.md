@@ -1,7 +1,7 @@
 # Font Maker: Plan, Phase 1 (F0–F6)
 
-Make an installable font from a book's letter groups, so that typing ક (or क) in Word, Pages or a browser
-draws the book's own ક. Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
+Make an installable font from a book's letter groups, so that typing क in Word, Pages or a browser
+draws the book's own क. **Devanagari only** (decided 2026-10-15, see section 7, decision 5). Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
 **Status:** F0, F1 and F2 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F3.
@@ -14,7 +14,7 @@ First book: 6, *Vachnamrut Printed 1944 Training Data*.
 | Today | After Phase 1 |
 |---|---|
 | A book's letters are cut, grouped and labelled (541 labelled groups, 9,455 samples for book 6) | Font Maker reads those groups and builds `<name>.ttf` from them |
-| The groups are only used for reading | The font can be installed on the Mac and used in Word, Pages, TextEdit and browsers, for Gujarati **and** Devanagari typing |
+| The groups are only used for reading | The font can be installed on the Mac and used in Word, Pages, TextEdit and browsers, for **Devanagari** typing |
 | — | A test page: type, see it in the book's letters, see which aksharas are missing or filled from a normal font |
 
 Words used here:
@@ -23,11 +23,11 @@ Words used here:
   groups, chosen copies, filled characters) and its builds. Stored as files in the library folder. It adds
   nothing to `library.db`.
 - **Glyph:** one shape in the font.
-- **Base glyph:** the shape for one Unicode character (ક, અ, ૧, ।).
-- **Akshara glyph (ligature):** the shape for a whole group such as કા, કિ, ક્ષ or સ્ત્રી. The font tells the
-  text engine to swap "ક + ા" for this shape.
+- **Base glyph:** the shape for one Unicode character (क, अ, १, ।).
+- **Akshara glyph (ligature):** the shape for a whole group such as का, कि, क्ष or स्त्री. The font tells the
+  text engine to swap "क + ा" for this shape.
 - **Missing:** a character the book's groups give no shape for.
-- **Filled:** a missing character whose shape is taken from a normal Gujarati / Devanagari font (Noto, see
+- **Filled:** a missing character whose shape is taken from a normal Devanagari font (Noto, see
   F5). It is always marked as filled.
 - **Coverage:** which typed aksharas the font draws in the book's letters, which are filled, and which are
   missing.
@@ -45,7 +45,7 @@ font-maker/
   requirements.txt        fontTools, potracer (pure Python, no binary); tests also uharfbuzz, httpx
   package.json            shortcuts: npm --prefix font-maker run build / test / typecheck
   src/font_maker/         __main__.py, main.py, api.py, store.py, glyphs.py, metrics.py, trace.py, build.py
-    data/                 Noto Serif Gujarati / Devanagari + licence (fill fonts)
+    data/                 Noto Serif Devanagari + licence (fill font)
     static/               the built screen
   frontend/               Vite + React + TypeScript, its own node_modules
   tests/                  backend tests (seconds)
@@ -67,8 +67,7 @@ Neither app's tests run the other's: the reading app's `discover -s tests` and `
 Rules:
 
 - **One-way imports.** `font_maker` may import `letter_extractor.app.db` (the tables),
-  `letter_extractor.ocr.aksharas` (akshara splitting) and `letter_extractor.mapping` (Gujarati ↔
-  Devanagari). Nothing in `letter_extractor` or `tests/` imports `font_maker` or `fontTools`. A small test in
+  `letter_extractor.ocr.aksharas` (akshara splitting). Nothing in `letter_extractor` or `tests/` imports `font_maker` or `fontTools`. A small test in
   `font-maker/tests/` checks this.
 - **Read-only database.** Font Maker opens `library.db` as `file:…?mode=ro` with its own engine. It does
   **not** use `Library()`, because that runs migrations. If the database's `alembic_version` is not the one
@@ -121,8 +120,8 @@ stays installed. The help page says how to remove it there (Font Book).
    groups you reviewed and labelled (book 6: 541, plus the danda group and 8 digit groups). As an option,
    **auto** groups that already have a (suggested) label can be added. Their glyphs are marked "not reviewed"
    in the grid. Groups with status `reviewed` have no label, so they cannot become a glyph. The screen shows
-   their count with that reason. A label of more than one akshara (cut errors such as ખાખા, રવ્ય, રહે, રેર,
-   સરિયે, ભક્ત) is left out automatically and listed in the report.
+   their count with that reason. A label of more than one akshara (cut errors such as खाखा, रव्य, रहे, रेर,
+   सरिये, भक्त) is left out automatically and listed in the report.
 2. **Which copies:** the group's samples (not deleted), sorted by `distance` (closest to the group's centre
    first). The best N are used (setting `copies`, default 8). This is about picking clean copies, not
    weighting; every group gives exactly one glyph.
@@ -136,7 +135,7 @@ stays installed. The help page says how to remove it there (Font Book).
    samples or its labels.**
 6. **Height on the line:** each sample's place on its line (`sample.y/h` against `line.y/h`) gives where the
    glyph sits. One baseline is measured per line, from the bottom edge of letters with no below-the-line
-   part (e.g. ક, મ, ન). The glyph's offset is the median over its copies. One scale is used for the whole
+   part (e.g. क, म, न). The glyph's offset is the median over its copies. One scale is used for the whole
    font, from the median line height.
 7. **Width and spacing:** advance width = median ink width + side gap. The side gap is measured from the gaps
    between neighbouring samples on the same line (median). There is no kerning in Phase 1.
@@ -147,22 +146,24 @@ The images are saved in `glyphs/`, so every glyph can be checked by eye.
 
 ## 4. How the font maps Unicode (F5)
 
-- **Both scripts, same shapes.** Each group gives one glyph. It is reached from its Gujarati label
-  (`label_guj`) **and** its Devanagari label (`label_dev`). Typing ક or क shows the same book shape, and so
-  do કા and का. Script tags `gjr2`/`gujr` and `dev2`/`deva`.
-- **Single-character groups** (ક, અ, ૧, …) → base glyphs in the character map (both code points). The danda
-  (।, ॥) is one Devanagari code point used by both scripts.
-- **Multi-character groups** (કા, કિ, ક્ષ, ર્ય, સ્ત્રી, …) → akshara glyphs, with a GSUB ligature rule
-  `ક ા → ka_aa`, and the same rule for `क ा`.
-- **Short i (િ / ि):** text engines move it in front of the consonant *before* the rules run. The rule for કિ
-  must therefore match `િ ક`, and for ક્તિ it must match `િ ક ્ ત`. Phase 1 builds no half forms or reph
+- **Devanagari only.** Each group gives one glyph, reached from its Devanagari label (`label_dev`, the
+  canonical label). Typing क shows the book's shape; typing Gujarati (ક) does **not** use this font (the
+  program shows its normal Gujarati font). Reason: book 6 is printed in Devanagari letter shapes (with the
+  headline), so mapping them to Gujarati characters would show Devanagari shapes for Gujarati text.
+  Script tags `dev2`/`deva`. `font.json` keeps `"script": "devanagari"`, so a book written in Gujarati shapes
+  can later get `"gujarati"` (section 6).
+- **Single-character groups** (क, अ, १, …) → base glyphs in the character map. The danda (।, ॥) too.
+- **Multi-character groups** (का, कि, क्ष, र्य, स्त्री, …) → akshara glyphs, with a GSUB ligature rule
+  `क ा → ka_aa`.
+- **Short i (ि):** text engines move it in front of the consonant *before* the rules run. The rule for कि
+  must therefore match `ि क`, and for क्ति it must match `ि क ् त`. Phase 1 builds no half forms or reph
   forms (`half`, `rphf`, `blwf`). That keeps the other aksharas in typed order, so their rules match the
   characters as typed.
-- **Missing characters** (book 6, Gujarati: a vowel sign alone, the virama, ળ, ઈ, ઊ, ઋ, ૦, ૩; plus the
-  Devanagari letters with no Gujarati twin, such as ळ, ऋ, ॠ): shown as **missing** by default. In the
+- **Missing characters** (book 6: a vowel sign alone, the virama, ळ, ई, ऊ, ऋ, ०, ३, and rarer ones such as
+  ङ, ञ, ॠ, ऽ, ॐ): shown as **missing** by default. In the
   font they are a clearly marked box. The Glyphs screen and the test page list them. Each missing character
   has two buttons:
-  - **Fill from normal font** (Phase 1): copies the shape from Noto Serif Gujarati / Noto Serif Devanagari,
+  - **Fill from normal font** (Phase 1): copies the shape from Noto Serif Devanagari,
     scaled to this font's height. The result is marked **filled** in `font.json`, in the report and on every
     screen (its own colour), and it can be taken out again.
   - **Generate** (shown, disabled, "next phase"): later it will make the shape in the book's style (cut a vowel
@@ -180,10 +181,10 @@ The images are saved in `glyphs/`, so every glyph can be checked by eye.
   at the next build.
 
 **Checking the rules without Word.** `font-maker/tests/` shapes test strings with HarfBuzz (`uharfbuzz`, tests only),
-the same engine Chrome uses. This checks that કિ, ક્ષ, ર્ય, कि etc. come out as the expected akshara glyphs.
+the same engine Chrome uses. This checks that कि, क्ष, र्य, क्ति etc. come out as the expected akshara glyphs.
 Word and Pages on the Mac use their own engines, so F6 includes one check by eye in Word.
 
-**Fill fonts:** Noto Serif Gujarati and Noto Serif Devanagari are kept in `font_maker/data/` with their licence (SIL
+**Fill font:** Noto Serif Devanagari is kept in `font_maker/data/` with its licence (SIL
 Open Font License). The OFL allows copying their shapes into another font. The result is under the OFL too,
 and must not be called "Noto". Phase 1 only copies outlines of single characters, not Noto's rules.
 
@@ -232,7 +233,7 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 
 ### F2: Glyph images (≈ 3.5 h)
 - `font_maker/glyphs.py`: steps 1–5 of section 3. Results saved in `glyphs/`. Pure numpy/OpenCV.
-- Screen **Glyphs**: a grid of every glyph (label in both scripts, image, "average of N" / "copy" / "your
+- Screen **Glyphs**: a grid of every glyph (Devanagari label, image, "average of N" / "copy" / "your
   pick", "not reviewed" for auto groups). Clicking one shows its copies, where you pick one, go back to the
   system pick, or leave the group out. Filters: left out, not reviewed, missing, filled.
 - **Kept fast: no large file is read or written per click.**
@@ -271,7 +272,8 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Groups without any copy are skipped (book 6: 532 of the 544 usable groups have copies).
 - Check on book 6, read-only, written only to the scratchpad: 40 glyphs in 0.28 s (all 532 ≈ 4 s, once);
   28 averaged, 12 one copy. The shapes are clean. Book 6 is printed in Devanagari letter shapes (with the
-  headline), so its font shows these shapes for Gujarati and Devanagari typing alike.
+  headline), which led to decision 5 (Devanagari only). The Glyphs grid still shows the label in both scripts; from F5 on
+  it shows the Devanagari label first.
 - Tests: 3 backend tests (images; counted remaking, a pick, a lost pick; the API with files), 1 screen smoke
   test. The whole `font-maker/tests` run takes ≈ 1 s.
 
@@ -284,27 +286,28 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Tests: a ring traces to an outer and an inner curve. A filled square has the expected area.
 
 ### F5: Build the font, missing and filled (≈ 4 h)
-- `font_maker/build.py`: base glyphs, akshara glyphs, GSUB ligature rules for both scripts (short-i order), names,
+- `font_maker/build.py`: base glyphs, akshara glyphs, GSUB ligature rules for Devanagari (short-i order), names,
   version number, `.notdef` and missing boxes, filled glyphs from Noto with their mark. Writes
   `builds/<name>-<n>.ttf` and `report.json`.
 - **Build font** button: runs in the background with progress (book 6: about 560 glyphs). It shows the
   coverage: glyphs made, groups left out (and why), filled characters, missing characters.
 - Missing list with **Fill from normal font** (per character and "fill all"), **Remove fill**, and
   **Generate** (disabled, "next phase").
-- Tests: HarfBuzz shaping of કા, કિ, ક્ષ, ર્ય, ૧૨, का, कि; a missing character gives the missing box; a filled
+- Tests: HarfBuzz shaping of का, कि, क्ति, क्ष, र्य, १२; Gujarati text does not use the font's glyphs; a
+  missing character gives the missing box; a filled
   one gives the Noto shape with its mark, and without the mark when the setting is off.
 
 ### F6: Test page and download (≈ 2 h)
 - Screen **Try it**: a text box. The newest build is loaded with `@font-face` from
   `/files/fonts/{id}/builds/<file>`, with the build number in the address so the browser does not keep an old
-  copy. It has a size slider and a few sample sentences in Gujarati and Devanagari.
+  copy. It has a size slider and a few sample sentences in Devanagari.
 - Below the box, every akshara the font cannot draw fully in the book's letters is marked in its own colour:
   **missing**, **filled**, or **pieced together**, with a list. `POST /api/fonts/{id}/coverage` splits the
   text with `ocr.aksharas.split_aksharas` and checks it against the build's report.
 - **Download .ttf** and a short help page `font-maker/docs/help/font.html` (served at `/help/font.html`): install the font (double-click → Install),
   update it after a rebuild, remove it (Font Book), use it in Word and Pages, embed it in a .docx, and what
   the underline on filled characters means.
-- One check by eye in Word on this Mac (Gujarati and Devanagari), with a screenshot in the plan.
+- One check by eye in Word on this Mac (Devanagari), with a screenshot in the plan.
 
 ## 6. Left for later (Phase 2+)
 
@@ -314,6 +317,9 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Hand-drawing or uploading missing letters.
 - Kerning and smoother outlines.
 - A font from several books / datasets.
+- **A Gujarati font** from a book written in Gujarati letter shapes: the setting `"script": "gujarati"` maps the
+  groups to Gujarati characters (`label_guj`, tags `gjr2`/`gujr`, fill from Noto Serif Gujarati). Not needed for
+  book 6.
 - Synthetic training lines for the reader (set aside; see the brainstorm of 2026-10-15).
 - Fonts from handwritten books. They work the same way, but one shape per group fits print far better than
   handwriting.
@@ -329,5 +335,6 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
    (next phase).
 4. **Glyph choice:** the system picks the best (average of the best copies, or the single best copy), and you
    can pick any copy instead.
-5. **Scripts:** both Gujarati and Devanagari typing show the book's shapes.
+5. **Scripts:** ~~both Gujarati and Devanagari~~ **Devanagari only** (changed 2026-10-15, after F2 showed that
+   book 6 is printed in Devanagari letter shapes). Gujarati typing is not mapped to these shapes.
 6. **Port:** 8676.

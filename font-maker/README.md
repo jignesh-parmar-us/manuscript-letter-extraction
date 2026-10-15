@@ -1,7 +1,7 @@
 # Font Maker
 
-Build an installable font from a book's letter groups, so that typing ક (or क) in Word, Pages or a browser
-draws the book's own letters. A small separate app in this project. It reads the reading app's library
+Build an installable font from a book's letter groups, so that typing Devanagari (क) in Word, Pages or a
+browser draws the book's own letters (Devanagari only; see the plan, section 7). A small separate app in this project. It reads the reading app's library
 (`library.db`) **read-only** and writes only into `<library>/fonts/`.
 
 Plan and status: [docs/FONT_PLAN.md](docs/FONT_PLAN.md) (F0–F6). Done: F0 (the skeleton: app, screen, tests) and F1 (the main page: pick a book, create, rename and
