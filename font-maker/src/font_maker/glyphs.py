@@ -366,11 +366,26 @@ class GlyphMaker:
                                font.get("settings", {}).get("mark_filled", True),
                                lambda g: self.contours(font_id, g), out,
                                lambda d, t: step(d, t, "outlines"))
-        tmp = self._report_path(font_id).with_suffix(".tmp")
-        tmp.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
-        os.replace(tmp, self._report_path(font_id))
+        for path in (self._report_path(font_id), out.with_name(out.name + ".report.json")):   # F7: per build too
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+            os.replace(tmp, path)
         self.projects.set_build(font_id, number)
         return report
+
+    def reports(self, font_id: str) -> List[Dict]:
+        """The reports of the builds, newest first (F7: the coverage of the test texts, with the build before)."""
+        builds = self.projects.dir / font_id / "builds"
+        found = [json.loads(p.read_text(encoding="utf-8")) for p in builds.glob("*.ttf.report.json")] if builds.is_dir() else []
+        return sorted(found, key=lambda r: -int(r.get("build", 0)))
+
+    def newest_font(self, font_id: str) -> Tuple[Path, Dict]:
+        """The newest build's .ttf and report (F7 downloads)."""
+        report = self.build_state(font_id)["report"]
+        path = self.projects.dir / font_id / "builds" / report["file"] if report else None
+        if path is None or not path.is_file():
+            raise ProjectError("Build the font first (Build tab).")
+        return path, report
 
     def start_build(self, font_id: str) -> Dict:
         self.projects.get(font_id)

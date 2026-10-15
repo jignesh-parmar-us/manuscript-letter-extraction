@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F6). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F7). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -15,6 +15,9 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
            POST /api/fonts/{id}/build    build the next version (in the background)
            PUT  /api/fonts/{id}/filled   fill missing characters from the normal font, or take the fill out
   try it   POST /api/fonts/{id}/coverage   how the newest build draws a text, akshara by akshara (F6, tryit.py)
+           GET/PUT /api/fonts/{id}/texts, DELETE /api/fonts/{id}/texts/{text}   test texts (F7, texts.py)
+           GET  /api/fonts/{id}/coverage/texts   the test texts with the newest build and the one before
+           POST /api/fonts/{id}/export/{png|pdf|docx}   the text in the newest build (F7, export.py)
   help     GET /help/font.html             the help page (no token; copied from font-maker/docs/help/ by the build)
   files    GET /files/fonts/{id}/glyphs/{name} (a glyph image), GET /files/fonts/{id}/builds/{name} (a .ttf),
            GET /files/books/{id}/{path} (a copy's image)
@@ -35,6 +38,8 @@ from letter_extractor.app.db import Book
 
 from .glyphs import Busy, GlyphMaker
 from .projects import ProjectError, ProjectNotFound, Projects
+from . import export
+from .texts import Texts
 from .tryit import classify
 from .store import Store
 
@@ -57,6 +62,17 @@ class TryText(BaseModel):
     text: str
 
 
+class TestText(BaseModel):
+    name: str
+    text: str
+    id: Optional[str] = None
+
+
+class ExportText(BaseModel):
+    text: str
+    size: Optional[float] = None      # png: pixels an em; pdf, docx: points
+
+
 class Fill(BaseModel):
     chars: List[str]
     filled: bool = True
@@ -72,6 +88,7 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
     app = FastAPI(title="Font Maker", version=__version__)
     projects = Projects(store.fonts_dir)
     maker = GlyphMaker(store, projects)
+    texts = Texts(store, projects)
     app.state.store, app.state.token, app.state.projects, app.state.maker = store, token, projects, maker
 
     def check_token(x_token: Optional[str] = Header(default=None),
@@ -161,6 +178,40 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
         if not report:
             raise ProjectError("Build the font first (Build tab).")
         return classify(body.text[:5000], report)
+
+    # ---- test texts and downloads (F7) ---------------------------------------------------------------
+    @app.get("/api/fonts/{font_id}/texts", dependencies=auth)
+    def list_texts(font_id: str) -> List[Dict]:
+        return texts.list(font_id)
+
+    @app.put("/api/fonts/{font_id}/texts", dependencies=auth)
+    def save_text(font_id: str, body: TestText) -> Dict:
+        return texts.save(font_id, body.name, body.text, body.id)
+
+    @app.delete("/api/fonts/{font_id}/texts/{text_id}", dependencies=auth, status_code=204)
+    def delete_text(font_id: str, text_id: str) -> Response:
+        texts.delete(font_id, text_id)
+        return Response(status_code=204)
+
+    @app.get("/api/fonts/{font_id}/coverage/texts", dependencies=auth)
+    def texts_coverage(font_id: str) -> List[Dict]:
+        return texts.coverage(font_id, maker.reports(font_id))
+
+    @app.post("/api/fonts/{font_id}/export/{fmt}", dependencies=auth)
+    def export_text(font_id: str, fmt: str, body: ExportText) -> Response:
+        if fmt not in ("png", "pdf", "docx"):
+            raise HTTPException(404, "Download as png, pdf or docx.")
+        path, report = maker.newest_font(font_id)
+        text = body.text[:20000]
+        if fmt == "png":
+            data, media = export.png(path, text, int(body.size or 64)), "image/png"
+        elif fmt == "pdf":
+            data, media = export.pdf(path, text, body.size or 18.0), "application/pdf"
+        else:
+            data = export.docx(path, report["family"], text, body.size or 18.0)
+            media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        name = path.name.rsplit("-", 1)[0] + "." + fmt
+        return Response(data, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     # ---- files (read-only) -----------------------------------------------------------------------------
     def _png_in(root: Path, path: str) -> Path:

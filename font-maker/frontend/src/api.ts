@@ -152,6 +152,23 @@ export interface Report extends Coverage {
 export interface TryAkshara {
   text: string;
   kind: "book" | "pieced" | "filled" | "missing" | "other" | "space";
+  start: number; // in the (NFC) text
+  detail?: { char: string; kind: "filled" | "missing" }[];
+}
+
+// F7: texts the font is measured on after every build (yours, and the books' hand-checked lines)
+export interface TestText {
+  id: string;
+  name: string;
+  text: string;
+  source: "yours" | "truth";
+}
+
+export interface TextCoverage {
+  id: string;
+  name: string;
+  source: "yours" | "truth";
+  builds: ({ build: number; aksharas: number; gaps?: [string, number][] } & Record<string, number>)[];
 }
 
 export interface TryResult {
@@ -183,6 +200,27 @@ export const api = {
   changeFont: (id: string, change: { name?: string; statuses?: Status[]; mark_filled?: boolean }) =>
     request<Font>("PATCH", `/api/fonts/${id}`, change),
   deleteFont: (id: string) => request<void>("DELETE", `/api/fonts/${id}`),
+  texts: (id: string) => request<TestText[]>("GET", `/api/fonts/${id}/texts`),
+  saveText: (id: string, name: string, text: string) => request<TestText>("PUT", `/api/fonts/${id}/texts`, { name, text }),
+  deleteText: (id: string, textId: string) => request<void>("DELETE", `/api/fonts/${id}/texts/${textId}`),
+  textsCoverage: (id: string) => request<TextCoverage[]>("GET", `/api/fonts/${id}/coverage/texts`),
+  exportText: async (id: string, fmt: "png" | "pdf" | "docx", text: string, size: number): Promise<Blob> => {
+    const response = await fetch(`/api/fonts/${id}/export/${fmt}`, {
+      method: "POST",
+      headers: { "X-Token": token(), "Content-Type": "application/json" },
+      body: JSON.stringify({ text, size }),
+    });
+    if (!response.ok) {
+      let detail = response.statusText || `Error ${response.status}`;
+      try {
+        detail = (await response.json()).detail ?? detail;
+      } catch {
+        // not JSON
+      }
+      throw new Error(detail);
+    }
+    return response.blob();
+  },
   tryText: (id: string, text: string) => request<TryResult>("POST", `/api/fonts/${id}/coverage`, { text }),
   buildState: (id: string) => request<BuildState>("GET", `/api/fonts/${id}/build`),
   build: (id: string) => request<BuildState>("POST", `/api/fonts/${id}/build`),

@@ -2,16 +2,22 @@
 // a normal Devanagari font, always marked as filled; "Generate" comes in the next phase), and Build, which
 // writes the next version of the .ttf.
 import { useEffect, useState } from "react";
-import { api, BuildState, fontFileUrl } from "./api";
+import { api, BuildState, fontFileUrl, TextCoverage } from "./api";
 
 export default function Build({ fontId }: { fontId: string }) {
   const [state, setState] = useState<BuildState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [texts, setTexts] = useState<TextCoverage[] | null>(null);
   const fail = (e: Error) => setError(e.message);
 
   useEffect(() => {
     api.buildState(fontId).then(setState, fail);
   }, [fontId]);
+  const built = state?.report?.build;
+  useEffect(() => {
+    // F7: the test texts, measured with the newest build and the one before
+    if (built) api.textsCoverage(fontId).then(setTexts, fail);
+  }, [fontId, built]);
   useEffect(() => {
     if (!state?.job.running) return;
     const timer = window.setTimeout(() => api.buildState(fontId).then(setState, fail), 1000);
@@ -98,6 +104,7 @@ export default function Build({ fontId }: { fontId: string }) {
           </>
         )}
         {job.error && <p className="error-text">The build stopped: {job.error}</p>}
+        {texts && texts.length > 0 && <TextsTable texts={texts} />}
         {report ? (
           <p>
             Build {report.build}: {report.glyphs} glyphs, {report.rules} rules,{" "}
@@ -109,6 +116,52 @@ export default function Build({ fontId }: { fontId: string }) {
           !job.running && <p className="muted">Not built yet.</p>
         )}
       </div>
+    </>
+  );
+}
+
+const pct = (n: number | undefined, total: number) => (total ? `${((100 * (n ?? 0)) / total).toFixed(1)} %` : "–");
+
+// F7: the share of each test text's aksharas the font draws as the book's own, pieced, filled or missing
+function TextsTable({ texts }: { texts: TextCoverage[] }) {
+  return (
+    <>
+      <h3>Test texts</h3>
+      <table className="list">
+        <thead>
+          <tr>
+            <th>Text</th>
+            <th className="num">Aksharas</th>
+            <th className="num">The book's own</th>
+            <th className="num">Pieced</th>
+            <th className="num">Filled</th>
+            <th className="num">Missing</th>
+            <th className="num">Build before</th>
+          </tr>
+        </thead>
+        <tbody>
+          {texts.map((t) => {
+            const [now, before] = t.builds;
+            if (!now) return null;
+            return (
+              <tr key={t.id}>
+                <td>
+                  {t.name}
+                  {now.gaps && now.gaps.length > 0 && (
+                    <div className="muted small">Most frequent not the book's own: {now.gaps.map(([a, n]) => `${a}×${n}`).join(" ")}</div>
+                  )}
+                </td>
+                <td className="num">{now.aksharas}</td>
+                <td className="num">{pct(now.book, now.aksharas)}</td>
+                <td className="num">{pct(now.pieced, now.aksharas)}</td>
+                <td className="num">{pct(now.filled, now.aksharas)}</td>
+                <td className="num">{pct(now.missing, now.aksharas)}</td>
+                <td className="num">{before ? `build ${before.build}: ${pct(before.book, before.aksharas)} own` : "–"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </>
   );
 }

@@ -3,7 +3,7 @@
 Phase 1 (F0–F6, `FONT_PLAN.md`) builds a working Devanagari font from a book's letter groups. Phase 2 makes it
 easier to try, fills its gaps **in the book's own style** instead of from Noto, and makes words join cleanly.
 
-**Status:** a plan, not built. Written 2026-10-16; all questions answered the same day (section 10). Built when you say so, possibly several chunks in one go.
+**Status:** F7 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F8; built when you say so, possibly several chunks in one go.
 Same rules as Phase 1 (`FONT_PLAN.md`, section 1): everything in `font-maker/`, the library read-only, light
 tests (tiny made-up images, no full-book runs in tests), only the changed module's tests while building.
 
@@ -123,6 +123,38 @@ font have the shaped glyphs' ink / paths; the .docx opens as a zip with the text
 de-obfuscates to the .ttf); screen 2 (a key inserts at the cursor and ⌫ akshara removes कि at once; the
 palette copy has every key of the reading app). The check by eye: open each download on the Mac (Preview,
 TextEdit, Word).
+
+**Done (2026-10-16).** As planned, with these details:
+- **Palette:** `frontend/src/LetterPalette.tsx` (Font Maker's own), keys from `letters.ts` (a copy of the reading
+  app's 80 keys; `letters.test.ts` reads the reading app's file as text and checks every key is here). Keys
+  are drawn in the font being tried and coloured (book / pieced / filled / missing, from the build's
+  labels and fills). **Book's aksharas:** a row of first letters, then that letter's aksharas; or a search.
+  **Used last:** the last 12 keys, per viewer (browser storage). ⌫ akshara uses a copy of the reading app's
+  akshara splitting (`letters.ts`, as `ocr/aksharas.py`).
+- **One check line** replaces F6's marked copy: "✓ N aksharas, all the book's own", or the count and each
+  akshara that is not, once, with its reason ("missing ळ", "filled ं", "pieced") and ×n; a click selects it
+  in the box. `tryit.classify` now gives every piece its `start` and a non-book akshara its `detail`.
+- **Downloads** (`export.py`, `POST /api/fonts/{id}/export/{png|pdf|docx}`; .txt by the screen), named
+  `<font>-<date>.<ext>`:
+  - Image: drawn 4× and scaled down; each glyph filled only in its own box (first version filled a whole-page
+    mask per glyph: 12.7 s for 4 lines of book 6; now 1.4 s).
+  - PDF: A4, 18 pt, lines wrapped at spaces; **each glyph stored once as a form and placed where used** (first
+    version wrote every outline again: 6 s and 2.8 MB for 40 lines; now 1 s and 592 KB). Text not searchable.
+  - Word: a hand-written .docx (8 parts), the font in `word/fonts/font1.odttf`, scrambled with the key in
+    `fontTable.xml`; every line a paragraph in the font (also as the complex-script font, `w:cs`). Not yet
+    opened in Word: part of the open Word check.
+- **Test texts** (`texts.py`, `texts.json`): yours (save, delete) and "Hand-checked lines of <book>" (all
+  `line_truth` lines of the font's books, read-only). Each build now also keeps its report next to its .ttf
+  (`<file>.ttf.report.json`), so the Build tab's **Test texts** table shows the newest build and the one
+  before: aksharas, the book's own / pieced / filled / missing, the 20 most frequent gaps.
+- `uharfbuzz` is now a normal requirement (image and PDF), not only for tests.
+- Help page: a section "Try it: write and download".
+- Checked on book 6 (scratchpad build): 40 hand-checked lines to PDF (2 pages) and 4 to an image, in the
+  book's letters, as by eye.
+- Tests: backend 3 (test texts with the build before; image ink, PDF forms placed, .docx with the text and the
+  font that unscrambles to the .ttf; check-line positions and reasons), the whole run ≈ 2.7 s; screen 4 (the
+  palette copy has every key of the reading app; akshara splitting and ⌫ akshara; the check line; a key types
+  at the cursor).
 
 ## 3. F8: One even headline (≈ 4 h)
 

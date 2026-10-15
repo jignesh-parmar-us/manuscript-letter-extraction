@@ -129,3 +129,30 @@ svg.glyph-big path {
 .legend .ak {
   padding: 0 4px;
 }
+
+/* F7: the letters palette's keys, in the font, coloured by what the font has; the check line */
+.fm-key.pieced {
+  text-decoration: underline dotted #2f6fb0;
+  text-underline-offset: 0.3em;
+}
+.fm-key.filled {
+  background: #fbe7b5;
+  color: #000;
+}
+.fm-key.missing {
+  background: #f6c9c4;
+  color: #000;
+}
+.key.selected {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.check-line {
+  margin: 6px 0;
+}
+.check-line .ak {
+  margin: 0 6px;
+  font-size: 20px;
+  padding: 0 4px;
+  border-radius: 4px;
+}

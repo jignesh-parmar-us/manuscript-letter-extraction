@@ -3,4 +3,4 @@
 -r ../requirements.txt
 fonttools>=4.50          # outlines and the .ttf (F4, F5)
 potracer>=0.0.4          # tracing glyph images into curves (F4); pure Python, no binary
-uharfbuzz>=0.40         # tests only (F5): shapes text like Chrome to check the ligature rules
+uharfbuzz>=0.40         # shapes text like Chrome: the F5 tests, and F7's image and PDF downloads
