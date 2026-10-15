@@ -183,3 +183,17 @@ svg.glyph-big path {
     max-height: none;
   }
 }
+
+/* F9: generated from the book (its own colour on every screen) */
+.fm-key.generated,
+.ak.generated {
+  background: #d6e8f7;
+  color: #000;
+}
+.char.generated {
+  border-color: #2f6fb0;
+}
+.sign-img {
+  height: 32px;
+  background: #fff;
+}

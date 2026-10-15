@@ -14,6 +14,12 @@ What goes in (font-maker/docs/FONT_PLAN.md, section 4):
   - **Missing characters** (CHARSET without a base glyph): a box, so the gap shows. Each can be **filled**
     from Noto Serif Devanagari (data/, SIL Open Font License), scaled to this font's headline height and
     marked with a line under it (`mark_filled`, on by default), so a filled letter shows as filled in Word too.
+  - **Generated** signs (F9, gen.py): a vowel sign, mark or the virama cut from the book's own aksharas.
+    Signs right of the consonant (ा ी ो ौ ॉ ः) get their own width, ि is drawn before the consonant, and marks
+    (ं ँ े ै ु ू ृ ् ़) have no width: they sit over or under the end of the glyph before them. They are
+    attached to it by GPOS (`abvm` / `blwm`, mark-to-base, the GDEF mark class), with anchors at the base's
+    right edge, so every text engine places them the same way (without GPOS, HarfBuzz would place marks by
+    its own guess). A generated sign wins over a filled one.
   - Every build gets a new version (1.<n>), so macOS and Word do not keep showing an older build.
 
 Units: UPM font units per em; one em is the book's median line height (F3), the same scale for every glyph.
@@ -88,17 +94,20 @@ def choose(glyphs: List[Dict]) -> Tuple[Dict[str, Dict], List[Dict]]:
     return by_label, duplicates
 
 
-def coverage(glyphs: List[Dict], filled: List[str]) -> Dict:
-    """What the font will draw in the book's letters, what is filled, what is missing (no image is opened)."""
+def coverage(glyphs: List[Dict], filled: List[str], generated: Optional[List[str]] = None) -> Dict:
+    """What the font will draw in the book's letters, what is generated (F9) or filled, what is missing
+    (no image is opened)."""
     by_label, duplicates = choose(glyphs)
     base = {label for label in by_label if len(label) == 1}
+    made = [c for c in (generated or []) if c not in base]
     return {"base": len(base), "aksharas": len(by_label) - len(base),
             "generated": sum(1 for g in by_label.values() if g.get("generated")),
             "estimated": sum(1 for g in by_label.values() if g.get("placed") == "estimated"),
             "left_out": sorted(g["label_dev"] for g in glyphs if g.get("left_out")),
             "duplicates": duplicates,
-            "filled": [c for c in filled if c not in base],
-            "missing": [c for c in CHARSET if c not in base and c not in filled],
+            "generated_chars": made,
+            "filled": [c for c in filled if c not in base and c not in made],
+            "missing": [c for c in CHARSET if c not in base and c not in filled and c not in made],
             "labels": sorted(by_label)}
 
 
@@ -127,10 +136,37 @@ def _bar(pen, x0: int, x1: int, y0: int, height: int) -> None:
     pen.closePath()
 
 
+def mark_features(marks: Dict[str, List[str]], order: List[str], advance: Dict[str, Tuple[int, int]]) -> List[str]:
+    """F9: GDEF classes and mark-to-base GPOS for the generated marks: every other glyph is a base with
+    its anchor at its right edge on the baseline, every mark's anchor at its own origin. A mark is drawn
+    from the right edge of the glyph before it, so this places it where it is drawn, the same in every engine."""
+    all_marks = [m for k in ("above", "below") for m in marks[k]]
+    if not all_marks:
+        return []
+    bases = [n for n in order if n not in all_marks and n != ".notdef"]
+    by_width: Dict[int, List[str]] = {}
+    for n in bases:
+        by_width.setdefault(advance[n][0], []).append(n)
+    fea = []
+    for kind, cls in (("above", "@ABOVE"), ("below", "@BELOW")):
+        if marks[kind]:
+            fea.append(f"markClass [{' '.join(marks[kind])}] <anchor 0 0> {cls};")
+    for kind, cls, feature in (("above", "@ABOVE", "abvm"), ("below", "@BELOW", "blwm")):
+        if not marks[kind]:
+            continue
+        fea.append(f"feature {feature} {{")
+        fea += [f"    pos base [{' '.join(names)}] <anchor {w} 0> mark {cls};" for w, names in sorted(by_width.items())]
+        fea.append(f"}} {feature};")
+    fea.append(f"table GDEF {{ GlyphClassDef [{' '.join(bases)}], , [{' '.join(all_marks)}], ; }} GDEF;")
+    return fea
+
+
 def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metrics: Dict, filled: List[str],
           mark_filled: bool, contours_of: Callable[[Dict], List[Dict]], out: Path,
-          progress: Optional[Callable[[int, int], None]] = None) -> Dict:
-    """Write the font to `out` and return its report."""
+          progress: Optional[Callable[[int, int], None]] = None, generated: Optional[Dict[str, Dict]] = None) -> Dict:
+    """Write the font to `out` and return its report. `generated`: char -> a generated sign (F9: its kind,
+    `contours` in page pixels from its image's top-left, `left` / `right` and `y_top` in page pixels)."""
+    generated = generated or {}
     by_label, duplicates = choose(glyphs)
     line_px = metrics.get("line_height") or 120.0
     u = UPM / line_px                                            # font units per page pixel
@@ -169,13 +205,30 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
     s = head / noto_head
 
     # every character the font answers for: CHARSET, the characters of every label, and filled ones
-    chars = sorted(set(CHARSET) | {c for label in by_label for c in label} | set(filled))
-    filled_done, missing = [], []
+    chars = sorted(set(CHARSET) | {c for label in by_label for c in label} | set(filled) | set(generated))
+    filled_done, missing, made = [], [], []
+    marks: Dict[str, List[str]] = {"above": [], "below": []}
     for ch in chars:
         gname = glyph_name(ch)
         if gname in outlines:
             continue
-        if ch in filled and ord(ch) in noto_cmap:
+        if ch in generated:                                      # F9: cut from the book's own aksharas
+            e = generated[ch]
+            pen = TTGlyphPen(None)
+            w_px = e["size"][0] / SCALE
+            if e["kind"] == "right":
+                draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, e["left"], e["y_top"])
+                width = round(max(0.0, e["left"] + w_px + gap_px) * u)
+            elif e["kind"] == "left":                            # ि: drawn before the consonant, its hook over it
+                draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, 0.0, e["y_top"])
+                width = round(max(1.0, w_px - e["right"]) * u)
+            else:                                                # a mark: no width, over / under the glyph before
+                draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, e["left"], e["y_top"])
+                width = 0
+                marks[e["kind"]].append(gname)
+            add(gname, pen, width)
+            made.append(ch)
+        elif ch in filled and ord(ch) in noto_cmap:
             pen = TTGlyphPen(None)
             src = noto_glyphs[noto_cmap[ord(ch)]]
             rec = DecomposingRecordingPen(noto_glyphs)       # some Noto letters are made of other letters
@@ -239,11 +292,13 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
 
     rules = sorted(((seq, names[label]) for label in by_label if len(label) > 1 for seq in rule_orders(label)),
                    key=lambda r: -len(r[0]))
+    fea = ["languagesystem DFLT dflt;", "languagesystem dev2 dflt;", "languagesystem deva dflt;", ""]
     if rules:
-        fea = ["languagesystem DFLT dflt;", "languagesystem dev2 dflt;", "languagesystem deva dflt;", "",
-               "feature pres {"]
+        fea += ["feature pres {"]
         fea += [f"    sub {' '.join(names[c] for c in seq)} by {lig};" for seq, lig in rules]
         fea += ["} pres;"]
+    fea += mark_features(marks, order, advance)
+    if len(fea) > 4:
         addOpenTypeFeaturesFromString(fb.font, "\n".join(fea))
     fb.font["OS/2"].recalcUnicodeRanges(fb.font)
     fb.font["OS/2"].recalcCodePageRanges(fb.font)
@@ -252,8 +307,9 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
     fb.save(str(tmp))
     tmp.replace(out)
 
-    report = coverage(glyphs, filled)
+    report = coverage(glyphs, filled, list(generated))
     report.update({"build": number, "file": out.name, "family": name, "ps_name": ps, "glyphs": len(order),
                    "rules": len(rules), "filled": filled_done, "missing": missing, "duplicates": duplicates,
+                   "generated_chars": made,
                    "units_per_px": round(u, 3), "space": space})
     return report

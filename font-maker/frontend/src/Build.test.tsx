@@ -6,7 +6,8 @@ const COVERAGE = {
   base: 47, aksharas: 485, generated: 116, estimated: 116, left_out: [], duplicates: [], filled: [],
   missing: ["ग", "ं"], labels: ["क"],
 };
-const STATE = { job: { running: false, done: 0, total: 0, error: null, phase: "" }, report: null, coverage: COVERAGE, builds: 0, mark_filled: true };
+const STATE = { job: { running: false, done: 0, total: 0, error: null, phase: "" }, report: null, coverage: COVERAGE, builds: 0, mark_filled: true,
+                can_generate: ["ं"] };
 
 test("fill a missing character and build", async () => {
   const calls: { method: string; url: string; body?: string }[] = [];
@@ -17,7 +18,8 @@ test("fill a missing character and build", async () => {
   }));
   render(<Build fontId="f0001" />);
   expect(await screen.findByText(/116 made by the system, 116 with an estimated place/)).toBeInTheDocument();
-  expect(screen.getAllByRole("button", { name: "Generate" })[0]).toBeDisabled();
+  expect(screen.getAllByRole("button", { name: "Generate" })[0]).toBeDisabled();     // ग: not a sign
+  expect(screen.getAllByRole("button", { name: "Generate" })[1]).toBeEnabled();      // ं: cut from the book (F9)
   fireEvent.click(screen.getAllByRole("button", { name: "Fill" })[0]);
   expect(await screen.findByRole("button", { name: "Remove fill" })).toBeInTheDocument();
   expect(JSON.parse(calls.find((c) => c.method === "PUT")!.body!)).toEqual({ chars: ["ग"], filled: true });

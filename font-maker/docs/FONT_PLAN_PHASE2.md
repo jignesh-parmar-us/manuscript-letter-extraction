@@ -3,7 +3,7 @@
 Phase 1 (F0–F6, `FONT_PLAN.md`) builds a working Devanagari font from a book's letter groups. Phase 2 makes it
 easier to try, fills its gaps **in the book's own style** instead of from Noto, and makes words join cleanly.
 
-**Status:** F7 and F8 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F9.
+**Status:** F7–F9 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F10.
 Same rules as Phase 1 (`FONT_PLAN.md`, section 1): everything in `font-maker/`, the library read-only, light
 tests (tiny made-up images, no full-book runs in tests), only the changed module's tests while building.
 
@@ -232,6 +232,33 @@ generated sign shows its pieces from each pair and the average.
 Tests: made-up "consonant" and "consonant + bar on the right" images give back the bar; a mark gets its
 anchor; HarfBuzz puts ं over a made-up consonant without an akshara glyph at the anchor.
 Measure: coverage on the test texts (F7) before / after; by eye on the Try it tab.
+
+**Done (2026-10-16).** As planned, with these details:
+- `font_maker/gen.py`. Pairs (C, C+S) of the font's glyphs, at most 24 a sign, in label order, each once. C is
+  placed inside C+S by `cv2.matchTemplate`, searched only within 3 px of where their measured places put it;
+  C is grown by 2 px before it is taken away; specks under 2 % of the largest piece are dropped.
+- **A sign whose pieces do not agree is not generated** (median pairwise overlap below 0.45), with the reason
+  shown: book 6's ृ (5 pairs, 0.27) and ् (2 pairs, 0.02) came out as no shape. ॉ ँ ़ have no pair in book 6.
+  They stay missing; fill them, or draw them (F11).
+- Book 6: **11 signs** generated, from 21–24 pairs each (ः from 1, marked "few examples"): ा 0.89, ौ 0.94, ू 0.75,
+  ु 0.70, ि 0.69, ी 0.68, ै 0.65, ं 0.63, े 0.63, ो 0.55 agreement; cutting all 16 takes 4.6 s, once (each sign
+  is cut again only when its pairs' glyphs change: `key`).
+- With an even headline (F8) a sign's height is kept against its consonant's headline and placed against the
+  font's, so ा ी ो ौ meet the font's headline.
+- Into the font: signs right of the consonant with their own width, ि before it, marks (ं े ै ु ू …) with no
+  width over / under the end of the glyph before them, attached by GPOS (`abvm` / `blwm`, anchors at the
+  base's right edge, GDEF mark class). A generated sign wins over a filled one.
+- On book 6's hand-checked lines (scratchpad build, nothing filled): the book's own 98.7 %, generated 0.5 %,
+  pieced 0.1 %, missing 0.7 % (the build before: missing 1.2 %). By eye: किं गुरुं घूमे ठीक ढोल in the book's style.
+- **Found in book 6's groups** (not changed: Font Maker reads the library only): the glyphs of **खु** (1 copy, a
+  split cut) and **शी** (2 copies) show an anusvara: their copies may really be खुं / शीं, or caught a
+  neighbour's dot. Check them in the reading app.
+- Screen: Build tab, **Generate** and **Generate all from the book** for the signs it can cut; "Not generated"
+  with the reason; the **Generated from the book** card (each sign's image, its pairs, agreement, few
+  examples, Remove); a "generated" colour on the palette keys and in the check line.
+- Tests: 2 backend tests (a bar and a dot cut out of made-up aksharas, a sign without a pair; HarfBuzz: खं = ख
+  + a zero-width generated ं, खा with a generated ा of its own width, कं keeps the book's akshara, ं in the GDEF
+  mark class); the whole run ≈ 2.6 s. The Build smoke test checks Generate is active for a sign only.
 
 ## 5. F10: Half forms, reph and rakar: conjuncts the book did not print (≈ 9 h)
 

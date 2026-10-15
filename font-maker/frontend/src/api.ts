@@ -150,6 +150,18 @@ export interface Coverage {
   filled: string[];
   missing: string[];
   labels: string[];
+  generated_chars?: string[]; // F9: signs cut from the book's aksharas
+}
+
+// F9: a sign cut from the book's aksharas
+export interface GeneratedSign {
+  char: string;
+  kind: string;
+  n: number; // pairs it was cut from
+  agree: number | null;
+  few: boolean;
+  pairs: string[];
+  image: string | null;
 }
 
 export interface Report extends Coverage {
@@ -163,9 +175,9 @@ export interface Report extends Coverage {
 // F6: how the newest build draws a text, akshara by akshara (font_maker/tryit.py)
 export interface TryAkshara {
   text: string;
-  kind: "book" | "pieced" | "filled" | "missing" | "other" | "space";
+  kind: "book" | "pieced" | "generated" | "filled" | "missing" | "other" | "space";
   start: number; // in the (NFC) text
-  detail?: { char: string; kind: "filled" | "missing" }[];
+  detail?: { char: string; kind: "generated" | "filled" | "missing" }[];
 }
 
 // F7: texts the font is measured on after every build (yours, and the books' hand-checked lines)
@@ -197,11 +209,15 @@ export interface BuildState {
   mark_filled: boolean;
   clean_headline?: boolean; // F8
   headline?: { top: number; thickness: number; glyphs: number } | null;
+  generated?: GeneratedSign[]; // F9
+  can_generate?: string[];
+  not_generated?: { char: string; reason: string }[];
 }
 
 // Files are loaded by <img> tags, which cannot send the token header: it goes in the address.
 export const glyphUrl = (fontId: string, g: Glyph) => `/files/fonts/${fontId}/glyphs/${g.image}?token=${token()}`;
 export const copyUrl = (c: Copy) => `/files/books/${c.book}/${c.image}?token=${token()}`;
+export const generatedUrl = (fontId: string, image: string) => `/files/fonts/${fontId}/generated/${image}?token=${token()}`;
 export const fontFileUrl = (fontId: string, file: string) => `/files/fonts/${fontId}/builds/${file}?token=${token()}`;
 
 export const api = {
@@ -238,6 +254,7 @@ export const api = {
   tryText: (id: string, text: string) => request<TryResult>("POST", `/api/fonts/${id}/coverage`, { text }),
   buildState: (id: string) => request<BuildState>("GET", `/api/fonts/${id}/build`),
   build: (id: string) => request<BuildState>("POST", `/api/fonts/${id}/build`),
+  generate: (id: string, chars: string[], on: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/generated`, { chars, on }),
   fill: (id: string, chars: string[], filled: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/filled`, { chars, filled }),
   checkGlyphs: (id: string) => request<GlyphState>("POST", `/api/fonts/${id}/glyphs/check`),
   glyphs: (id: string) => request<GlyphState>("GET", `/api/fonts/${id}/glyphs`),

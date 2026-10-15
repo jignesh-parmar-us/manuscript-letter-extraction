@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F8). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F9). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -15,6 +15,7 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
   build    GET  /api/fonts/{id}/build    the newest build's report, the coverage now, the build job (F5)
            POST /api/fonts/{id}/build    build the next version (in the background)
            PUT  /api/fonts/{id}/filled   fill missing characters from the normal font, or take the fill out
+           PUT  /api/fonts/{id}/generated   generate signs from the book's aksharas, or take them out (F9, gen.py)
   try it   POST /api/fonts/{id}/coverage   how the newest build draws a text, akshara by akshara (F6, tryit.py)
            GET/PUT /api/fonts/{id}/texts, DELETE /api/fonts/{id}/texts/{text}   test texts (F7, texts.py)
            GET  /api/fonts/{id}/coverage/texts   the test texts with the newest build and the one before
@@ -82,6 +83,11 @@ class ExportText(BaseModel):
 class Fill(BaseModel):
     chars: List[str]
     filled: bool = True
+
+
+class Generate(BaseModel):
+    chars: List[str]
+    on: bool = True
 
 
 class Choice(BaseModel):
@@ -190,6 +196,10 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
             raise ProjectError("Build the font first (Build tab).")
         return classify(body.text[:5000], report)
 
+    @app.put("/api/fonts/{font_id}/generated", dependencies=auth)
+    def generate(font_id: str, body: Generate) -> Dict:
+        return maker.set_generated(font_id, body.chars, body.on)
+
     # ---- test texts and downloads (F7) ---------------------------------------------------------------
     @app.get("/api/fonts/{font_id}/texts", dependencies=auth)
     def list_texts(font_id: str) -> List[Dict]:
@@ -231,6 +241,11 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
         if root not in target.parents or not target.is_file() or target.suffix.lower() != ".png":
             raise HTTPException(404, "No such file.")
         return target
+
+    @app.get("/files/fonts/{font_id}/generated/{name}", dependencies=auth)
+    def generated_file(font_id: str, name: str):
+        return FileResponse(_png_in(projects.dir / font_id / "glyphs" / "generated", name),
+                            headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     @app.get("/files/fonts/{font_id}/glyphs/{name}", dependencies=auth)
     def glyph_file(font_id: str, name: str):

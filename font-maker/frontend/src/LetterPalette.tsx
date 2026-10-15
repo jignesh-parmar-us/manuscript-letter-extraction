@@ -7,14 +7,15 @@
 import { useMemo, useState } from "react";
 import { DEV, isSign, SECTIONS } from "./letters";
 
-export type KeyKind = "book" | "pieced" | "filled" | "missing";
+export type KeyKind = "book" | "pieced" | "generated" | "filled" | "missing";
 
 /** What the font draws for a key's text: the book's own glyph, several of them, or a filled / missing letter. */
-export function keyKind(key: string, labels: Set<string>, filled: Set<string>): KeyKind {
+export function keyKind(key: string, labels: Set<string>, filled: Set<string>, made: Set<string> = new Set()): KeyKind {
   if (labels.has(key)) return "book";
   const chars = Array.from(key);
-  if (chars.some((c) => !labels.has(c) && !filled.has(c))) return "missing";
+  if (chars.some((c) => !labels.has(c) && !filled.has(c) && !made.has(c))) return "missing";
   if (chars.some((c) => filled.has(c))) return "filled";
+  if (chars.some((c) => made.has(c))) return "generated";
   return "pieced";
 }
 
@@ -46,6 +47,7 @@ interface Props {
   family: string; // the CSS font family of the font being tried
   labels: string[]; // the book's labels in the newest build (letters and aksharas)
   filled: string[];
+  generated?: string[]; // F9: signs cut from the book's aksharas
   onKey: (text: string) => void;
   onBackspace: () => void; // one character
   onBackspaceAkshara: () => void; // the whole akshara before the cursor
@@ -65,6 +67,7 @@ export default function LetterPalette(props: Props) {
   };
   const labels = useMemo(() => new Set(props.labels), [props.labels]);
   const filled = useMemo(() => new Set(props.filled), [props.filled]);
+  const made = useMemo(() => new Set(props.generated ?? []), [props.generated]);
 
   const type = (k: string) => {
     props.onKey(k);
@@ -73,7 +76,7 @@ export default function LetterPalette(props: Props) {
     remember(RECENT, JSON.stringify(next));
   };
   const key = (k: string) => {
-    const kind = keyKind(k, labels, filled);
+    const kind = keyKind(k, labels, filled, made);
     return (
       <button key={k} className={`key fm-key ${kind}`} style={keyFont}
               onClick={() => type(k)} title={`${k}: ${KIND_TEXT[kind]}`} aria-label={k}>
@@ -155,6 +158,7 @@ export default function LetterPalette(props: Props) {
       )}
       <p className="muted small">
         Keys: <span className="fm-key book">the book's own</span> · <span className="fm-key pieced">pieced</span> ·{" "}
+        <span className="fm-key generated">generated</span> ·{" "}
         <span className="fm-key filled">filled</span> · <span className="fm-key missing">missing</span>
       </p>
     </div>
@@ -164,6 +168,7 @@ export default function LetterPalette(props: Props) {
 export const KIND_TEXT: Record<string, string> = {
   book: "the book's own",
   pieced: "pieced together from the book's glyphs",
+  generated: "holds a sign Font Maker cut from the book's aksharas",
   filled: "holds a letter filled from the normal font",
   missing: "holds a missing letter (a box)",
   other: "not Devanagari: not in this font",

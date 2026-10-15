@@ -363,7 +363,10 @@ class GlyphMaker:
         report = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
         job = self.jobs.get(font_id, {"running": False, "done": 0, "total": 0, "error": None, "phase": ""})
         return {"job": dict(job), "report": report, "builds": font["builds"],
-                "coverage": builder.coverage(list(st["glyphs"].values()), font.get("filled", [])),
+                "coverage": builder.coverage(list(st["glyphs"].values()), font.get("filled", []),
+                                             font.get("generated", [])),
+                "generated": self.generated_info(font_id, font),
+                "can_generate": self._can_generate(),
                 "mark_filled": font.get("settings", {}).get("mark_filled", True),
                 "clean_headline": font.get("settings", {}).get("clean_headline", True),
                 "headline": st["metrics"].get("headline")}
@@ -377,17 +380,111 @@ class GlyphMaker:
         number = int(font.get("build", 0)) + 1
         safe = re.sub(r"[^A-Za-z0-9]+", "-", font["name"]).strip("-") or font_id
         out = self.projects.dir / font_id / "builds" / f"{safe}-{number}.ttf"
+        made = self.generated_for_build(font_id, font)
         report = builder.build(font["name"], number, f"FontMaker{font_id}", list(st["glyphs"].values()),
                                st["metrics"], font.get("filled", []),
                                font.get("settings", {}).get("mark_filled", True),
                                lambda g, target=self.headline_target(font_id): self.contours(font_id, g, target), out,
-                               lambda d, t: step(d, t, "outlines"))
+                               lambda d, t: step(d, t, "outlines"), generated=made)
         for path in (self._report_path(font_id), out.with_name(out.name + ".report.json")):   # F7: per build too
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
             os.replace(tmp, path)
         self.projects.set_build(font_id, number)
         return report
+
+    # -- generated signs (F9, gen.py) ---------------------------------------------------------------------
+    def _gen_dir(self, font_id: str) -> Path:
+        return self._dir(font_id) / "generated"
+
+    def _gen_entry(self, font_id: str, ch: str) -> Optional[Dict]:
+        """The generated sign's numbers, cut again when the book's aksharas it comes from changed."""
+        from . import gen
+        folder = self._gen_dir(font_id)
+        path = folder / f"{gen.code(ch)}.json"
+        glyphs = list(self._loaded(font_id)["glyphs"].values())
+        entry = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+        if entry and entry.get("key") == gen.current_key(ch, glyphs) and (folder / entry["image"]).is_file():
+            return entry
+        made = gen.make_sign(ch, glyphs, self._dir(font_id))
+        if made is None:
+            return None
+        entry, img = made
+        folder.mkdir(parents=True, exist_ok=True)
+        entry["image"] = f"{gen.code(ch)}-{entry['key']}.png"
+        for old in folder.glob(f"{gen.code(ch)}-*"):
+            old.unlink(missing_ok=True)
+        cv2.imwrite(str(folder / entry["image"]), np.where(img, 0, 255).astype(np.uint8))
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(entry, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+        self.made += 1
+        return entry
+
+    def generated_info(self, font_id: str, font: Dict) -> List[Dict]:
+        """The chosen generated signs, for the Build tab (only their saved numbers; nothing is cut here)."""
+        from . import gen
+        out = []
+        for ch in font.get("generated", []):
+            path = self._gen_dir(font_id) / f"{gen.code(ch)}.json"
+            e = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+            out.append({"char": ch, "n": e.get("n", 0), "agree": e.get("agree"), "few": e.get("few", True),
+                        "pairs": [p["akshara"] for p in e.get("pairs", [])], "image": e.get("image"),
+                        "kind": e.get("kind")})
+        return out
+
+    def set_generated(self, font_id: str, chars: List[str], on: bool) -> Dict:
+        """Generate these signs from the book's aksharas (cut now), or take them out again."""
+        from . import gen
+        self._check_busy(font_id)
+        font = self.projects.get(font_id)
+        chosen = [c for c in font.get("generated", []) if c not in chars]
+        failed = []
+        if on:
+            for ch in chars:
+                if not gen.can_generate(ch):
+                    failed.append({"char": ch, "reason": "not a sign Font Maker can cut yet"})
+                    continue
+                reason = gen.why_not(self._gen_entry(font_id, ch))
+                if reason:
+                    failed.append({"char": ch, "reason": reason})
+                else:
+                    chosen.append(ch)
+        self.projects.set_fields(font_id, generated=chosen)
+        state = self.build_state(font_id)
+        state["not_generated"] = failed
+        return state
+
+    def generated_for_build(self, font_id: str, font: Dict) -> Dict[str, Dict]:
+        """The chosen generated signs with their outlines and their height in the font (with an even
+        headline, they meet the font's headline)."""
+        from . import gen
+        target = self.headline_target(font_id)
+        out = {}
+        for ch in font.get("generated", []):
+            e = self._gen_entry(font_id, ch)
+            if gen.why_not(e):                                  # the book's aksharas changed: no longer one shape
+                continue
+            folder = self._gen_dir(font_id)
+            outline = folder / (e["image"] + ".outline.json")
+            if outline.is_file():
+                contours = json.loads(outline.read_text(encoding="utf-8"))
+            else:
+                img = cv2.imread(str(folder / e["image"]), cv2.IMREAD_GRAYSCALE)
+                contours = trace(img < 128, SCALE)
+                outline.write_text(json.dumps(contours), encoding="utf-8")
+                self.traced += 1
+            y_top = target["top"] + e["top_head"] if target and e.get("top_head") is not None else e["top"]
+            out[ch] = {**e, "contours": contours, "y_top": y_top}
+        return out
+
+    @staticmethod
+    def _can_generate() -> List[str]:
+        from . import gen
+        return [c for c in builder.CHARSET if gen.can_generate(c)]
+
+    def generated_image(self, font_id: str, name: str) -> Path:
+        return self._gen_dir(font_id) / name
 
     def reports(self, font_id: str) -> List[Dict]:
         """The reports of the builds, newest first (F7: the coverage of the test texts, with the build before)."""

@@ -12,7 +12,7 @@ class TryItTest(unittest.TestCase):
         out = classify("कि क्त किं ळ ક", REPORT)
         kinds = [(a["text"], a["kind"]) for a in out["aksharas"] if a["kind"] != "space"]
         self.assertEqual(kinds, [("कि", "book"), ("क्त", "pieced"), ("किं", "filled"), ("ळ", "missing"), ("ક", "other")])
-        self.assertEqual(out["counts"], {"book": 1, "pieced": 1, "filled": 1, "missing": 1, "other": 1})
+        self.assertEqual(out["counts"], {"book": 1, "pieced": 1, "generated": 0, "filled": 1, "missing": 1, "other": 1})
         self.assertEqual("".join(a["text"] for a in out["aksharas"]), "कि क्त किं ळ ક")   # spaces kept
         self.assertEqual([a["text"] for a in classify("abc क", REPORT)["aksharas"]], ["abc", " ", "क"])
 

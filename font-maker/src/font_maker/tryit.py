@@ -6,6 +6,7 @@ is taken letter by letter (the book's letter, a filled one, or a missing box). T
 
   book     one glyph of the book's own
   pieced   put together from several of the book's glyphs (no group of its own, e.g. a conjunct without a group)
+  generated holds a sign Font Maker cut from the book's aksharas (F9, marked on the screens)
   filled   holds a letter filled from the normal font (always marked)
   missing  holds a letter the font has only as a box
   other    not Devanagari (Latin, Gujarati, …): this font does not draw it
@@ -21,7 +22,7 @@ from typing import Dict, List
 
 from letter_extractor.ocr.aksharas import split_spans
 
-KINDS = ("book", "pieced", "filled", "missing", "other")
+KINDS = ("book", "pieced", "generated", "filled", "missing", "other")
 ZERO_WIDTH = ("‌", "‍")                    # ZWNJ, ZWJ: invisible
 
 
@@ -32,6 +33,7 @@ def _devanagari(ch: str) -> bool:
 def classify(text: str, report: Dict) -> Dict:
     labels = set(report.get("labels", []))
     filled = set(report.get("filled", []))
+    made = set(report.get("generated_chars", []))
     longest = max((len(label) for label in labels), default=1)
     text = unicodedata.normalize("NFC", text)
     out: List[Dict] = []
@@ -57,11 +59,11 @@ def classify(text: str, report: Dict) -> Dict:
             ch, rest = rest[0], rest[1:]
             if ch in ZERO_WIDTH:
                 continue
-            part = "filled" if ch in filled else "missing"
+            part = "generated" if ch in made else "filled" if ch in filled else "missing"
             parts.append(part)
             detail.append({"char": ch, "kind": part})
         kind = ("missing" if "missing" in parts else "filled" if "filled" in parts
-                else "book" if len(parts) == 1 else "pieced")
+                else "generated" if "generated" in parts else "book" if len(parts) == 1 else "pieced")
         piece = {"text": ak, "kind": kind, "start": start}
         if kind != "book":
             piece["detail"] = detail

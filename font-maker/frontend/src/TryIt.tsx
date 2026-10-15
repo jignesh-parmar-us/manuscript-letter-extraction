@@ -13,7 +13,7 @@ import LetterPalette, { KIND_TEXT } from "./LetterPalette";
 import { go } from "./route";
 
 const SAMPLES = ["श्री स्वामिनारायण भगवान", "वचनामृत गढडा प्रथम प्रकरण", "भक्त धर्म ज्ञान वैराग्य", "किं कृष्ण गुरु ॥ १२"];
-const NOT_BOOK = ["pieced", "filled", "missing"];
+const NOT_BOOK = ["pieced", "generated", "filled", "missing"];
 
 function reason(a: TryAkshara): string {
   if (a.kind === "pieced") return "pieced";
@@ -228,7 +228,7 @@ export default function TryIt({ fontId }: { fontId: string }) {
       </div>
       {shown && (
         <div className="try-palette">
-          <LetterPalette family={family} labels={report.labels} filled={report.filled} onKey={insert}
+          <LetterPalette family={family} labels={report.labels} filled={report.filled} generated={report.generated_chars} onKey={insert}
                          onBackspace={() => remove(false)} onBackspaceAkshara={() => remove(true)}
                          onHide={() => showPalette(false)} />
         </div>

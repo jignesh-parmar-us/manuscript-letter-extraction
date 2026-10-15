@@ -2,7 +2,7 @@
 // a normal Devanagari font, always marked as filled; "Generate" comes in the next phase), and Build, which
 // writes the next version of the .ttf.
 import { useEffect, useState } from "react";
-import { api, BuildState, fontFileUrl, TextCoverage } from "./api";
+import { api, BuildState, fontFileUrl, generatedUrl, TextCoverage } from "./api";
 
 export default function Build({ fontId }: { fontId: string }) {
   const [state, setState] = useState<BuildState | null>(null);
@@ -27,9 +27,13 @@ export default function Build({ fontId }: { fontId: string }) {
   if (!state) return error ? <div className="error" role="alert"><span>{error}</span></div> : <p className="muted">Loading…</p>;
   const { job, coverage: c, report } = state;
   const fill = (chars: string[], filled: boolean) => api.fill(fontId, chars, filled).then(setState, fail);
+  const generate = (chars: string[], on: boolean) => api.generate(fontId, chars, on).then(setState, fail);
+  const canGenerate = new Set(state.can_generate ?? []);
+  const generable = c.missing.filter((ch) => canGenerate.has(ch));
   const extra = [c.generated > 0 && `${c.generated} made by the system`, c.estimated > 0 && `${c.estimated} with an estimated place`]
     .filter(Boolean).join(", ");
-  const changed = report && (report.filled.join() !== c.filled.join() || report.labels?.length !== c.labels.length);
+  const changed = report && (report.filled.join() !== c.filled.join() || report.labels?.length !== c.labels.length ||
+    (report.generated_chars ?? []).join() !== (c.generated_chars ?? []).join());
   return (
     <>
       {error && (
@@ -63,22 +67,53 @@ export default function Build({ fontId }: { fontId: string }) {
       <div className="card">
         <div className="row between">
           <h2>Missing ({c.missing.length})</h2>
-          {c.missing.length > 0 && <button onClick={() => fill(c.missing, true)}>Fill all from normal font</button>}
+          <div className="row">
+            {generable.length > 0 && <button onClick={() => generate(generable, true)}>Generate all from the book</button>}
+            {c.missing.length > 0 && <button onClick={() => fill(c.missing, true)}>Fill all from normal font</button>}
+          </div>
         </div>
         <p className="muted small">
-          The book has no letter for these. In the font they are a box, so the gap shows. Fill one from a normal
-          Devanagari font (Noto Serif Devanagari); it is always marked as filled.
+          The book has no letter for these. In the font they are a box, so the gap shows. <strong>Generate</strong> cuts
+          a vowel sign or mark out of the book's own aksharas (का − क = ा); <strong>Fill</strong> takes it from a
+          normal Devanagari font (Noto Serif Devanagari). Both are always marked.
         </p>
         <div className="chars">
           {c.missing.map((ch) => (
             <span key={ch} className="char missing">
               <span className="char-text">{ch}</span>
               <button className="link" onClick={() => fill([ch], true)}>Fill</button>
-              <button className="link" disabled title="Next phase: make it in the book's style">Generate</button>
+              <button className="link" disabled={!canGenerate.has(ch)} onClick={() => generate([ch], true)}
+                      title={canGenerate.has(ch) ? "Cut it out of the book's aksharas" : "Not a sign Font Maker can cut"}>Generate</button>
             </span>
           ))}
         </div>
       </div>
+
+      {(state.not_generated ?? []).length > 0 && (
+        <p className="error-text">
+          Not generated: {state.not_generated!.map((f) => `${f.char} (${f.reason})`).join(" · ")}. Fill it, or leave it missing.
+        </p>
+      )}
+
+      {(state.generated ?? []).length > 0 && (
+        <div className="card">
+          <h2>Generated from the book ({state.generated!.length})</h2>
+          <p className="muted small">Cut out of the book's own aksharas: the sign of each pair, averaged.</p>
+          <div className="chars">
+            {state.generated!.map((g) => (
+              <span key={g.char} className="char generated" title={`From ${g.pairs.join(" ")}`}>
+                {g.image && <img className="sign-img" src={generatedUrl(fontId, g.image)} alt={g.char} />}
+                <span className="char-text">◌{g.char}</span>
+                <span className="muted small">
+                  {g.n} {g.n === 1 ? "pair" : "pairs"}{g.agree !== null ? `, agree ${Math.round(g.agree * 100)} %` : ""}
+                  {g.few && " (few examples)"}
+                </span>
+                <button className="link" onClick={() => generate([g.char], false)}>Remove</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {c.filled.length > 0 && (
         <div className="card">

@@ -13,7 +13,7 @@ characters as boxes, or filled from Noto Serif Devanagari and marked with a line
 type and see the text in the font, marked akshara by akshara; help page `docs/help/font.html`).
 Phase 1 is built; the check by eye in Word is still open. Phase 2 ([docs/FONT_PLAN_PHASE2.md](docs/FONT_PLAN_PHASE2.md)): F7
 (Try it: letters palette with the book's aksharas, one check line, test texts, downloads as image, text, PDF, Word) and F8
-(one even headline; gaps as in भ थ ध stay).
+(one even headline; gaps as in भ थ ध stay) and F9 (vowel signs and marks cut from the book's own aksharas).
 
 ## Run (macOS, zsh, from the project folder)
 
@@ -44,7 +44,8 @@ The reading app's tests (`discover -s tests`, `npm test`) do not run these, and 
 src/font_maker/   main.py (start), api.py (backend), store.py (read-only library),
                   projects.py (font projects), glyphs.py (glyph images), metrics.py (places),
                   trace.py (outlines), build.py (the .ttf), tryit.py (Try it), texts.py (test texts),
-                  export.py (image, PDF, Word), headline.py (even headline)
+                  export.py (image, PDF, Word), headline.py (even headline),
+                  gen.py (generated signs)
                   data/: Noto Serif Devanagari subset, SIL Open Font License (OFL-NotoSerifDevanagari.txt)
 frontend/         the screen (React); uses the reading app's stylesheet (../frontend/src/styles.css)
 tests/            backend tests
