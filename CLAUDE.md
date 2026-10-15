@@ -18,10 +18,15 @@ in `frontend/`, SQLite library at `~/Documents/Manuscript Letters`.
   (e.g. `PYTHONPATH=src .venv/bin/python -m unittest tests.test_wholelines`), and `npm test`
   only if `frontend/` changed. Run the full suites at the end of a chunk or before a merge
   (backend ≈ 12 min, screen ≈ 1.5 min). Add a test with every fix.
+- **No heavy runs while implementing:** no Measure, no harness, no full backend suite. Run only the
+  tests of the changed modules; prove "same numbers" changes with small equality tests. Heavy runs only
+  when I ask, one at a time (`docs/SPEED_PLAN.md`).
 
 ## Plans and docs
 - When the implementation differs from the plan, update the plan in the same commit:
   `docs/IMPLEMENTATION_PLAN.md` (Phase 1, C0–C9), `docs/implementation_plan_phase2.md` (C10+),
+  `docs/implementation_plan_phase3_lean.md` (C19+, what is built; the full `implementation_plan_phase3.md`
+  is the reference for what was left for later), `docs/SPEED_PLAN.md` (S1–S4),
   `docs/SEGMENTATION_PLAN.md` (line search). Record what changed and why. Also update the chunks
   that come after it: status, files, settings.
 - Tuning numbers go in `docs/TUNING.md` / `docs/TUNING_PHASE2.md`.
