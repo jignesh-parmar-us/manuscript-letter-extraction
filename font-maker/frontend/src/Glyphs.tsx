@@ -1,4 +1,4 @@
-// The Glyphs tab (F2): every glyph of the font, made from its group's best copies. Click one to pick a copy
+// The Glyphs tab (F2): every glyph of the font (Devanagari label first: the font is Devanagari only), made from its group's best copies. Click one to pick a copy
 // yourself, go back to the system pick, or leave the group out. Your choices never change the group.
 // Opening the tab brings the glyphs up to date: only glyphs whose group changed are made again.
 import { useEffect, useState } from "react";
@@ -88,10 +88,10 @@ export default function Glyphs({ fontId }: { fontId: string }) {
       <div className="grid">
         {shown.map((g) => (
           <button key={g.group} className={`tile glyph${g.left_out ? " left-out" : ""}${g.lost ? " lost" : ""}`}
-                  onClick={() => setOpen(g)} title={`${g.label_guj} ${g.label_dev}: ${methodText(g)}`}>
-            <img src={glyphUrl(fontId, g)} alt={g.label_guj} loading="lazy" />
+                  onClick={() => setOpen(g)} title={`${g.label_dev} ${g.label_guj}: ${methodText(g)}`}>
+            <img src={glyphUrl(fontId, g)} alt={g.label_dev} loading="lazy" />
             <span className="glyph-label">
-              {g.label_guj} <span className="muted">{g.label_dev}</span>
+              {g.label_dev} <span className="muted">{g.label_guj}</span>
             </span>
             {g.method === "pick" && <span className="badge ok">pick</span>}
             {g.status === "auto" && <span className="badge warn">not reviewed</span>}
@@ -102,7 +102,7 @@ export default function Glyphs({ fontId }: { fontId: string }) {
       {state.cut_errors.length > 0 && (
         <p className="muted small">
           Not made, because the label holds more than one akshara (a cut to fix in the reading app):{" "}
-          {state.cut_errors.map((c) => c.label_guj).join(", ")}.
+          {state.cut_errors.map((c) => c.label_dev).join(", ")}.
         </p>
       )}
       {open && <GlyphDialog fontId={fontId} glyph={open} onChoose={choose} onClose={() => setOpen(null)} />}
@@ -121,12 +121,12 @@ function GlyphDialog(props: { fontId: string; glyph: Glyph; onChoose: (g: Glyph,
       <div className="dialog glyph-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="row between">
           <h2>
-            {g.label_guj} <span className="muted">{g.label_dev}</span>
+            {g.label_dev} <span className="muted">{g.label_guj}</span>
           </h2>
           <button className="link" onClick={props.onClose} aria-label="Close">×</button>
         </div>
         <div className="row">
-          <img className="glyph-big" src={glyphUrl(props.fontId, g)} alt={g.label_guj} />
+          <img className="glyph-big" src={glyphUrl(props.fontId, g)} alt={g.label_dev} />
           <div>
             <p>
               {methodText(g)}

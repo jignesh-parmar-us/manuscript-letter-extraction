@@ -17,7 +17,7 @@ test("pick a glyph and leave it out", async () => {
     return new Response(JSON.stringify(STATE));
   }));
   render(<Glyphs fontId="f0001" />);
-  fireEvent.click(await screen.findByTitle("કિ कि: average of 3"));
+  fireEvent.click(await screen.findByTitle("कि કિ: average of 3"));
   expect(await screen.findByLabelText("Use copy 1")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Leave out of the font" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Use in the font again" })).toBeInTheDocument());

@@ -272,8 +272,8 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Groups without any copy are skipped (book 6: 532 of the 544 usable groups have copies).
 - Check on book 6, read-only, written only to the scratchpad: 40 glyphs in 0.28 s (all 532 ≈ 4 s, once);
   28 averaged, 12 one copy. The shapes are clean. Book 6 is printed in Devanagari letter shapes (with the
-  headline), which led to decision 5 (Devanagari only). The Glyphs grid still shows the label in both scripts; from F5 on
-  it shows the Devanagari label first.
+  headline), which led to decision 5 (Devanagari only). The Glyphs grid shows the Devanagari label first, the
+  Gujarati one after it (muted).
 - Tests: 3 backend tests (images; counted remaking, a pick, a lost pick; the API with files), 1 screen smoke
   test. The whole `font-maker/tests` run takes ≈ 1 s.
 
