@@ -9,7 +9,9 @@ delete fonts; a font's files are in `<library>/fonts/<id>/`) and F2 (Glyphs: one
 group from its best copies; pick a copy yourself or leave a group out) and F3 (where each glyph sits
 on the line, its width, letter gap and word space; view "On the line") and F4 (each glyph traced into
 outlines when needed, shown in its dialog) and F5 (Build: the .ttf with the ligature rules; missing
-characters as boxes, or filled from Noto Serif Devanagari and marked with a line; download).
+characters as boxes, or filled from Noto Serif Devanagari and marked with a line; download) and F6 (Try it:
+type and see the text in the font, marked akshara by akshara; help page `docs/help/font.html`).
+Phase 1 is built; the check by eye in Word is still open.
 
 ## Run (macOS, zsh, from the project folder)
 
@@ -39,11 +41,11 @@ The reading app's tests (`discover -s tests`, `npm test`) do not run these, and 
 ```
 src/font_maker/   main.py (start), api.py (backend), store.py (read-only library),
                   projects.py (font projects), glyphs.py (glyph images), metrics.py (places),
-                  trace.py (outlines), build.py (the .ttf)
+                  trace.py (outlines), build.py (the .ttf), tryit.py (Try it)
                   data/: Noto Serif Devanagari subset, SIL Open Font License (OFL-NotoSerifDevanagari.txt)
 frontend/         the screen (React); uses the reading app's stylesheet (../frontend/src/styles.css)
 tests/            backend tests
-docs/             the plan; help pages from F6
+docs/             the plan; help/font.html (the help page, copied into the app by the build)
 ```
 
 Font Maker may import `letter_extractor` (tables, akshara splitting, script mapping); `letter_extractor`

@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F5). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F6). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -14,6 +14,8 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
   build    GET  /api/fonts/{id}/build    the newest build's report, the coverage now, the build job (F5)
            POST /api/fonts/{id}/build    build the next version (in the background)
            PUT  /api/fonts/{id}/filled   fill missing characters from the normal font, or take the fill out
+  try it   POST /api/fonts/{id}/coverage   how the newest build draws a text, akshara by akshara (F6, tryit.py)
+  help     GET /help/font.html             the help page (no token; copied from font-maker/docs/help/ by the build)
   files    GET /files/fonts/{id}/glyphs/{name} (a glyph image), GET /files/fonts/{id}/builds/{name} (a .ttf),
            GET /files/books/{id}/{path} (a copy's image)
 """
@@ -33,6 +35,7 @@ from letter_extractor.app.db import Book
 
 from .glyphs import Busy, GlyphMaker
 from .projects import ProjectError, ProjectNotFound, Projects
+from .tryit import classify
 from .store import Store
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -48,6 +51,10 @@ class FontChange(BaseModel):
     name: Optional[str] = None
     statuses: Optional[List[str]] = None
     mark_filled: Optional[bool] = None
+
+
+class TryText(BaseModel):
+    text: str
 
 
 class Fill(BaseModel):
@@ -148,6 +155,13 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
         projects.set_filled(font_id, body.chars, body.filled)
         return maker.build_state(font_id)
 
+    @app.post("/api/fonts/{font_id}/coverage", dependencies=auth)
+    def try_coverage(font_id: str, body: TryText) -> Dict:
+        report = maker.build_state(font_id)["report"]
+        if not report:
+            raise ProjectError("Build the font first (Build tab).")
+        return classify(body.text[:5000], report)
+
     # ---- files (read-only) -----------------------------------------------------------------------------
     def _png_in(root: Path, path: str) -> Path:
         root = root.resolve()
@@ -194,5 +208,8 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
 
     if (static_dir / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+    if (static_dir / "help").is_dir():
+        # the help page (copied from font-maker/docs/help/ by the screen's build); no data, so no token needed
+        app.mount("/help", StaticFiles(directory=static_dir / "help", html=True), name="help")
 
     return app

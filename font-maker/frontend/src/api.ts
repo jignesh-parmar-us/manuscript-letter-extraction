@@ -148,6 +148,18 @@ export interface Report extends Coverage {
   rules: number;
 }
 
+// F6: how the newest build draws a text, akshara by akshara (font_maker/tryit.py)
+export interface TryAkshara {
+  text: string;
+  kind: "book" | "pieced" | "filled" | "missing" | "other" | "space";
+}
+
+export interface TryResult {
+  aksharas: TryAkshara[];
+  counts: Record<string, number>;
+  build: number;
+}
+
 export interface BuildState {
   job: { running: boolean; done: number; total: number; error: string | null; phase: string };
   report: Report | null;
@@ -171,6 +183,7 @@ export const api = {
   changeFont: (id: string, change: { name?: string; statuses?: Status[]; mark_filled?: boolean }) =>
     request<Font>("PATCH", `/api/fonts/${id}`, change),
   deleteFont: (id: string) => request<void>("DELETE", `/api/fonts/${id}`),
+  tryText: (id: string, text: string) => request<TryResult>("POST", `/api/fonts/${id}/coverage`, { text }),
   buildState: (id: string) => request<BuildState>("GET", `/api/fonts/${id}/build`),
   build: (id: string) => request<BuildState>("POST", `/api/fonts/${id}/build`),
   fill: (id: string, chars: string[], filled: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/filled`, { chars, filled }),

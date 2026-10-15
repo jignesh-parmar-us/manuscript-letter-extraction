@@ -1,6 +1,6 @@
 // The frame of Font Maker: one bar at the top and the screen chosen by the address:
 //   #/               Fonts     (Fonts.tsx: the font projects and "New font")
-//   #/fonts/<id>[/<tab>]   one font  (FontView.tsx; tabs: glyphs, settings)
+//   #/fonts/<id>[/<tab>]   one font  (FontView.tsx; tabs: glyphs, build, try, settings)
 import { useEffect, useState } from "react";
 import { api, AppInfo } from "./api";
 import Fonts from "./Fonts";
@@ -25,7 +25,9 @@ export default function App() {
           </button>
         </div>
         <div className="top-middle muted small">{info && `Library: ${info.library} (read-only)`}</div>
-        <nav className="top-right" aria-label="App" />
+        <nav className="top-right" aria-label="App">
+          <a href="/help/font.html" target="_blank" rel="noreferrer">Help</a>
+        </nav>
       </header>
       <main>{fontId ? <FontView fontId={fontId} tab={route[2] ?? "glyphs"} /> : <Fonts />}</main>
     </div>

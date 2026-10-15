@@ -91,3 +91,41 @@ svg.glyph-big path {
   border-color: var(--warn);
   color: var(--warn);
 }
+
+/* Try it (F6): the text in the font, then marked akshara by akshara */
+.try-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: #000;
+  line-height: 1.6;
+}
+.try-marked {
+  background: #fff;
+  color: #000;
+  padding: 8px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.ak.pieced {
+  text-decoration: underline dotted #2f6fb0;
+  text-underline-offset: 0.35em;
+}
+.ak.filled {
+  background: #fbe7b5;
+}
+.ak.missing {
+  background: #f6c9c4;
+}
+.ak.other {
+  color: #8a857c;
+}
+.legend {
+  margin-right: 12px;
+}
+.legend .ak {
+  padding: 0 4px;
+}

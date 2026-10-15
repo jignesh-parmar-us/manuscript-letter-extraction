@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing क in Word
 draws the book's own क. **Devanagari only** (decided 2026-10-15, see section 7, decision 5). Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** F0–F5 done (2026-10-16). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F6.
+**Status:** F0–F6 done (2026-10-16): Phase 1 is built. Still open: the check by eye in Word (F6). Plan written 2026-10-15; decisions answered the same day (section 7). Next: the Word check, then Phase 2 (section 6).
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -387,6 +387,27 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
   update it after a rebuild, remove it (Font Book), use it in Word and Pages, embed it in a .docx, and what
   the underline on filled characters means.
 - One check by eye in Word on this Mac (Devanagari), with a screenshot in the plan.
+
+**Done (2026-10-16).** As planned, with these details:
+- `font_maker/tryit.py`: each akshara is covered the way the font's rules cover it: the longest group label
+  it starts with is the book's glyph (कि in किं), the rest letter by letter. The akshara is **book** (one
+  glyph of the book), **pieced** (several of the book's glyphs), **filled** (holds a filled letter),
+  **missing** (holds a box) or **other** (not Devanagari; a Latin word is one piece). Only the build's
+  report is read. The screen asks 300 ms after typing stops.
+- Try it tab: four sample lines, a text box in the newest build (`@font-face` from the build's own file
+  name, so a new build is never an old copy), a size slider (16–120 px), the text marked in colours with a
+  legend and counts, **Download**, and a link to the help page. Without a build it points to the Build tab.
+- Help page `font-maker/docs/help/font.html` (download, install with Font Book, after a new build, use in
+  Word and Pages, embed in a .docx or save as PDF, what a box / a line under a letter / a halant / another
+  font means, the licence). The screen's build copies it into the app (`/help/font.html`); a **Help** link is
+  at the top right.
+- Book 6 (the scratchpad build with everything filled): the four sample lines are all the book's own
+  aksharas, except किं (filled ं).
+- **Still open: the check by eye in Word on this Mac** (Gujarati is not affected; Devanagari: the sample
+  lines, कि क्ति, a filled letter with its line). It needs Word, so it is yours: install the font, type the
+  sample lines, and tell me what shows; the result and a screenshot go here.
+- Tests: 1 backend test (book / pieced / filled / missing / other, spaces kept, a Latin word in one piece);
+  the whole `font-maker/tests` run ≈ 1.6 s. 1 screen smoke test (the build's file in `@font-face`, marks).
 
 ## 6. Left for later (Phase 2+)
 

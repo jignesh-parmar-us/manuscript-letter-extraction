@@ -1,11 +1,12 @@
 // One font, in tabs: Glyphs (F2, Glyphs.tsx), Build (F5, Build.tsx) and Settings (F1: its name, renamed at
-// any time and used from the next build on; the group statuses it uses; Delete). Try it (F6) comes later.
+// any time and used from the next build on; the group statuses it uses; Delete) and Try it (F6, TryIt.tsx).
 import { FormEvent, useEffect, useState } from "react";
 import { api, deleteMessage, Font, Source, Status, usable } from "./api";
 import { useConfirm } from "./Confirm";
 import Build from "./Build";
 import Glyphs from "./Glyphs";
 import StatusChoice from "./StatusChoice";
+import TryIt from "./TryIt";
 import { go } from "./route";
 
 export default function FontView({ fontId, tab }: { fontId: string; tab: string }) {
@@ -64,7 +65,7 @@ export default function FontView({ fontId, tab }: { fontId: string; tab: string 
             {font.last_build ? `Last built ${new Date(font.last_build).toLocaleString()}.` : "Not built yet."}
           </p>
           <nav className="tabs">
-            {[["glyphs", "Glyphs"], ["build", "Build"], ["settings", "Settings"]].map(([t, text]) => (
+            {[["glyphs", "Glyphs"], ["build", "Build"], ["try", "Try it"], ["settings", "Settings"]].map(([t, text]) => (
               <button key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => go(`/fonts/${fontId}/${t}`)}>
                 {text}
               </button>
@@ -72,6 +73,7 @@ export default function FontView({ fontId, tab }: { fontId: string; tab: string 
           </nav>
           {tab === "glyphs" && <Glyphs key={font.statuses.join()} fontId={fontId} />}
           {tab === "build" && <Build fontId={fontId} />}
+          {tab === "try" && <TryIt fontId={fontId} />}
           {tab === "settings" && (
           <>
           <div className="card">
