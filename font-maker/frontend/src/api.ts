@@ -151,6 +151,7 @@ export interface Coverage {
   missing: string[];
   labels: string[];
   generated_chars?: string[]; // F9: signs cut from the book's aksharas
+  generated_forms?: string[]; // F10: half forms, reph, rakar
 }
 
 // F9: a sign cut from the book's aksharas
@@ -160,6 +161,7 @@ export interface GeneratedSign {
   n: number; // pairs it was cut from
   agree: number | null;
   few: boolean;
+  odd?: string[]; // pairs left out as unlike the others
   pairs: string[];
   image: string | null;
 }
@@ -211,6 +213,7 @@ export interface BuildState {
   headline?: { top: number; thickness: number; glyphs: number } | null;
   generated?: GeneratedSign[]; // F9
   can_generate?: string[];
+  forms?: string[]; // F10: joined forms the book gives pairs for (half:क, reph, rakar)
   not_generated?: { char: string; reason: string }[];
 }
 

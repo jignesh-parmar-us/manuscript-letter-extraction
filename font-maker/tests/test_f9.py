@@ -87,6 +87,13 @@ class SignTest(unittest.TestCase):
         self.assertLess(am["top"], -16)                                     # above the consonant's top
         self.assertIsNone(gen.make_sign("ु", glyphs, folder))              # no pair: not generated
 
+    def test_only_specks_left_is_no_piece(self):
+        base = np.zeros((40, 40), bool)
+        base[8:32, 8:32] = True
+        whole = base.copy()
+        whole[2, 36] = True                                                 # one stray pixel
+        self.assertIsNone(gen.cut(base, whole, (0, 0), "right"))
+
     def test_generated_signs_in_the_font(self):
         state = self.maker.set_generated(self.font, ["ा", "ं", "ु"], True)
         self.assertEqual([f["char"] for f in state["not_generated"]], ["ु"])

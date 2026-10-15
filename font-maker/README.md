@@ -13,7 +13,8 @@ characters as boxes, or filled from Noto Serif Devanagari and marked with a line
 type and see the text in the font, marked akshara by akshara; help page `docs/help/font.html`).
 Phase 1 is built; the check by eye in Word is still open. Phase 2 ([docs/FONT_PLAN_PHASE2.md](docs/FONT_PLAN_PHASE2.md)): F7
 (Try it: letters palette with the book's aksharas, one check line, test texts, downloads as image, text, PDF, Word) and F8
-(one even headline; gaps as in भ थ ध stay) and F9 (vowel signs and marks cut from the book's own aksharas).
+(one even headline; gaps as in भ थ ध stay) F9 (vowel signs and marks cut from the book's own aksharas)
+and F10 (half forms, reph, rakar for conjuncts the book did not print).
 
 ## Run (macOS, zsh, from the project folder)
 

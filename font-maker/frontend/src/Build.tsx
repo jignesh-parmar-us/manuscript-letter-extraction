@@ -30,6 +30,11 @@ export default function Build({ fontId }: { fontId: string }) {
   const generate = (chars: string[], on: boolean) => api.generate(fontId, chars, on).then(setState, fail);
   const canGenerate = new Set(state.can_generate ?? []);
   const generable = c.missing.filter((ch) => canGenerate.has(ch));
+  const made = state.generated ?? [];
+  const signs = made.filter((g) => Array.from(g.char).length === 1);
+  const forms = made.filter((g) => Array.from(g.char).length > 1);
+  const formsOpen = (state.forms ?? []).filter((k) => !forms.some((g) => g.char === k));
+  const failed = new Map((state.not_generated ?? []).map((f) => [f.char, f.reason]));
   const extra = [c.generated > 0 && `${c.generated} made by the system`, c.estimated > 0 && `${c.estimated} with an estimated place`]
     .filter(Boolean).join(", ");
   const changed = report && (report.filled.join() !== c.filled.join() || report.labels?.length !== c.labels.length ||
@@ -95,12 +100,12 @@ export default function Build({ fontId }: { fontId: string }) {
         </p>
       )}
 
-      {(state.generated ?? []).length > 0 && (
+      {signs.length > 0 && (
         <div className="card">
-          <h2>Generated from the book ({state.generated!.length})</h2>
+          <h2>Generated from the book ({signs.length})</h2>
           <p className="muted small">Cut out of the book's own aksharas: the sign of each pair, averaged.</p>
           <div className="chars">
-            {state.generated!.map((g) => (
+            {signs.map((g) => (
               <span key={g.char} className="char generated" title={`From ${g.pairs.join(" ")}`}>
                 {g.image && <img className="sign-img" src={generatedUrl(fontId, g.image)} alt={g.char} />}
                 <span className="char-text">◌{g.char}</span>
@@ -112,6 +117,48 @@ export default function Build({ fontId }: { fontId: string }) {
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {(forms.length > 0 || formsOpen.length > 0) && (
+        <div className="card">
+          <div className="row between">
+            <h2>Joined forms ({forms.length} of {forms.length + formsOpen.length})</h2>
+            {formsOpen.filter((k) => k !== "rakar").length > 0 && (
+              <button onClick={() => generate(formsOpen.filter((k) => k !== "rakar"), true)}>Generate all</button>
+            )}
+          </div>
+          <p className="muted small">
+            For conjuncts the book did not print (ख्र, व्य, र्ण): a half form, the reph and the rakar, cut out of the
+            book's own conjuncts. A form needs at least two different conjuncts; क्ष ज्ञ त्र श्र are shapes of their own
+            and are not used. The book's own conjunct glyphs always come first.
+          </p>
+          <div className="chars">
+            {forms.map((g) => (
+              <span key={g.char} className="char generated" title={`From ${g.pairs.join(" ")}`}>
+                {g.image && <img className="sign-img" src={generatedUrl(fontId, g.image)} alt={formName(g.char)} />}
+                <span>{formName(g.char)}</span>
+                <span className="muted small">
+                  {g.n} conjuncts{g.agree !== null ? `, agree ${Math.round(g.agree * 100)} %` : ""}
+                  {g.odd && g.odd.length > 0 && ` (left out: ${g.odd.join(" ")})`}
+                </span>
+                <button className="link" onClick={() => generate([g.char], false)}>Remove</button>
+              </span>
+            ))}
+            {formsOpen.map((k) => (
+              <span key={k} className="char missing" title={failed.get(k) ?? ""}>
+                <span>{formName(k)}</span>
+                {failed.has(k) && <span className="muted small">{failed.get(k)}</span>}
+                <button className="link" onClick={() => generate([k], true)}>Generate</button>
+              </span>
+            ))}
+          </div>
+          {formsOpen.includes("rakar") && (
+            <p className="muted small">
+              The rakar is not in "Generate all": it is placed where it sits in प्र-like letters, and in letters such as
+              ख ह it falls on the letter and does not show.
+            </p>
+          )}
         </div>
       )}
 
@@ -208,4 +255,12 @@ function TextsTable({ texts }: { texts: TextCoverage[] }) {
       </table>
     </>
   );
+}
+
+/** How a joined form is named on the screen: half:क -> "half क (क्)", reph, rakar. */
+export function formName(key: string): string {
+  if (key.startsWith("half:")) return `half ${key.slice(5)} (${key.slice(5)}्)`;
+  if (key === "reph") return "reph (र्)";
+  if (key === "rakar") return "rakar (्र)";
+  return key;
 }

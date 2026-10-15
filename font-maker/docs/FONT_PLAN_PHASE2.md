@@ -3,7 +3,7 @@
 Phase 1 (F0–F6, `FONT_PLAN.md`) builds a working Devanagari font from a book's letter groups. Phase 2 makes it
 easier to try, fills its gaps **in the book's own style** instead of from Noto, and makes words join cleanly.
 
-**Status:** F7–F9 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F10.
+**Status:** F7–F10 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F11.
 Same rules as Phase 1 (`FONT_PLAN.md`, section 1): everything in `font-maker/`, the library read-only, light
 tests (tiny made-up images, no full-book runs in tests), only the changed module's tests while building.
 
@@ -282,6 +282,34 @@ as a stroke below).
 Marked generated, as F9. Tests: made-up conjunct − second letter = the half form; HarfBuzz shapes a conjunct
 without its own glyph as half form + full letter; र्य keeps its own glyph. Measure: coverage on the test
 texts, the "pieced" share should fall.
+
+**Done (2026-10-16).** Different from the plan, found on book 6:
+- **The book's own aksharas moved from `pres` to `akhn`**, which text engines apply before `rphf` / `half` /
+  `blwf`: in `pres` the reph would already have replaced र् in र्य. F5's shaping tests (का कि क्ति क्ष र्य) still
+  pass; HarfBuzz moves a generated reph to the end of its akshara (र्त → त + reph).
+- **A piece unlike all the others is left out** before averaging (median overlap below 0.3), and shown: book
+  6's र्य and र्श are printed with forms of their own, not a reph; with them the reph's 8 pieces agreed 0.27,
+  without them 6 pieces agree 0.49 and the reph is generated (र्ण पूर्ण वर्ष by eye). The same rule now also
+  helps F9's signs (ृ: 3 pairs, 0.51, after leaving out कृ दृ; also generated now).
+- **Slivers** (where a letter's averaged edge differs a little from the akshara's) are removed by an opening
+  and by keeping only pieces at least 10 % of the largest; a rest of specks only gives no piece (it crashed).
+- **क्ष ज्ञ त्र श्र are never used** (shapes of their own), and **a joined form needs two different conjuncts**:
+  from one, a shape of its own cannot be told from a half form (book 6 cut half क from क्ष and half ह from
+  ह्म, and क्य ह्र came out wrong). Book 6: half forms of **न ल श ष स** (2–4 conjuncts, 0.60–0.82), the **reph**
+  (6, 0.49), the **rakar** (4, 0.55); 13 half forms not generated (one conjunct only, or no pair, or their
+  pieces do not agree: half त द ध).
+- **The rakar** is taken from anywhere the full letter is not (it crosses the letter's foot), one stroke in the
+  lower half. It is placed where it sits in प्र-like letters; in ख ह that spot is the letter's own ink, so it
+  does not show. It is therefore **not in "Generate all"** and the Build tab says why; a rakar per letter
+  (anchored at each letter's stem, or contextual rules) is left for later.
+- Every cut sign's key holds the cutting's `VERSION` (now 4), so changed rules cut every sign again.
+- Screen: Build tab, **Joined forms**: every form the book gives pairs for, generated (image, conjuncts,
+  agreement, the ones left out, Remove) or not (the reason, Generate); Generate all (not the rakar).
+- Tests: 3 backend tests (forms cut from made-up conjuncts; one conjunct or क्ष is not enough; HarfBuzz: क्प =
+  half क + प, र्प = प + reph, त्र = त + rakar, क्त and र्य keep the book's glyphs, the check line calls them
+  generated) and a speck-only test for F9; the whole run ≈ 2.9 s.
+- On book 6's hand-checked lines nothing measurable changes (98.7 % the book's own, 0.6 % generated, 0.6 %
+  missing): its conjuncts are almost all the book's own; the joined forms are for new text.
 
 ## 6. F11: Missing letters: generate, draw or upload (≈ 5 h)
 

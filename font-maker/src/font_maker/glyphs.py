@@ -367,6 +367,7 @@ class GlyphMaker:
                                              font.get("generated", [])),
                 "generated": self.generated_info(font_id, font),
                 "can_generate": self._can_generate(),
+                "forms": self.available_forms(font_id),
                 "mark_filled": font.get("settings", {}).get("mark_filled", True),
                 "clean_headline": font.get("settings", {}).get("clean_headline", True),
                 "headline": st["metrics"].get("headline")}
@@ -429,6 +430,7 @@ class GlyphMaker:
             path = self._gen_dir(font_id) / f"{gen.code(ch)}.json"
             e = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
             out.append({"char": ch, "n": e.get("n", 0), "agree": e.get("agree"), "few": e.get("few", True),
+                        "odd": e.get("odd", []),
                         "pairs": [p["akshara"] for p in e.get("pairs", [])], "image": e.get("image"),
                         "kind": e.get("kind")})
         return out
@@ -482,6 +484,11 @@ class GlyphMaker:
     def _can_generate() -> List[str]:
         from . import gen
         return [c for c in builder.CHARSET if gen.can_generate(c)]
+
+    def available_forms(self, font_id: str) -> List[str]:
+        """F10: the joined forms the book gives pairs for (no image is opened)."""
+        from . import gen
+        return gen.available(list(self._loaded(font_id)["glyphs"].values()))
 
     def generated_image(self, font_id: str, name: str) -> Path:
         return self._gen_dir(font_id) / name

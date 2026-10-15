@@ -20,6 +20,10 @@ What goes in (font-maker/docs/FONT_PLAN.md, section 4):
     attached to it by GPOS (`abvm` / `blwm`, mark-to-base, the GDEF mark class), with anchors at the base's
     right edge, so every text engine places them the same way (without GPOS, HarfBuzz would place marks by
     its own guess). A generated sign wins over a filled one.
+  - **Joined forms** (F10): a generated half form (`half_0915`, drawn before the full letter), reph and rakar
+    (marks, as above). The features text engines apply to Devanagari: `half` (क ् → half_0915), `rphf` (र ् →
+    reph), `blwf` (् र → rakar). The book's own akshara glyphs come first: their rules are in `akhn`, which
+    engines apply before those (in `pres` they came after, and र्य would have become reph + य).
   - Every build gets a new version (1.<n>), so macOS and Word do not keep showing an older build.
 
 Units: UPM font units per em; one em is the book's median line height (F3), the same scale for every glyph.
@@ -63,6 +67,11 @@ def glyph_name(ch: str) -> str:
     return f"uni{ord(ch):04X}"
 
 
+def form_name(key: str) -> str:
+    """F10: half_0915, reph, rakar."""
+    return f"half_{ord(key[5]):04X}" if key.startswith("half:") else key
+
+
 def akshara_name(g: Dict) -> str:
     return f"a{g['book']}_{g['code']}"
 
@@ -99,13 +108,15 @@ def coverage(glyphs: List[Dict], filled: List[str], generated: Optional[List[str
     (no image is opened)."""
     by_label, duplicates = choose(glyphs)
     base = {label for label in by_label if len(label) == 1}
-    made = [c for c in (generated or []) if c not in base]
+    made = [c for c in (generated or []) if len(c) == 1 and c not in base]
+    forms = [c for c in (generated or []) if len(c) > 1]
     return {"base": len(base), "aksharas": len(by_label) - len(base),
             "generated": sum(1 for g in by_label.values() if g.get("generated")),
             "estimated": sum(1 for g in by_label.values() if g.get("placed") == "estimated"),
             "left_out": sorted(g["label_dev"] for g in glyphs if g.get("left_out")),
             "duplicates": duplicates,
             "generated_chars": made,
+            "generated_forms": forms,
             "filled": [c for c in filled if c not in base and c not in made],
             "missing": [c for c in CHARSET if c not in base and c not in filled and c not in made],
             "labels": sorted(by_label)}
@@ -167,6 +178,8 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
     """Write the font to `out` and return its report. `generated`: char -> a generated sign (F9: its kind,
     `contours` in page pixels from its image's top-left, `left` / `right` and `y_top` in page pixels)."""
     generated = generated or {}
+    forms = {k: v for k, v in generated.items() if len(k) > 1}         # F10: half forms, reph, rakar
+    generated = {k: v for k, v in generated.items() if len(k) == 1}
     by_label, duplicates = choose(glyphs)
     line_px = metrics.get("line_height") or 120.0
     u = UPM / line_px                                            # font units per page pixel
@@ -250,6 +263,20 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
             missing.append(ch)
         names[ch] = gname
 
+    made_forms = []
+    for key, e in forms.items():                                 # F10: the joined forms
+        pen = TTGlyphPen(None)
+        gname = form_name(key)
+        w_px = e["size"][0] / SCALE
+        if e["kind"] == "half":                                  # drawn before the full letter
+            draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, 0.0, e["y_top"])
+            add(gname, pen, round(max(1.0, w_px - e["right"]) * u))
+        else:                                                    # reph above, rakar below: marks
+            draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, e["left"], e["y_top"])
+            add(gname, pen, 0)
+            marks["above" if e["kind"] == "reph" else "below"].append(gname)
+        made_forms.append(key)
+
     notdef = TTGlyphPen(None)
     _box(notdef, round(head * 0.8), head)
     add(".notdef", notdef, round(head * 0.8))
@@ -293,10 +320,18 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
     rules = sorted(((seq, names[label]) for label in by_label if len(label) > 1 for seq in rule_orders(label)),
                    key=lambda r: -len(r[0]))
     fea = ["languagesystem DFLT dflt;", "languagesystem dev2 dflt;", "languagesystem deva dflt;", ""]
-    if rules:
-        fea += ["feature pres {"]
+    if rules:                                                    # the book's own aksharas: before the joined forms
+        fea += ["feature akhn {"]
         fea += [f"    sub {' '.join(names[c] for c in seq)} by {lig};" for seq, lig in rules]
-        fea += ["} pres;"]
+        fea += ["} akhn;"]
+    virama, ra = glyph_name("्"), glyph_name("र")
+    halves = [(k, form_name(k)) for k in made_forms if k.startswith("half:")]
+    if halves:
+        fea += ["feature half {"] + [f"    sub {glyph_name(k[5])} {virama} by {g};" for k, g in halves] + ["} half;"]
+    if "reph" in made_forms:
+        fea += ["feature rphf {", f"    sub {ra} {virama} by reph;", "} rphf;"]
+    if "rakar" in made_forms:
+        fea += ["feature blwf {", f"    sub {virama} {ra} by rakar;", "} blwf;"]
     fea += mark_features(marks, order, advance)
     if len(fea) > 4:
         addOpenTypeFeaturesFromString(fb.font, "\n".join(fea))
@@ -310,6 +345,7 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
     report = coverage(glyphs, filled, list(generated))
     report.update({"build": number, "file": out.name, "family": name, "ps_name": ps, "glyphs": len(order),
                    "rules": len(rules), "filled": filled_done, "missing": missing, "duplicates": duplicates,
-                   "generated_chars": made,
+                   "generated_chars": made, "generated_forms": made_forms,
+            "generated_forms": forms,
                    "units_per_px": round(u, 3), "space": space})
     return report
