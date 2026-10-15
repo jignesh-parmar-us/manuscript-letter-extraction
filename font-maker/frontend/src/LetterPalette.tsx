@@ -2,7 +2,8 @@
 // type Devanagari at the cursor. Unlike the reading app's, the keys are drawn in the font being tried and
 // coloured by what the font has (the book's own, pieced, filled, missing), and a second page has every
 // akshara of the book as one key. Every key types the same Unicode characters as the single keys would
-// (कि = क + ि), so the text is the same either way.
+// (कि = क + ि), so the text is the same either way. "Keys: in the font | Unicode" only changes how the keys
+// look (the font being tried, or the system's normal Devanagari font); the text box is always in the font.
 import { useMemo, useState } from "react";
 import { DEV, isSign, SECTIONS } from "./letters";
 
@@ -18,11 +19,26 @@ export function keyKind(key: string, labels: Set<string>, filled: Set<string>): 
 }
 
 const RECENT = "fm-recent-keys";
+const LOOK = "fm-key-look";
 function loadRecent(): string[] {
   try {
     return JSON.parse(window.localStorage.getItem(RECENT) ?? "[]");
   } catch {
     return [];
+  }
+}
+function remember(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // private window: not kept
+  }
+}
+function loadLook(): "font" | "unicode" {
+  try {
+    return window.localStorage.getItem(LOOK) === "unicode" ? "unicode" : "font";
+  } catch {
+    return "font";
   }
 }
 
@@ -33,6 +49,7 @@ interface Props {
   onKey: (text: string) => void;
   onBackspace: () => void; // one character
   onBackspaceAkshara: () => void; // the whole akshara before the cursor
+  onHide?: () => void;
 }
 
 export default function LetterPalette(props: Props) {
@@ -40,6 +57,12 @@ export default function LetterPalette(props: Props) {
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [first, setFirst] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [look, setLook] = useState<"font" | "unicode">(loadLook);
+  const keyFont = look === "font" ? { fontFamily: `"${props.family}", serif` } : undefined;
+  const chooseLook = (l: "font" | "unicode") => {
+    setLook(l);
+    remember(LOOK, l);
+  };
   const labels = useMemo(() => new Set(props.labels), [props.labels]);
   const filled = useMemo(() => new Set(props.filled), [props.filled]);
 
@@ -47,16 +70,12 @@ export default function LetterPalette(props: Props) {
     props.onKey(k);
     const next = [k, ...recent.filter((r) => r !== k)].slice(0, 12);
     setRecent(next);
-    try {
-      window.localStorage.setItem(RECENT, JSON.stringify(next));
-    } catch {
-      // private window: the row is just not kept
-    }
+    remember(RECENT, JSON.stringify(next));
   };
   const key = (k: string) => {
     const kind = keyKind(k, labels, filled);
     return (
-      <button key={k} className={`key fm-key ${kind}`} style={{ fontFamily: `"${props.family}", serif` }}
+      <button key={k} className={`key fm-key ${kind}`} style={keyFont}
               onClick={() => type(k)} title={`${k}: ${KIND_TEXT[kind]}`} aria-label={k}>
         {isSign(k) ? `◌${k}` : k}
       </button>
@@ -88,6 +107,14 @@ export default function LetterPalette(props: Props) {
         <button onClick={() => props.onKey("\n")} aria-label="New line">New line</button>
         <button onClick={props.onBackspace} aria-label="Remove the character before the cursor">⌫ letter</button>
         <button onClick={props.onBackspaceAkshara} aria-label="Remove the akshara before the cursor">⌫ akshara</button>
+        {props.onHide && <button className="palette-close" onClick={props.onHide}>Hide letters</button>}
+      </div>
+      <div className="row small">
+        <span className="muted">Keys:</span>
+        <button className={look === "font" ? "tab active" : "tab"} onClick={() => chooseLook("font")}
+                title="The keys drawn in the font being tried">In the font</button>
+        <button className={look === "unicode" ? "tab active" : "tab"} onClick={() => chooseLook("unicode")}
+                title="The keys in the normal Devanagari font; the text box stays in your font">Unicode</button>
       </div>
       {recent.length > 0 && (
         <div className="palette-row">
@@ -112,7 +139,7 @@ export default function LetterPalette(props: Props) {
               <span className="muted small">First letter</span>
               <div className="keys">
                 {groups.map(([f, list]) => (
-                  <button key={f} className={`key${first === f ? " selected" : ""}`} style={{ fontFamily: `"${props.family}", serif` }}
+                  <button key={f} className={`key${first === f ? " selected" : ""}`} style={keyFont}
                           onClick={() => setFirst(f)} title={`${list.length} aksharas`}>
                     {f}
                   </button>

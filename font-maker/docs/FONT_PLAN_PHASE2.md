@@ -148,6 +148,12 @@ TextEdit, Word).
   (`<file>.ttf.report.json`), so the Build tab's **Test texts** table shows the newest build and the one
   before: aksharas, the book's own / pieced / filled / missing, the 20 most frequent gaps.
 - `uharfbuzz` is now a normal requirement (image and PDF), not only for tests.
+- **Changed after a first look (2026-10-16):** the palette sat under the box, so typing meant scrolling up to
+  see the text. Now, on a wide window (over 1000 px), the text (left) and the palette (right) are side by
+  side; the palette stays in view and scrolls inside itself; on a narrow window it goes under the box.
+  **Hide letters / Show letters** (remembered per viewer). **Keys: In the font | Unicode**: the keys drawn in
+  the font being tried (the default) or in the normal Devanagari font; the text box is always in the font
+  (remembered per viewer). One more screen test (hide / show, the key look).
 - Help page: a section "Try it: write and download".
 - Checked on book 6 (scratchpad build): 40 hand-checked lines to PDF (2 pages) and 4 to an image, in the
   book's letters, as by eye.

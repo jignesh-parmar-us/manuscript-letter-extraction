@@ -3,6 +3,9 @@
 // the ones that are not (click one to select it in the box). The text can be saved as a test text (measured
 // after every build, Build tab) and downloaded as an image, text, PDF or Word document in the font.
 // The font is loaded from the build's own file name, so a new build is never shown from an old copy.
+// Layout: on a wide window the text (left) and the letters palette (right) side by side, the palette
+// staying in view and scrolling inside itself; on a narrow one the palette goes under the box. The
+// palette can be hidden (remembered per viewer).
 import { useEffect, useRef, useState } from "react";
 import { api, BuildState, fontFileUrl, TestText, TryAkshara, TryResult } from "./api";
 import { aksharaStartBefore } from "./letters";
@@ -30,6 +33,15 @@ export function checkLine(result: TryResult) {
   return { total: aks.length, own, notOwn: [...notOwn.values()], others };
 }
 
+const SHOWN = "fm-palette-shown";
+function loadShown(): boolean {
+  try {
+    return window.localStorage.getItem(SHOWN) !== "no";
+  } catch {
+    return true;
+  }
+}
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -43,6 +55,15 @@ export default function TryIt({ fontId }: { fontId: string }) {
   const [chosen, setChosen] = useState<string>("");
   const [naming, setNaming] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [shown, setShown] = useState(loadShown);
+  const showPalette = (on: boolean) => {
+    setShown(on);
+    try {
+      window.localStorage.setItem(SHOWN, on ? "yes" : "no");
+    } catch {
+      // private window: not kept
+    }
+  };
   const [error, setError] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const caret = useRef<number | null>(null);
@@ -140,6 +161,8 @@ export default function TryIt({ fontId }: { fontId: string }) {
     <>
       <style>{`@font-face { font-family: "${family}"; src: url("${url}") format("truetype"); }`}</style>
       {error && <p className="error-text">{error}</p>}
+      <div className={`try-layout${shown ? " with-palette" : ""}`}>
+      <div className="try-main">
       <div className="row toolbar">
         {SAMPLES.map((s) => (
           <button key={s} onClick={() => setText(s)}>{s}</button>
@@ -175,9 +198,8 @@ export default function TryIt({ fontId }: { fontId: string }) {
           )}
         </p>
       )}
-      <LetterPalette family={family} labels={report.labels} filled={report.filled} onKey={insert}
-                     onBackspace={() => remove(false)} onBackspaceAkshara={() => remove(true)} />
       <div className="row toolbar">
+        {!shown && <button onClick={() => showPalette(true)}>Show letters</button>}
         <label className="small">
           Size <input type="range" min={16} max={120} value={size} onChange={(e) => setSize(Number(e.target.value))} /> {size} px
         </label>
@@ -203,6 +225,15 @@ export default function TryIt({ fontId }: { fontId: string }) {
         <a href={url} download={report.file}>Download the font ({report.file})</a> ·{" "}
         <a href="/help/font.html" target="_blank" rel="noreferrer">How to install it and use it in Word</a>
       </p>
+      </div>
+      {shown && (
+        <div className="try-palette">
+          <LetterPalette family={family} labels={report.labels} filled={report.filled} onKey={insert}
+                         onBackspace={() => remove(false)} onBackspaceAkshara={() => remove(true)}
+                         onHide={() => showPalette(false)} />
+        </div>
+      )}
+      </div>
     </>
   );
 }

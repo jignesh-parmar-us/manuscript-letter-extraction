@@ -18,7 +18,10 @@ function backend() {
   }));
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.localStorage.clear(); // the palette's "Used last" row and choices
+});
 
 test("the newest build is used and the check line names what is not the book's own", async () => {
   backend();
@@ -41,4 +44,18 @@ test("a key types at the cursor, ⌫ akshara removes the whole akshara", async (
   box.setSelectionRange(7, 7);
   fireEvent.click(screen.getByRole("button", { name: "Remove the akshara before the cursor" }));
   await waitFor(() => expect(box.value).toBe("श्री "));
+});
+
+test("the palette can be hidden and shown; its keys can look like normal Unicode letters", async () => {
+  backend();
+  render(<TryIt fontId="f0001" />);
+  const ka = await screen.findByRole("button", { name: "क" });
+  expect(ka.style.fontFamily).toContain("fm-f0001-3");
+  fireEvent.click(screen.getByRole("button", { name: "Unicode" }));
+  expect(screen.getByRole("button", { name: "क" }).style.fontFamily).toBe("");
+  expect((screen.getByLabelText("Text to try") as HTMLTextAreaElement).style.fontFamily).toContain("fm-f0001-3");
+  fireEvent.click(screen.getByRole("button", { name: "Hide letters" }));
+  expect(screen.queryByRole("button", { name: "क" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Show letters" }));
+  expect(await screen.findByRole("button", { name: "क" })).toBeInTheDocument();
 });

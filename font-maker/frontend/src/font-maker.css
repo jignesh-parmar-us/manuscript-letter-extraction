@@ -156,3 +156,30 @@ svg.glyph-big path {
   padding: 0 4px;
   border-radius: 4px;
 }
+
+/* Try it: the text and the letters palette side by side on a wide window; the palette stays in view and
+   scrolls inside itself. On a narrow window it goes under the text. */
+.try-layout.with-palette {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 44%);
+  gap: 16px;
+  align-items: start;
+}
+.try-palette {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}
+.try-palette .palette {
+  margin-top: 0;
+}
+@media (max-width: 1000px) {
+  .try-layout.with-palette {
+    display: block;
+  }
+  .try-palette {
+    position: static;
+    max-height: none;
+  }
+}
