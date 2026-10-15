@@ -89,7 +89,9 @@ Rules:
 <library>/fonts/<font folder>/          folder named by a fixed id (f0001, …), so renaming never moves it
   font.json          name, source books, group statuses, left-out groups, chosen copies, filled characters,
                      settings, build number
-  glyphs/<code>.png  the cleaned, enlarged image of each glyph (what gets traced), for checking by eye
+  glyphs/glyphs.json  computed, per glyph: copies used, average or one copy, how well the copies agree,
+                     and a fingerprint of what it was made from (F2)
+  glyphs/<code>-<fingerprint>.png  the cleaned, enlarged image of each glyph (what gets traced)
   builds/<name>-<n>.ttf   every build is kept; the newest is shown and downloaded
   report.json        the newest build's coverage: glyphs, filled and missing characters, groups left out and why
 ```
@@ -97,6 +99,17 @@ Rules:
 `font.json` keeps **`sources: [book ids]`** as a list from the start. Phase 1 shows a single book choice.
 After Phase 3 a source becomes a dataset (see `docs/implementation_plan_phase3_lean.md`), and a font can draw
 from several.
+
+**No database tables (decided 2026-10-15).** Font Maker's data stays in these files, not in new tables:
+`library.db` stays read-only for Font Maker, only the reading app changes its tables, and deleting a font
+stays "delete its folder". Your choices are small, and everything else can be recomputed from the library.
+A link table in `library.db` (e.g. "this group is used in font X") can come with Phase 3 if wanted.
+
+**Choices are kept even when groups change.** The reading app can re-cut, merge or delete groups after a
+choice was made. Every choice is therefore saved with its group id **and** the label at that time, e.g.
+`{"group": 812, "label": "कि", "sample": 40211}`. When a font opens, the choices are checked against the
+library in one query. If the group or the sample is gone, or the sample has moved to another group, that
+glyph goes back to the system pick and is marked **"your pick was lost"**. A choice is never dropped silently.
 
 **Deleting a font project** removes only its folder in `fonts/`, after a confirmation that names the font and
 its number of builds. Groups, samples and labels are never touched. A font already installed on the Mac
@@ -222,8 +235,25 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Screen **Glyphs**: a grid of every glyph (label in both scripts, image, "average of N" / "copy" / "your
   pick", "not reviewed" for auto groups). Clicking one shows its copies, where you pick one, go back to the
   system pick, or leave the group out. Filters: left out, not reviewed, missing, filled.
-- Tests: averaging and alignment on small made-up images; the fallback to one copy when copies disagree;
-  overrides stored in `font.json`; the library database unchanged.
+- **Kept fast: no large file is read or written per click.**
+  - Sizes for book 6: `font.json` with every group picked is about 35 KB; `glyphs.json` about 110 KB. Nothing
+    grows with the number of samples.
+  - The backend loads `glyphs.json` once when a font opens and keeps it in memory. A click (pick a copy, go
+    back to the system pick, leave out) remakes **only that glyph** (≈ 8 small images). It rewrites only the
+    small `font.json` (well under 5 ms). The screen gets back only that glyph, not the whole list.
+  - `glyphs.json` is written once after a batch of work, and after a single-glyph change. It is never
+    re-read on a click.
+  - The fingerprint is made from ids, labels and settings, without opening any image. Opening a font
+    therefore recomputes only the glyphs whose group changed. The first time a font is made, all ≈ 550
+    glyphs are computed in the background with progress (≈ 4,400 small mask images, one pass); after that,
+    work is incremental.
+  - Glyph image files have the fingerprint in their name, so the browser caches them, and a changed glyph
+    gets a new address. The grid loads images lazily (`loading="lazy"`).
+  - The lost-pick check is one query for the font's group and sample ids. No images are read.
+- Tests (light, no timing checks): averaging and alignment on 3 made-up 10×10 images; the fallback to one
+  copy when copies disagree; a pick is stored with group and label, and a deleted sample turns it into
+  "your pick was lost"; a second open with nothing changed recomputes **no** glyph (counted, not timed); a pick
+  remakes exactly one glyph; the library database unchanged.
 
 ### F3: Metrics (≈ 2 h)
 - `font_maker/metrics.py`: baseline, scale, vertical offset and advance width (section 3, steps 6–7).
