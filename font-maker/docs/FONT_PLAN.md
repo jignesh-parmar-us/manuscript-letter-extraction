@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing क in Word
 draws the book's own क. **Devanagari only** (decided 2026-10-15, see section 7, decision 5). Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** F0, F1 and F2 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F3.
+**Status:** F0–F3 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F4.
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -124,7 +124,9 @@ stays installed. The help page says how to remove it there (Font Book).
    सरिये, भक्त) is left out automatically and listed in the report.
 2. **Which copies:** the group's samples (not deleted), sorted by `distance` (closest to the group's centre
    first). The best N are used (setting `copies`, default 8). This is about picking clean copies, not
-   weighting; every group gives exactly one glyph.
+   weighting; every group gives exactly one glyph. **Only copies cut from a page** are used when the group
+   has any; letters made by the reading app's "Generate missing letters" only when it has none, and that
+   glyph is marked **made by the system** (added in F3, see there).
 3. **Ink only:** each copy's `_mask.png` (book 6 has masks) cuts the ink away from the paper.
 4. **System pick:** the best copies are aligned on their ink (shift only), scaled ×4, averaged and
    thresholded. Averaging smooths out print speckle and scanning edges, which a single 66-px cut cannot do.
@@ -280,6 +282,31 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 ### F3: Metrics (≈ 2 h)
 - `font_maker/metrics.py`: baseline, scale, vertical offset and advance width (section 3, steps 6–7).
 - Tests: made-up lines with known baselines give the expected offsets.
+
+**Done (2026-10-15).** Different from the plan, found on book 6's real lines:
+- **The baseline of a line is a slanted straight line** (`y = a + b·x`), not one height. The scans are a
+  little tilted: median slope 0.010, up to 0.035, i.e. up to ≈ 95 px over a 2,700 px line, more than a
+  letter's height. It is fitted to the bottoms of letters without a sign below the line (ु ू ृ ॄ ् ॢ ॣ), twice:
+  letters farther than 8 % of the line height from the first fit are left out of the second. Fewer than 3
+  clean letters on a line: their median, flat.
+- **Neighbours are found by x**: `sample.pos` is often 0 on book 6.
+- **Gaps are measured over every cut letter of the Training Data pages**, labelled or not. With labelled
+  ones only, an unlabelled letter in between looked like a word space (book 6: 94 px instead of 53 px).
+- **Letters made by the system:** 691 of book 6's copies were made by "Generate missing letters" and have no
+  line. F2 used to mix them in; now a glyph uses only copies cut from a page when the group has any, and is
+  marked **made by the system** otherwise (book 6: 116 of 532 glyphs). Their place is **estimated**: the
+  median bottom of measured glyphs with the same signs below the line (ु, ू, ृ … or none); marked so.
+- Each glyph keeps its copies' ink boxes inside the sample box (`ink` in `glyphs.json`, from the masks F2
+  reads anyway), so measuring opens no image. `ALGO` is 2: every glyph is made once more.
+- Values are kept in page pixels (`bottom`, `top`, `width` per glyph; `line_height`, `letter_gap`,
+  `word_space` per font); F5 turns them into font units with one scale (from the line height).
+- Book 6: 299 lines, line height 121 px, letter gap 0 px (letters touch through the headline), word space
+  53 px; measuring takes 0.3 s. Plain letters sit on the line (median bottom −0.4 px); कु पु गु … 20–22 px below;
+  रु रू कृ ≈ 5 px below. Checked by eye on a line of 30 glyphs.
+- Screen: the measured numbers above the grid; filters **Made by the system** and **Place estimated**;
+  the glyph's place in its dialog; a view **On the line** that sets the shown glyphs on one baseline.
+- Tests: 5 backend tests (tilted baseline, gaps, median place, system-made copies and estimates, the flow);
+  the whole `font-maker/tests` run ≈ 1 s. The screen smoke test checks the place text.
 
 ### F4: Tracing (≈ 2 h)
 - `font_maker/trace.py`: image → curves (potrace), in font units, with holes the right way round (ઠ, ઢ, ૦).

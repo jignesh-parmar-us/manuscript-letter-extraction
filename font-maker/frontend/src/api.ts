@@ -86,6 +86,21 @@ export interface Glyph {
   image: string;
   left_out: boolean;
   lost: boolean; // your pick was lost: the system pick is used again
+  generated: boolean; // made from letters the system generated (the group has no copy cut from a page)
+  size: [number, number]; // the image, enlarged 4 times
+  // F3, in page pixels against the baseline (+ = below it); "estimated" for glyphs without a line
+  bottom: number | null;
+  top: number | null;
+  width: number | null;
+  placed?: "measured" | "estimated";
+}
+
+// F3: measured over the font's book (page pixels)
+export interface Metrics {
+  lines?: number;
+  line_height?: number;
+  letter_gap?: number | null;
+  word_space?: number | null;
 }
 
 export interface LostPick {
@@ -100,12 +115,14 @@ export interface GlyphState {
   glyphs: Glyph[];
   cut_errors: { group: number; code: string; label_dev: string; label_guj: string }[];
   lost: LostPick[];
+  metrics: Metrics;
 }
 
 export interface Copy {
   id: number;
   book: number;
   image: string;
+  generated: boolean;
 }
 
 export type Choice = "system" | "copy" | "left_out" | "keep";

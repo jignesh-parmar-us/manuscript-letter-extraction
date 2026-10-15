@@ -36,3 +36,27 @@
 .grid.copies .tile img {
   height: 48px;
 }
+
+/* "On the line" (F3): every glyph on one baseline, at its measured place */
+.line-view {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 12px;
+  background: #fff;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.on-line {
+  position: relative;
+}
+.on-line img {
+  position: absolute;
+  left: 0;
+}
+.on-line .baseline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid #c9b8a8;
+}

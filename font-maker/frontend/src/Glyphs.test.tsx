@@ -5,6 +5,7 @@ import Glyphs from "./Glyphs";
 const GLYPH = {
   group: 7, book: 6, code: "g0007", kind: "letter", status: "labelled", label_dev: "कि", label_guj: "કિ",
   method: "average", agree: 0.9, used: [1, 2, 3], count: 12, image: "6-g0007-abc.png", left_out: false, lost: false,
+  generated: false, size: [200, 300], bottom: 20.5, top: -56.5, width: 50, placed: "measured",
 };
 const STATE = { job: { running: false, done: 0, total: 0, error: null }, glyphs: [GLYPH], cut_errors: [], lost: [] };
 
@@ -19,6 +20,7 @@ test("pick a glyph and leave it out", async () => {
   render(<Glyphs fontId="f0001" />);
   fireEvent.click(await screen.findByTitle("कि કિ: average of 3"));
   expect(await screen.findByLabelText("Use copy 1")).toBeInTheDocument();
+  expect(screen.getByText("21 px below the line, 77 px tall, 50 px wide.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Leave out of the font" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Use in the font again" })).toBeInTheDocument());
   const put = calls.find((c) => c.method === "PUT")!;

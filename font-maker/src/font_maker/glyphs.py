@@ -3,7 +3,10 @@
 How a glyph is made (font-maker/docs/FONT_PLAN.md, section 3, steps 1-5):
   - the groups of the font's books with the chosen statuses and a label of exactly one akshara
     (a label of several aksharas is a cut error: listed, not made);
-  - the group's copies, closest to the group's centre first (`sample.distance`); the best N (`copies`);
+  - the group's copies, closest to the group's centre first (`sample.distance`); the best N (`copies`).
+    Only copies cut from a page are used when the group has any; letters made by the reading app's
+    "Generate missing letters" (source "generated") only when it has none, and that glyph is marked
+    `generated` (made by the system), as anything system-made is always shown;
   - the ink of each copy (its mask), aligned on the ink's centre (shift only), averaged, enlarged x4 and
     thresholded: the **system pick**. When the copies disagree (median overlap of each pair below `min_agree`), the
     single best copy is used instead;
@@ -28,13 +31,15 @@ import cv2
 import numpy as np
 from sqlalchemy import select
 
-from letter_extractor.app.db import Book, LetterGroup, Sample
+from letter_extractor.app.db import GENERATED, Book, LetterGroup, Sample
 from letter_extractor.ocr.aksharas import split_aksharas
 
+from .metrics import Lines, estimate, measure
 from .projects import ProjectError, Projects
 from .store import Store
 
-ALGO = 1                    # raise when the way a glyph is made changes: every glyph is then remade
+ALGO = 2                    # raise when the way a glyph is made changes: every glyph is then remade
+                            # (2: glyphs keep their copies' ink boxes, for F3)
 SCALE = 4                   # enlargement before thresholding (smooth edges for tracing, F4)
 KINDS = ("letter", "danda", "digit")
 DEFAULTS = {"copies": 8, "min_agree": 0.6}
@@ -78,6 +83,14 @@ def iou(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.logical_and(a, b).sum() / union) if union else 1.0
 
 
+def ink_box(ink: np.ndarray) -> List[int]:
+    """[top, bottom, left, right] of the ink inside its sample box (bottom and right exclusive), for F3."""
+    ys, xs = np.nonzero(ink)
+    if not len(ys):
+        return [0, int(ink.shape[0]), 0, int(ink.shape[1])]
+    return [int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1]
+
+
 def make_image(inks: Sequence[np.ndarray], min_agree: float) -> Tuple[np.ndarray, str, float]:
     """(enlarged ink, "average" | "copy", agreement) from the copies, best first."""
     if len(inks) == 1:
@@ -117,6 +130,12 @@ class Group:
     label_dev: str
     label_guj: str
     copies: List[Tuple[int, str, str]] = field(default_factory=list)   # (sample id, mask, image), best first
+    generated: set = field(default_factory=set)                         # ids of copies made by the system
+
+    def best(self, n: int) -> Tuple[List[Tuple[int, str, str]], bool]:
+        """The best n copies cut from a page; only when there is none, the best made by the system."""
+        real = [c for c in self.copies if c[0] not in self.generated]
+        return (real[:n], False) if real else (self.copies[:n], True)
 
 
 def load_groups(store: Store, sources: List[int], statuses: List[str]) -> Tuple[Dict[int, Group], List[Dict]]:
@@ -135,16 +154,18 @@ def load_groups(store: Store, sources: List[int], statuses: List[str]) -> Tuple[
             groups[g.id] = Group(g.id, g.book_id, store.root / "books" / folder, g.code, g.kind, g.status,
                                  g.label_dev, g.label_guj)
         if groups:
-            samples = s.execute(select(Sample.id, Sample.group_id, Sample.mask, Sample.image)
+            samples = s.execute(select(Sample.id, Sample.group_id, Sample.mask, Sample.image, Sample.source)
                                 .where(Sample.group_id.in_(list(groups)), Sample.deleted.is_(False))
                                 .order_by(Sample.group_id, Sample.distance.is_(None), Sample.distance, Sample.id)).all()
-            for sid, gid, mask, image in samples:
+            for sid, gid, mask, image, source in samples:
                 groups[gid].copies.append((sid, mask, image))
+                if source == GENERATED:
+                    groups[gid].generated.add(sid)
     return {k: g for k, g in groups.items() if g.copies}, cut_errors
 
 
 def fingerprint(g: Group, pick: Optional[int], settings: Dict) -> str:
-    used = [pick] if pick else [c[0] for c in g.copies[:settings["copies"]]]
+    used = [pick] if pick else [c[0] for c in g.best(settings["copies"])[0]]
     key = [ALGO, g.id, g.label_dev, used, settings["copies"], settings["min_agree"]]
     return hashlib.sha1(json.dumps(key).encode()).hexdigest()[:12]
 
@@ -159,7 +180,8 @@ class GlyphMaker:
 
     def __init__(self, store: Store, projects: Projects):
         self.store, self.projects = store, projects
-        self.fonts: Dict[str, Dict] = {}      # font id -> {"glyphs": {group id: glyph}, "cut_errors", "lost"}
+        self.fonts: Dict[str, Dict] = {}      # font id -> {"glyphs": {group id: glyph}, "cut_errors", "lost", "metrics"}
+        self.lines: Dict[str, Lines] = {}     # font id -> its measured lines (F3), in memory only
         self.jobs: Dict[str, Dict] = {}       # font id -> {"running", "done", "total", "error"}
         self.lock = threading.Lock()
         self.made = 0                         # glyph images made since start (counted by the tests)
@@ -172,7 +194,8 @@ class GlyphMaker:
             path = self._dir(font_id) / "glyphs.json"
             data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
             self.fonts[font_id] = {"glyphs": {int(k): v for k, v in data.get("glyphs", {}).items()},
-                                   "cut_errors": data.get("cut_errors", []), "lost": data.get("lost", [])}
+                                   "cut_errors": data.get("cut_errors", []), "lost": data.get("lost", []),
+                                   "metrics": data.get("metrics", {})}
         return self.fonts[font_id]
 
     def _save(self, font_id: str) -> None:
@@ -181,7 +204,8 @@ class GlyphMaker:
         folder.mkdir(parents=True, exist_ok=True)
         tmp = folder / "glyphs.json.tmp"
         tmp.write_text(json.dumps({"glyphs": {str(k): v for k, v in state["glyphs"].items()},
-                                   "cut_errors": state["cut_errors"], "lost": state["lost"]},
+                                   "cut_errors": state["cut_errors"], "lost": state["lost"],
+                                   "metrics": state["metrics"]},
                                   ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, folder / "glyphs.json")
 
@@ -189,6 +213,7 @@ class GlyphMaker:
         """The font was deleted: drop what is kept in memory."""
         self.fonts.pop(font_id, None)
         self.jobs.pop(font_id, None)
+        self.lines.pop(font_id, None)
 
     # -- what is shown ----------------------------------------------------------------------------------
     def state(self, font_id: str) -> Dict:
@@ -196,7 +221,7 @@ class GlyphMaker:
         st = self._loaded(font_id)
         job = self.jobs.get(font_id, {"running": False, "done": 0, "total": 0, "error": None})
         return {"job": dict(job), "glyphs": list(st["glyphs"].values()), "cut_errors": st["cut_errors"],
-                "lost": st["lost"]}
+                "lost": st["lost"], "metrics": st["metrics"]}
 
     def _check_busy(self, font_id: str) -> None:
         if self.jobs.get(font_id, {}).get("running"):
@@ -229,11 +254,16 @@ class GlyphMaker:
         else:
             if pick:
                 (sid, mask, image), = [c for c in g.copies if c[0] == pick]
-                img, method, agree, used = enlarge(crop(read_ink(g.book_dir, mask, image))), "pick", 1.0, [pick]
+                inks = {pick: read_ink(g.book_dir, mask, image)}
+                img, method, agree = enlarge(crop(inks[pick])), "pick", 1.0
+                generated = pick in g.generated
             else:
-                best = g.copies[:settings["copies"]]
-                img, method, agree = make_image([read_ink(g.book_dir, m, i) for _, m, i in best], settings["min_agree"])
-                used = [c[0] for c in best] if method == "average" else [best[0][0]]
+                best, generated = g.best(settings["copies"])
+                inks = {sid: read_ink(g.book_dir, m, i) for sid, m, i in best}
+                img, method, agree = make_image(list(inks.values()), settings["min_agree"])
+                if method == "copy":
+                    inks = {best[0][0]: inks[best[0][0]]}
+            used = list(inks)
             folder.mkdir(parents=True, exist_ok=True)
             name = f"{g.book_id}-{g.code}-{fp}.png"
             cv2.imwrite(str(folder / name), np.where(img, 0, 255).astype(np.uint8))
@@ -241,7 +271,8 @@ class GlyphMaker:
                 (folder / old["image"]).unlink(missing_ok=True)
             self.made += 1
             glyph = {"fp": fp, "image": name, "method": method, "agree": round(agree, 3), "used": used,
-                     "size": [int(img.shape[1]), int(img.shape[0])]}
+                     "size": [int(img.shape[1]), int(img.shape[0])],
+                     "ink": {str(sid): ink_box(ink) for sid, ink in inks.items()}, "generated": generated}
         glyph.update({"group": g.id, "book": g.book_id, "code": g.code, "kind": g.kind, "status": g.status,
                       "label_dev": g.label_dev, "label_guj": g.label_guj, "count": len(g.copies),
                       "left_out": left_out, "lost": lost})
@@ -251,18 +282,21 @@ class GlyphMaker:
         """Bring the font's glyphs up to date; returns how many images were made (0 when nothing changed)."""
         font, settings, groups, cut_errors, picks, left_out, lost, lost_groups = self._plan(font_id)
         st = self._loaded(font_id)
+        lines = self.lines[font_id] = measure(self.store, font["sources"])          # F3: no images, one query
         before, out = self.made, {}
         for n, g in enumerate(groups.values(), 1):
             pick = picks.get(str(g.id), {}).get("sample") if g.id not in lost_groups else None
             out[g.id] = self._glyph(font_id, g, pick, settings, st["glyphs"].get(g.id), str(g.id) in left_out,
                                     g.id in lost_groups)
+            out[g.id].update(lines.place(out[g.id].get("ink", {})))
             if progress:
                 progress(n, len(groups))
+        estimate(list(out.values()), SCALE)                      # glyphs made only from generated letters
         for gid, old in st["glyphs"].items():                    # groups no longer in the font
             if gid not in out and old.get("image"):
                 (self._dir(font_id) / old["image"]).unlink(missing_ok=True)
-        changed = (out, cut_errors, lost) != (st["glyphs"], st["cut_errors"], st["lost"])
-        st.update(glyphs=out, cut_errors=cut_errors, lost=lost)
+        changed = (out, cut_errors, lost, lines.summary) != (st["glyphs"], st["cut_errors"], st["lost"], st["metrics"])
+        st.update(glyphs=out, cut_errors=cut_errors, lost=lost, metrics=lines.summary)
         if changed or not (self._dir(font_id) / "glyphs.json").is_file():
             self._save(font_id)                                  # nothing changed: no file is written
         return self.made - before
@@ -316,8 +350,12 @@ class GlyphMaker:
         st["lost"] = [p for p in lost if p["group"] != group_id]
         if g is not None:
             pick = picks.get(str(group_id), {}).get("sample")
-            st["glyphs"][group_id] = self._glyph(font_id, g, pick, settings, st["glyphs"].get(group_id),
-                                                 str(group_id) in left_out, False)
+            glyph = self._glyph(font_id, g, pick, settings, st["glyphs"].get(group_id), str(group_id) in left_out, False)
+            lines = self.lines.get(font_id) or measure(self.store, font["sources"])
+            self.lines[font_id] = lines
+            glyph.update(lines.place(glyph.get("ink", {})))
+            st["glyphs"][group_id] = glyph
+            estimate(list(st["glyphs"].values()), SCALE)
         self._save(font_id)
         return {"glyph": st["glyphs"].get(group_id), "lost": st["lost"]}
 
@@ -328,6 +366,9 @@ class GlyphMaker:
             g = s.get(LetterGroup, group_id)
             if g is None or g.book_id not in font["sources"]:
                 raise ProjectError(f"Group {group_id} is not in this font's book.")
-            rows = s.execute(select(Sample.id, Sample.image).where(Sample.group_id == group_id, Sample.deleted.is_(False))
-                             .order_by(Sample.distance.is_(None), Sample.distance, Sample.id).limit(limit)).all()
-            return [{"id": sid, "book": g.book_id, "image": image} for sid, image in rows]
+            rows = s.execute(select(Sample.id, Sample.image, Sample.source)
+                             .where(Sample.group_id == group_id, Sample.deleted.is_(False))
+                             .order_by(Sample.source == GENERATED, Sample.distance.is_(None), Sample.distance, Sample.id)
+                             .limit(limit)).all()
+            return [{"id": sid, "book": g.book_id, "image": image, "generated": source == GENERATED}
+                    for sid, image, source in rows]
