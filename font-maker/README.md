@@ -14,7 +14,8 @@ type and see the text in the font, marked akshara by akshara; help page `docs/he
 Phase 1 is built; the check by eye in Word is still open. Phase 2 ([docs/FONT_PLAN_PHASE2.md](docs/FONT_PLAN_PHASE2.md)): F7
 (Try it: letters palette with the book's aksharas, one check line, test texts, downloads as image, text, PDF, Word) and F8
 (one even headline; gaps as in भ थ ध stay) F9 (vowel signs and marks cut from the book's own aksharas)
-and F10 (half forms, reph, rakar for conjuncts the book did not print).
+F10 (half forms, reph, rakar for conjuncts the book did not print)
+and F11 (missing letters made from the book's parts, drawn on a pad, or uploaded).
 
 ## Run (macOS, zsh, from the project folder)
 

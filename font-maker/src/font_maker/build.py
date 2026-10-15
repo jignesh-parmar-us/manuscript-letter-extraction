@@ -103,12 +103,14 @@ def choose(glyphs: List[Dict]) -> Tuple[Dict[str, Dict], List[Dict]]:
     return by_label, duplicates
 
 
-def coverage(glyphs: List[Dict], filled: List[str], generated: Optional[List[str]] = None) -> Dict:
+def coverage(glyphs: List[Dict], filled: List[str], generated: Optional[List[str]] = None,
+             drawn: Optional[List[str]] = None) -> Dict:
     """What the font will draw in the book's letters, what is generated (F9) or filled, what is missing
     (no image is opened)."""
     by_label, duplicates = choose(glyphs)
     base = {label for label in by_label if len(label) == 1}
-    made = [c for c in (generated or []) if len(c) == 1 and c not in base]
+    drawn_ = [c for c in (drawn or []) if c not in base]
+    made = [c for c in (generated or []) if len(c) == 1 and c not in base and c not in drawn_]
     forms = [c for c in (generated or []) if len(c) > 1]
     return {"base": len(base), "aksharas": len(by_label) - len(base),
             "generated": sum(1 for g in by_label.values() if g.get("generated")),
@@ -117,8 +119,9 @@ def coverage(glyphs: List[Dict], filled: List[str], generated: Optional[List[str
             "duplicates": duplicates,
             "generated_chars": made,
             "generated_forms": forms,
-            "filled": [c for c in filled if c not in base and c not in made],
-            "missing": [c for c in CHARSET if c not in base and c not in filled and c not in made],
+            "drawn_chars": drawn_,
+            "filled": [c for c in filled if c not in base and c not in made and c not in drawn_],
+            "missing": [c for c in CHARSET if c not in base and c not in filled and c not in made and c not in drawn_],
             "labels": sorted(by_label)}
 
 
@@ -219,7 +222,7 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
 
     # every character the font answers for: CHARSET, the characters of every label, and filled ones
     chars = sorted(set(CHARSET) | {c for label in by_label for c in label} | set(filled) | set(generated))
-    filled_done, missing, made = [], [], []
+    filled_done, missing, made, drawn_done = [], [], [], []
     marks: Dict[str, List[str]] = {"above": [], "below": []}
     for ch in chars:
         gname = glyph_name(ch)
@@ -232,6 +235,9 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
             if e["kind"] == "right":
                 draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, e["left"], e["y_top"])
                 width = round(max(0.0, e["left"] + w_px + gap_px) * u)
+            elif e["kind"] == "letter":                          # F11: a letter made, drawn or uploaded
+                draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, gap_px / 2, e["y_top"])
+                width = round((w_px + gap_px) * u)
             elif e["kind"] == "left":                            # ि: drawn before the consonant, its hook over it
                 draw(e["contours"], Cu2QuPen(pen, max_err=1.0), u, 0.0, e["y_top"])
                 width = round(max(1.0, w_px - e["right"]) * u)
@@ -240,7 +246,7 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
                 width = 0
                 marks[e["kind"]].append(gname)
             add(gname, pen, width)
-            made.append(ch)
+            (drawn_done if e.get("drawn") else made).append(ch)
         elif ch in filled and ord(ch) in noto_cmap:
             pen = TTGlyphPen(None)
             src = noto_glyphs[noto_cmap[ord(ch)]]
@@ -342,10 +348,10 @@ def build(name: str, number: int, fallback_name: str, glyphs: List[Dict], metric
     fb.save(str(tmp))
     tmp.replace(out)
 
-    report = coverage(glyphs, filled, list(generated))
+    report = coverage(glyphs, filled, [c for c in generated if c not in drawn_done], drawn_done)
     report.update({"build": number, "file": out.name, "family": name, "ps_name": ps, "glyphs": len(order),
                    "rules": len(rules), "filled": filled_done, "missing": missing, "duplicates": duplicates,
-                   "generated_chars": made, "generated_forms": made_forms,
+                   "generated_chars": made, "generated_forms": made_forms, "drawn_chars": drawn_done,
             "generated_forms": forms,
                    "units_per_px": round(u, 3), "space": space})
     return report

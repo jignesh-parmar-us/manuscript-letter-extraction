@@ -197,3 +197,40 @@ svg.glyph-big path {
   height: 32px;
   background: #fff;
 }
+
+/* F11: drawn or uploaded by you (its own colour), and the drawing pad */
+.fm-key.drawn,
+.ak.drawn {
+  background: #e3d7f3;
+  color: #000;
+}
+.char.drawn {
+  border-color: #6b4fa0;
+}
+.dialog.draw-dialog {
+  max-width: 420px;
+}
+.draw-area {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--line);
+  margin: 8px 0;
+  max-width: 100%;
+}
+.draw-area canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.draw-area .guide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #c9b8a8;
+}
+.draw-area .guide.head {
+  border-top-color: #9fb8d6;
+}

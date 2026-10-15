@@ -152,6 +152,7 @@ export interface Coverage {
   labels: string[];
   generated_chars?: string[]; // F9: signs cut from the book's aksharas
   generated_forms?: string[]; // F10: half forms, reph, rakar
+  drawn_chars?: string[]; // F11: drawn or uploaded by you
 }
 
 // F9: a sign cut from the book's aksharas
@@ -177,9 +178,9 @@ export interface Report extends Coverage {
 // F6: how the newest build draws a text, akshara by akshara (font_maker/tryit.py)
 export interface TryAkshara {
   text: string;
-  kind: "book" | "pieced" | "generated" | "filled" | "missing" | "other" | "space";
+  kind: "book" | "pieced" | "generated" | "drawn" | "filled" | "missing" | "other" | "space";
   start: number; // in the (NFC) text
-  detail?: { char: string; kind: "generated" | "filled" | "missing" }[];
+  detail?: { char: string; kind: "generated" | "drawn" | "filled" | "missing" }[];
 }
 
 // F7: texts the font is measured on after every build (yours, and the books' hand-checked lines)
@@ -215,12 +216,15 @@ export interface BuildState {
   can_generate?: string[];
   forms?: string[]; // F10: joined forms the book gives pairs for (half:क, reph, rakar)
   not_generated?: { char: string; reason: string }[];
+  drawn?: { char: string; image: string | null; source: string }[]; // F11
+  pad?: { headline?: { top: number; thickness: number } | null; letter_height: number };
 }
 
 // Files are loaded by <img> tags, which cannot send the token header: it goes in the address.
 export const glyphUrl = (fontId: string, g: Glyph) => `/files/fonts/${fontId}/glyphs/${g.image}?token=${token()}`;
 export const copyUrl = (c: Copy) => `/files/books/${c.book}/${c.image}?token=${token()}`;
 export const generatedUrl = (fontId: string, image: string) => `/files/fonts/${fontId}/generated/${image}?token=${token()}`;
+export const drawnUrl = (fontId: string, image: string) => `/files/fonts/${fontId}/drawn/${image}?token=${token()}`;
 export const fontFileUrl = (fontId: string, file: string) => `/files/fonts/${fontId}/builds/${file}?token=${token()}`;
 
 export const api = {
@@ -258,6 +262,9 @@ export const api = {
   buildState: (id: string) => request<BuildState>("GET", `/api/fonts/${id}/build`),
   build: (id: string) => request<BuildState>("POST", `/api/fonts/${id}/build`),
   generate: (id: string, chars: string[], on: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/generated`, { chars, on }),
+  drawn: (id: string, char: string, png: string, baseline?: number, ppp?: number) =>
+    request<BuildState>("PUT", `/api/fonts/${id}/drawn/${encodeURIComponent(char)}`, { png, baseline, px_per_page_px: ppp }),
+  removeDrawn: (id: string, char: string) => request<BuildState>("DELETE", `/api/fonts/${id}/drawn/${encodeURIComponent(char)}`),
   fill: (id: string, chars: string[], filled: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/filled`, { chars, filled }),
   checkGlyphs: (id: string) => request<GlyphState>("POST", `/api/fonts/${id}/glyphs/check`),
   glyphs: (id: string) => request<GlyphState>("GET", `/api/fonts/${id}/glyphs`),

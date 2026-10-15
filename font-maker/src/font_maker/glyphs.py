@@ -364,7 +364,9 @@ class GlyphMaker:
         job = self.jobs.get(font_id, {"running": False, "done": 0, "total": 0, "error": None, "phase": ""})
         return {"job": dict(job), "report": report, "builds": font["builds"],
                 "coverage": builder.coverage(list(st["glyphs"].values()), font.get("filled", []),
-                                             font.get("generated", [])),
+                                             font.get("generated", []), font.get("drawn", [])),
+                "drawn": self.drawn_info(font_id, font),
+                "pad": {"headline": st["metrics"].get("headline"), "letter_height": self.letter_height(font_id)},
                 "generated": self.generated_info(font_id, font),
                 "can_generate": self._can_generate(),
                 "forms": self.available_forms(font_id),
@@ -405,9 +407,27 @@ class GlyphMaker:
         path = folder / f"{gen.code(ch)}.json"
         glyphs = list(self._loaded(font_id)["glyphs"].values())
         entry = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
-        if entry and entry.get("key") == gen.current_key(ch, glyphs) and (folder / entry["image"]).is_file():
+        sign = None
+        if gen.is_letter(ch):                                    # F11: a letter made from the book's parts
+            parts = gen.letter_parts(ch)
+            by_label = {g["label_dev"]: g for g in glyphs if not g.get("left_out")}
+            base = by_label.get(parts[0])
+            if len(parts) > 1:
+                s = self._gen_entry(font_id, parts[1])
+                if s is None or gen.why_not(s):
+                    return None
+                simg = cv2.imread(str(folder / s["image"]), cv2.IMREAD_GRAYSCALE)
+                sign = (s, simg < 128)
+            used = [{"akshara": parts[0], "fp": base.get("fp", "") if base else ""}]
+            if sign:
+                used.append({"akshara": parts[1], "fp": sign[0].get("key", "")})
+            key = gen.key_of(used)
+        else:
+            key = gen.current_key(ch, glyphs)
+        if entry and entry.get("key") == key and (folder / entry["image"]).is_file():
             return entry
-        made = gen.make_sign(ch, glyphs, self._dir(font_id))
+        made = (gen.make_letter(ch, glyphs, self._dir(font_id), sign) if gen.is_letter(ch)
+                else gen.make_sign(ch, glyphs, self._dir(font_id)))
         if made is None:
             return None
         entry, img = made
@@ -478,6 +498,73 @@ class GlyphMaker:
                 self.traced += 1
             y_top = target["top"] + e["top_head"] if target and e.get("top_head") is not None else e["top"]
             out[ch] = {**e, "contours": contours, "y_top": y_top}
+        for ch in font.get("drawn", []):                         # F11: drawn or uploaded: wins over generated
+            e = self._drawn_entry(font_id, ch)
+            if e is None:
+                continue
+            outline = self._drawn_dir(font_id) / (e["image"] + ".outline.json")
+            if outline.is_file():
+                contours = json.loads(outline.read_text(encoding="utf-8"))
+            else:
+                img = cv2.imread(str(self._drawn_dir(font_id) / e["image"]), cv2.IMREAD_GRAYSCALE)
+                contours = trace(img < 128, SCALE)
+                outline.write_text(json.dumps(contours), encoding="utf-8")
+                self.traced += 1
+            out[ch] = {**e, "contours": contours, "y_top": e["top"], "drawn": True}
+        return out
+
+    # -- F11: letters you draw or upload ---------------------------------------------------------------------
+    def _drawn_dir(self, font_id: str) -> Path:
+        return self._dir(font_id) / "drawn"
+
+    def _drawn_entry(self, font_id: str, ch: str) -> Optional[Dict]:
+        from . import gen
+        path = self._drawn_dir(font_id) / f"{gen.code(ch)}.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    def letter_height(self, font_id: str) -> float:
+        """How tall a plain consonant is (page pixels, its headline to its foot): an uploaded letter's size."""
+        from . import gen
+        hs = [g["bottom"] - g["top"] for g in self._loaded(font_id)["glyphs"].values()
+              if g["label_dev"] in gen.CONSONANTS and g.get("top") is not None and g.get("bottom") is not None]
+        return float(np.median(hs)) if hs else 50.0
+
+    def set_drawn(self, font_id: str, ch: str, png: bytes, baseline: Optional[float] = None,
+                  px_per_page_px: Optional[float] = None) -> Dict:
+        """A letter you drew on the pad (its baseline row and scale given) or uploaded (scaled to the font)."""
+        from . import gen
+        if len(ch) != 1:
+            raise ProjectError("Draw or upload one character at a time.")
+        made = gen.drawn_letter(ch, png, self.letter_height(font_id), baseline, px_per_page_px)
+        if made is None:
+            raise ProjectError("The picture has no ink: draw the letter in dark strokes on a light background.")
+        entry, img = made
+        folder = self._drawn_dir(font_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        stamp = hashlib.sha1(png).hexdigest()[:10]
+        for old in folder.glob(f"{gen.code(ch)}-*"):
+            old.unlink(missing_ok=True)
+        entry["image"] = f"{gen.code(ch)}-{stamp}.png"
+        entry["source"] = "drawn" if baseline is not None else "uploaded"
+        cv2.imwrite(str(folder / entry["image"]), np.where(img, 0, 255).astype(np.uint8))
+        (folder / f"{gen.code(ch)}.json").write_text(json.dumps(entry, ensure_ascii=False), encoding="utf-8")
+        font = self.projects.get(font_id)
+        self.projects.set_fields(font_id, drawn=[c for c in font.get("drawn", []) if c != ch] + [ch])
+        return self.build_state(font_id)
+
+    def remove_drawn(self, font_id: str, ch: str) -> Dict:
+        from . import gen
+        font = self.projects.get(font_id)
+        for old in self._drawn_dir(font_id).glob(f"{gen.code(ch)}*"):
+            old.unlink(missing_ok=True)
+        self.projects.set_fields(font_id, drawn=[c for c in font.get("drawn", []) if c != ch])
+        return self.build_state(font_id)
+
+    def drawn_info(self, font_id: str, font: Dict) -> List[Dict]:
+        out = []
+        for ch in font.get("drawn", []):
+            e = self._drawn_entry(font_id, ch) or {}
+            out.append({"char": ch, "image": e.get("image"), "source": e.get("source", "drawn")})
         return out
 
     @staticmethod

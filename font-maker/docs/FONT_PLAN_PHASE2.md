@@ -3,7 +3,7 @@
 Phase 1 (F0–F6, `FONT_PLAN.md`) builds a working Devanagari font from a book's letter groups. Phase 2 makes it
 easier to try, fills its gaps **in the book's own style** instead of from Noto, and makes words join cleanly.
 
-**Status:** F7–F10 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F11.
+**Status:** F7–F11 done (2026-10-16). Written 2026-10-16; all questions answered the same day (section 10). Next: F12 (after Phase 3 C19), F13 when needed; the Word check is still open.
 Same rules as Phase 1 (`FONT_PLAN.md`, section 1): everything in `font-maker/`, the library read-only, light
 tests (tiny made-up images, no full-book runs in tests), only the changed module's tests while building.
 
@@ -326,6 +326,28 @@ texts, the "pieced" share should fall.
    in the library.
 
 Tests: । from a made-up ॥; an uploaded image becomes a glyph at the font's height.
+
+**Done (2026-10-16).** Different from the plan:
+- **Generated letters** (`gen.LETTERS`): । from the left stroke of ॥; आ ओ औ ऑ from अ + the generated ा ो ौ ॉ, ऐ
+  from ए + े (these are how those letters are written); ई from इ + the part of ी above the headline (an
+  approximation, marked). **Not made: ऊ, ० and ॐ** (no rule gives their shape from the book's parts; the plan's
+  "ऊ from उ + ू" and "० from the bowl of ३ / ६" would not look like them): draw or upload them. A letter is made
+  again when its letter or sign changes (its key holds both).
+- Book 6: **। ई औ** made (ऑ not: no ॉ in the book); missing went from 17 to 14 characters. By eye: । and औ as
+  printed, ई recognisable.
+- **Draw:** a pad of 120 × 120 page pixels (3 pad pixels each) with the font's baseline and headline as dashed
+  guides, a pen as thick as the book's headline (adjustable), an eraser, Clear, Save. The drawing keeps its
+  place against the baseline and its size. *Not done:* the book's neighbouring letters shown faintly on the
+  pad (the guides give the height).
+- **Upload:** a PNG or JPEG; its dark pixels (Otsu; a transparent background counts as paper), cut to the ink,
+  scaled to the height of a plain consonant of the book (median, F3), its foot on the baseline.
+- What wins for a character: the book's own letter, then **drawn / uploaded**, then generated, then filled,
+  then the box. Drawn letters are in `glyphs/drawn/` and `font.json` (`drawn`), never in the library.
+- Screen: Build tab, Missing list: **Generate** (now also for these letters), **Draw**, **Upload**; the **Drawn
+  by you** card (image, drawn or uploaded, Redraw, Remove); a "drawn" colour on the palette and the check line.
+- Tests: 3 backend tests (। and औ from made-up parts, ऊ refused; an upload at the font's height on the
+  baseline, a drawing at its drawn place; in the font a drawn letter wins over the generated one, and back);
+  the whole run ≈ 4–8 s (36 tests, the slowest 0.7 s). The Build smoke test opens the pad.
 
 ## 7. F12: A font from several books or datasets (≈ 4 h; after Phase 3 C19)
 

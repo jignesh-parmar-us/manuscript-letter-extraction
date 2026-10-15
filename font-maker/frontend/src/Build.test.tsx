@@ -20,6 +20,9 @@ test("fill a missing character and build", async () => {
   expect(await screen.findByText(/116 made by the system, 116 with an estimated place/)).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Generate" })[0]).toBeDisabled();     // ग: not a sign
   expect(screen.getAllByRole("button", { name: "Generate" })[1]).toBeEnabled();      // ं: cut from the book (F9)
+  fireEvent.click(screen.getAllByRole("button", { name: "Draw" })[0]);                  // F11: the pad opens
+  expect(screen.getByLabelText("Drawing pad")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
   fireEvent.click(screen.getAllByRole("button", { name: "Fill" })[0]);
   expect(await screen.findByRole("button", { name: "Remove fill" })).toBeInTheDocument();
   expect(JSON.parse(calls.find((c) => c.method === "PUT")!.body!)).toEqual({ chars: ["ग"], filled: true });

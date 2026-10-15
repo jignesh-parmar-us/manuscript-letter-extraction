@@ -1,13 +1,18 @@
 // The Build tab (F5): what the font will draw in the book's letters, the missing characters (fill them from
 // a normal Devanagari font, always marked as filled; "Generate" comes in the next phase), and Build, which
 // writes the next version of the .ttf.
-import { useEffect, useState } from "react";
-import { api, BuildState, fontFileUrl, generatedUrl, TextCoverage } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { api, BuildState, drawnUrl, fontFileUrl, generatedUrl, TextCoverage } from "./api";
+import DrawPad from "./DrawPad";
+import { isSign } from "./letters";
 
 export default function Build({ fontId }: { fontId: string }) {
   const [state, setState] = useState<BuildState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [texts, setTexts] = useState<TextCoverage[] | null>(null);
+  const [drawing, setDrawing] = useState<string | null>(null);
+  const upload = useRef<HTMLInputElement>(null);
+  const uploadFor = useRef<string | null>(null);
   const fail = (e: Error) => setError(e.message);
 
   useEffect(() => {
@@ -38,7 +43,8 @@ export default function Build({ fontId }: { fontId: string }) {
   const extra = [c.generated > 0 && `${c.generated} made by the system`, c.estimated > 0 && `${c.estimated} with an estimated place`]
     .filter(Boolean).join(", ");
   const changed = report && (report.filled.join() !== c.filled.join() || report.labels?.length !== c.labels.length ||
-    (report.generated_chars ?? []).join() !== (c.generated_chars ?? []).join());
+    (report.generated_chars ?? []).join() !== (c.generated_chars ?? []).join() ||
+    (report.drawn_chars ?? []).join() !== (c.drawn_chars ?? []).join());
   return (
     <>
       {error && (
@@ -88,7 +94,9 @@ export default function Build({ fontId }: { fontId: string }) {
               <span className="char-text">{ch}</span>
               <button className="link" onClick={() => fill([ch], true)}>Fill</button>
               <button className="link" disabled={!canGenerate.has(ch)} onClick={() => generate([ch], true)}
-                      title={canGenerate.has(ch) ? "Cut it out of the book's aksharas" : "Not a sign Font Maker can cut"}>Generate</button>
+                      title={canGenerate.has(ch) ? "Make it from the book's own letters and aksharas" : "No rule makes it from the book's parts"}>Generate</button>
+              <button className="link" onClick={() => setDrawing(ch)}>Draw</button>
+              <button className="link" onClick={() => { uploadFor.current = ch; upload.current?.click(); }}>Upload</button>
             </span>
           ))}
         </div>
@@ -108,7 +116,7 @@ export default function Build({ fontId }: { fontId: string }) {
             {signs.map((g) => (
               <span key={g.char} className="char generated" title={`From ${g.pairs.join(" ")}`}>
                 {g.image && <img className="sign-img" src={generatedUrl(fontId, g.image)} alt={g.char} />}
-                <span className="char-text">◌{g.char}</span>
+                <span className="char-text">{isSign(g.char) ? `◌${g.char}` : g.char}</span>
                 <span className="muted small">
                   {g.n} {g.n === 1 ? "pair" : "pairs"}{g.agree !== null ? `, agree ${Math.round(g.agree * 100)} %` : ""}
                   {g.few && " (few examples)"}
@@ -118,6 +126,38 @@ export default function Build({ fontId }: { fontId: string }) {
             ))}
           </div>
         </div>
+      )}
+
+      {(state.drawn ?? []).length > 0 && (
+        <div className="card">
+          <h2>Drawn by you ({state.drawn!.length})</h2>
+          <div className="chars">
+            {state.drawn!.map((d) => (
+              <span key={d.char} className="char drawn">
+                {d.image && <img className="sign-img" src={drawnUrl(fontId, d.image)} alt={d.char} />}
+                <span className="char-text">{d.char}</span>
+                <span className="muted small">{d.source}</span>
+                <button className="link" onClick={() => setDrawing(d.char)}>Redraw</button>
+                <button className="link" onClick={() => api.removeDrawn(fontId, d.char).then(setState, fail)}>Remove</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <input ref={upload} type="file" accept="image/png,image/jpeg" hidden aria-label="Upload a letter"
+             onChange={(e) => {
+               const file = e.target.files?.[0];
+               const ch = uploadFor.current;
+               e.target.value = "";
+               if (!file || !ch) return;
+               const reader = new FileReader();
+               reader.onload = () => api.drawn(fontId, ch, String(reader.result)).then(setState, fail);
+               reader.readAsDataURL(file);
+             }} />
+      {drawing && (
+        <DrawPad char={drawing} headline={state.pad?.headline} letterHeight={state.pad?.letter_height}
+                 onClose={() => setDrawing(null)}
+                 onSave={(png, baseline, ppp) => api.drawn(fontId, drawing, png, baseline, ppp).then((s) => { setState(s); setDrawing(null); }, fail)} />
       )}
 
       {(forms.length > 0 || formsOpen.length > 0) && (

@@ -1,5 +1,5 @@
-"""Generated letters (F9, F10): vowel signs, marks, the virama, half forms, the reph and the rakar, cut from the
-book's own aksharas.
+"""Generated letters (F9-F11): vowel signs, marks, the virama, half forms, the reph and the rakar, cut from the
+book's own aksharas; missing letters made from the book's parts, drawn or uploaded (F11, at the end).
 
 A printed book never prints a vowel sign alone, so every akshara the book did not print fell back to a box
 or a Noto letter. Here a sign S is cut out of the book's aksharas:
@@ -249,7 +249,7 @@ def current_key(sign: str, glyphs: List[Dict]) -> str:
 
 
 def can_generate(ch: str) -> bool:
-    return ch in SIGN_KIND or ch.startswith("half:") or ch in ("reph", "rakar")
+    return ch in SIGN_KIND or ch.startswith("half:") or ch in ("reph", "rakar") or ch in LETTERS
 
 
 def why_not(entry: Optional[Dict]) -> Optional[str]:
@@ -261,3 +261,121 @@ def why_not(entry: Optional[Dict]) -> Optional[str]:
     if entry["n"] > 1 and entry["agree"] < MIN_AGREE:
         return f"its {entry['n']} examples do not agree ({entry['agree']:.2f})"
     return None
+
+
+# ---- F11: missing letters made from the book's own parts -------------------------------------------------
+# How a missing letter is made: from one stroke of another letter ("split"), or a letter plus a generated sign
+# ("compose": the sign where it sits on a consonant; "hook": only the part of the sign above the headline,
+# for ई = इ + the hook of ी). Each is marked generated. ऊ, ० and ॐ are not made: no rule gives their shape.
+LETTERS = {
+    "।": ("split", "॥", None),
+    "आ": ("compose", "अ", "ा"),
+    "ओ": ("compose", "अ", "ो"),
+    "औ": ("compose", "अ", "ौ"),
+    "ऑ": ("compose", "अ", "ॉ"),
+    "ऐ": ("compose", "ए", "े"),
+    "ई": ("hook", "इ", "ी"),
+}
+
+
+def is_letter(key: str) -> bool:
+    return key in LETTERS
+
+
+def letter_parts(key: str) -> List[str]:
+    how, base, sign = LETTERS[key]
+    return [base] + ([sign] if sign else [])
+
+
+def make_letter(key: str, glyphs: List[Dict], folder: Path, sign: Optional[Tuple[Dict, np.ndarray]]):
+    """A missing letter from the book's parts: (its numbers, its image), or None (with no part to make it).
+    `sign`: the generated sign it needs (its numbers and image), for compose and hook."""
+    how, base_label, _ = LETTERS[key]
+    by_label = {g["label_dev"]: g for g in glyphs if not g.get("left_out")}
+    base = by_label.get(base_label)
+    if base is None or base.get("top") is None:
+        return None
+    img = read(folder, base)
+    if img is None:
+        return None
+    if how == "split":                                       # । : the left stroke of ॥
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(img.astype(np.uint8), connectivity=8)
+        if n < 3:
+            return None
+        big = sorted(range(1, n), key=lambda i: -stats[i, cv2.CC_STAT_AREA])[:2]
+        left = min(big, key=lambda i: stats[i, cv2.CC_STAT_LEFT])
+        x, y, w, h = (int(stats[left, k]) for k in (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
+        piece = labels[y:y + h, x:x + w] == left
+        top = base["top"] + y / SCALE
+        return ({"char": key, "kind": "letter", "parts": [base_label], "size": [w, h], "top": round(top, 2),
+                 "top_head": None, "left": 0.0, "right": 0.0, "n": 1, "few": False, "agree": 1.0, "odd": [],
+                 "pairs": [{"akshara": base_label, "fp": base.get("fp", "")}],
+                 "key": key_of([{"akshara": base_label, "fp": base.get("fp", "")}])}, piece)
+    if sign is None:
+        return None
+    s, simg = sign
+    head = base["top"] + base["headline"][0] if base.get("headline") else base["top"]
+    if s.get("top_head") is None:
+        return None
+    s_top = head + s["top_head"]                             # the sign's top, against the baseline
+    if how == "hook":                                        # only the part above the headline
+        rows = int(round(max(0.0, -s["top_head"]) * SCALE))
+        if rows < 2:
+            return None
+        simg = crop(simg[:rows])
+    bw = img.shape[1]
+    sx = bw + int(round(s["left"] * SCALE)) if s["kind"] in ("right", "above", "below") else 0
+    if how == "hook":
+        sx = bw - int(round(simg.shape[1] * 0.6))           # over the right end of the letter
+    top = min(base["top"], s_top)
+    oy_b = int(round((base["top"] - top) * SCALE))
+    oy_s = int(round((s_top - top) * SCALE))
+    x0 = min(0, sx)
+    w = max(bw, sx + simg.shape[1]) - x0
+    h = max(oy_b + img.shape[0], oy_s + simg.shape[0])
+    out = np.zeros((h, w), bool)
+    out[oy_b:oy_b + img.shape[0], -x0:-x0 + bw] |= img
+    out[oy_s:oy_s + simg.shape[0], sx - x0:sx - x0 + simg.shape[1]] |= simg
+    used = [{"akshara": base_label, "fp": base.get("fp", "")}, {"akshara": s["char"], "fp": s.get("key", "")}]
+    return ({"char": key, "kind": "letter", "parts": [base_label, s["char"]], "size": [w, h], "top": round(top, 2),
+             "top_head": round(top - head, 2) if base.get("headline") else None, "left": 0.0, "right": 0.0,
+             "n": 1, "few": False, "agree": 1.0, "odd": [], "pairs": used, "key": key_of(used)}, out)
+
+
+# ---- F11: letters you draw or upload -------------------------------------------------------------------
+def ink_of_picture(png: bytes) -> Optional[np.ndarray]:
+    """The dark pixels of a drawn or uploaded picture (transparent counts as paper)."""
+    data = np.frombuffer(png, np.uint8)
+    img = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
+    if img is None:
+        return None
+    if img.ndim == 3 and img.shape[2] == 4:                  # transparent canvas: ink where it is opaque and dark
+        alpha = img[:, :, 3] > 128
+        gray = cv2.cvtColor(img[:, :, :3], cv2.COLOR_BGR2GRAY)
+        return alpha & (gray < 128)
+    gray = img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    return ink > 0
+
+
+def drawn_letter(key: str, png: bytes, letter_height: float, baseline: Optional[float] = None,
+                 px_per_page_px: Optional[float] = None) -> Optional[Tuple[Dict, np.ndarray]]:
+    """A letter you drew (its baseline row and scale on the pad are given) or uploaded (scaled so its ink is
+    `letter_height` page pixels tall, its foot on the baseline): (its numbers, its image at SCALE)."""
+    ink = ink_of_picture(png)
+    if ink is None or not ink.any():
+        return None
+    ys, xs = np.nonzero(ink)
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    piece = ink[y0:y1, x0:x1]
+    if baseline is not None and px_per_page_px:
+        k = SCALE / px_per_page_px                           # pad pixels -> glyph image pixels
+        top = (y0 - baseline) / px_per_page_px
+    else:
+        k = SCALE * letter_height / max(1, piece.shape[0])
+        top = -letter_height
+    big = cv2.resize(piece.astype(np.float32), (max(1, int(round(piece.shape[1] * k))), max(1, int(round(piece.shape[0] * k)))),
+                     interpolation=cv2.INTER_AREA if k < 1 else cv2.INTER_CUBIC) >= 0.5
+    big = crop(big)
+    return ({"char": key, "kind": "letter", "size": [int(big.shape[1]), int(big.shape[0])], "top": round(float(top), 2),
+             "top_head": None, "left": 0.0, "right": 0.0}, big)

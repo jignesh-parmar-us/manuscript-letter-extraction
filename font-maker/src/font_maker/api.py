@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F9). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F11). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -16,6 +16,7 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
            POST /api/fonts/{id}/build    build the next version (in the background)
            PUT  /api/fonts/{id}/filled   fill missing characters from the normal font, or take the fill out
            PUT  /api/fonts/{id}/generated   generate signs from the book's aksharas, or take them out (F9, gen.py)
+           PUT/DELETE /api/fonts/{id}/drawn/{char}   a letter you drew or uploaded (F11), or take it out
   try it   POST /api/fonts/{id}/coverage   how the newest build draws a text, akshara by akshara (F6, tryit.py)
            GET/PUT /api/fonts/{id}/texts, DELETE /api/fonts/{id}/texts/{text}   test texts (F7, texts.py)
            GET  /api/fonts/{id}/coverage/texts   the test texts with the newest build and the one before
@@ -83,6 +84,12 @@ class ExportText(BaseModel):
 class Fill(BaseModel):
     chars: List[str]
     filled: bool = True
+
+
+class Drawn(BaseModel):
+    png: str                          # base64 (a data: URL is fine)
+    baseline: Optional[float] = None  # drawn on the pad: its baseline row and pad pixels per page pixel
+    px_per_page_px: Optional[float] = None
 
 
 class Generate(BaseModel):
@@ -199,6 +206,27 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
     @app.put("/api/fonts/{font_id}/generated", dependencies=auth)
     def generate(font_id: str, body: Generate) -> Dict:
         return maker.set_generated(font_id, body.chars, body.on)
+
+    @app.put("/api/fonts/{font_id}/drawn/{char}", dependencies=auth)
+    def drawn(font_id: str, char: str, body: Drawn) -> Dict:
+        import base64
+        data = body.png.split(",", 1)[1] if body.png.startswith("data:") else body.png
+        try:
+            png = base64.b64decode(data, validate=True)
+        except ValueError:
+            raise ProjectError("The picture could not be read.")
+        if len(png) > 8_000_000:
+            raise ProjectError("The picture is larger than 8 MB.")
+        return maker.set_drawn(font_id, char, png, body.baseline, body.px_per_page_px)
+
+    @app.delete("/api/fonts/{font_id}/drawn/{char}", dependencies=auth)
+    def remove_drawn(font_id: str, char: str) -> Dict:
+        return maker.remove_drawn(font_id, char)
+
+    @app.get("/files/fonts/{font_id}/drawn/{name}", dependencies=auth)
+    def drawn_file(font_id: str, name: str):
+        return FileResponse(_png_in(projects.dir / font_id / "glyphs" / "drawn", name),
+                            headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     # ---- test texts and downloads (F7) ---------------------------------------------------------------
     @app.get("/api/fonts/{font_id}/texts", dependencies=auth)
