@@ -4,7 +4,7 @@
 <library>/fonts/f0001/
   font.json     name, sources (book ids), group statuses, choices (F2-F5), build number
   glyphs/       the glyph images and glyphs.json (F2, glyphs.py)
-  builds/       the built fonts (F5)
+  builds/       the built fonts (F5, build.py); report.json: the newest build's coverage
 ```
 
 The folder is named by a fixed id, so renaming a font never moves it. Deleting removes only that folder;
@@ -115,7 +115,8 @@ class Projects:
             "build": 0, "created_at": now, "updated_at": now})
         return self.get(font_id)
 
-    def update(self, font_id: str, name: Optional[str] = None, statuses: Optional[List[str]] = None) -> Dict:
+    def update(self, font_id: str, name: Optional[str] = None, statuses: Optional[List[str]] = None,
+               mark_filled: Optional[bool] = None) -> Dict:
         folder = self._folder(font_id)
         data = self._read(folder)
         if name is not None:
@@ -123,6 +124,8 @@ class Projects:
             self._check_unique(data["name"], other_than=font_id)
         if statuses is not None:
             data["statuses"] = _clean_statuses(statuses)
+        if mark_filled is not None:
+            data.setdefault("settings", {})["mark_filled"] = bool(mark_filled)
         data["updated_at"] = _now()
         self._write(folder, data)
         return self.get(font_id)
@@ -133,6 +136,23 @@ class Projects:
         folder = self._folder(font_id)
         data = self._read(folder)
         data.update(picks=picks, left_out=left_out, updated_at=_now())
+        self._write(folder, data)
+
+    def set_filled(self, font_id: str, chars: List[str], on: bool) -> Dict:
+        """Fill these missing characters from the normal font (F5), or take the fill out again."""
+        folder = self._folder(font_id)
+        data = self._read(folder)
+        filled = [c for c in data.get("filled", []) if c not in chars]
+        if on:
+            filled += [c for c in chars if len(c) == 1]
+        data.update(filled=filled, updated_at=_now())
+        self._write(folder, data)
+        return self.get(font_id)
+
+    def set_build(self, font_id: str, number: int) -> None:
+        folder = self._folder(font_id)
+        data = self._read(folder)
+        data.update(build=number, updated_at=_now())
         self._write(folder, data)
 
     def delete(self, font_id: str) -> None:

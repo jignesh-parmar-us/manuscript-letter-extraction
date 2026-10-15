@@ -1,4 +1,4 @@
-"""Font Maker's backend (F0-F4). `create_app(store, token)` returns the app.
+"""Font Maker's backend (F0-F5). `create_app(store, token)` returns the app.
 
 As in the reading app, every request must carry the session token created at start: in the `X-Token`
 header, or as `?token=` (for files a tag loads). `GET /` serves the built screen with the token in it.
@@ -11,7 +11,11 @@ header, or as `?token=` (for files a tag loads). `GET /` serves the built screen
            GET  /api/fonts/{id}/glyphs/{group}/copies   a group's copies to pick from
            PUT  /api/fonts/{id}/glyphs/{group}/choice   system pick / one copy / left out / keep
            GET  /api/fonts/{id}/glyphs/{group}/outline  the traced outline as an SVG path (F4, trace.py)
-  files    GET /files/fonts/{id}/glyphs/{name} (a glyph image), GET /files/books/{id}/{path} (a copy's image)
+  build    GET  /api/fonts/{id}/build    the newest build's report, the coverage now, the build job (F5)
+           POST /api/fonts/{id}/build    build the next version (in the background)
+           PUT  /api/fonts/{id}/filled   fill missing characters from the normal font, or take the fill out
+  files    GET /files/fonts/{id}/glyphs/{name} (a glyph image), GET /files/fonts/{id}/builds/{name} (a .ttf),
+           GET /files/books/{id}/{path} (a copy's image)
 """
 from __future__ import annotations
 
@@ -43,6 +47,12 @@ class NewFont(BaseModel):
 class FontChange(BaseModel):
     name: Optional[str] = None
     statuses: Optional[List[str]] = None
+    mark_filled: Optional[bool] = None
+
+
+class Fill(BaseModel):
+    chars: List[str]
+    filled: bool = True
 
 
 class Choice(BaseModel):
@@ -95,7 +105,7 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
 
     @app.patch("/api/fonts/{font_id}", dependencies=auth)
     def change_font(font_id: str, body: FontChange) -> Dict:
-        return projects.update(font_id, name=body.name, statuses=body.statuses)
+        return projects.update(font_id, name=body.name, statuses=body.statuses, mark_filled=body.mark_filled)
 
     @app.delete("/api/fonts/{font_id}", dependencies=auth, status_code=204)
     def delete_font(font_id: str) -> Response:
@@ -124,6 +134,20 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
     def choose(font_id: str, group_id: int, body: Choice) -> Dict:
         return maker.choose(font_id, group_id, body.choice, body.sample)
 
+    # ---- the font (F5) ---------------------------------------------------------------------------------
+    @app.get("/api/fonts/{font_id}/build", dependencies=auth)
+    def build_state(font_id: str) -> Dict:
+        return maker.build_state(font_id)
+
+    @app.post("/api/fonts/{font_id}/build", dependencies=auth)
+    def build(font_id: str) -> Dict:
+        return maker.start_build(font_id)
+
+    @app.put("/api/fonts/{font_id}/filled", dependencies=auth)
+    def fill(font_id: str, body: Fill) -> Dict:
+        projects.set_filled(font_id, body.chars, body.filled)
+        return maker.build_state(font_id)
+
     # ---- files (read-only) -----------------------------------------------------------------------------
     def _png_in(root: Path, path: str) -> Path:
         root = root.resolve()
@@ -136,6 +160,15 @@ def create_app(store: Store, token: str, static_dir: Optional[Path] = None) -> F
     def glyph_file(font_id: str, name: str):
         # the name holds the glyph's fingerprint: a changed glyph has a new name, so it may be cached
         return FileResponse(_png_in(projects.dir / font_id / "glyphs", name),
+                            headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+    @app.get("/files/fonts/{font_id}/builds/{name}", dependencies=auth)
+    def font_file(font_id: str, name: str):
+        root = (projects.dir / font_id / "builds").resolve()
+        target = (root / name).resolve()
+        if root not in target.parents or not target.is_file() or target.suffix.lower() != ".ttf":
+            raise HTTPException(404, "No such font file.")
+        return FileResponse(target, media_type="font/ttf", filename=target.name,
                             headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     @app.get("/files/books/{book_id}/{path:path}", dependencies=auth)

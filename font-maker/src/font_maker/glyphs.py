@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +35,7 @@ from sqlalchemy import select
 from letter_extractor.app.db import GENERATED, Book, LetterGroup, Sample
 from letter_extractor.ocr.aksharas import split_aksharas
 
+from . import build as builder
 from .metrics import Lines, estimate, measure
 from .projects import ProjectError, Projects
 from .store import Store
@@ -309,27 +311,72 @@ class GlyphMaker:
             self._save(font_id)                                  # nothing changed: no file is written
         return self.made - before
 
-    def start(self, font_id: str) -> Dict:
-        """Opening a font: remake what changed, in the background when there is anything to make."""
+    def _job(self, font_id: str, work) -> Optional[Dict]:
+        """Run `work(step)` in the background, one job per font; None when one is running already."""
         with self.lock:
             if self.jobs.get(font_id, {}).get("running"):
-                return self.state(font_id)
-            job = {"running": True, "done": 0, "total": 0, "error": None}
+                return None
+            job = {"running": True, "done": 0, "total": 0, "error": None, "phase": "glyphs"}
             self.jobs[font_id] = job
 
-        def step(done: int, total: int):
-            job["done"], job["total"] = done, total
+        def step(done: int, total: int, phase: str = "glyphs"):
+            job["done"], job["total"], job["phase"] = done, total, phase
 
         def run():
             try:
-                self.refresh(font_id, step)
+                work(step)
             except Exception as e:                               # shown on the screen
                 job["error"] = str(e)
             finally:
                 job["running"] = False
 
-        threading.Thread(target=run, name=f"glyphs-{font_id}", daemon=True).start()
+        threading.Thread(target=run, name=f"font-{font_id}", daemon=True).start()
+        return job
+
+    def start(self, font_id: str) -> Dict:
+        """Opening a font: remake what changed, in the background when there is anything to make."""
+        self._job(font_id, lambda step: self.refresh(font_id, step))
         return self.state(font_id)
+
+    # -- building the font (F5) ---------------------------------------------------------------------------
+    def _report_path(self, font_id: str) -> Path:
+        return self.projects.dir / font_id / "report.json"
+
+    def build_state(self, font_id: str) -> Dict:
+        font = self.projects.get(font_id)
+        st = self._loaded(font_id)
+        path = self._report_path(font_id)
+        report = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+        job = self.jobs.get(font_id, {"running": False, "done": 0, "total": 0, "error": None, "phase": ""})
+        return {"job": dict(job), "report": report, "builds": font["builds"],
+                "coverage": builder.coverage(list(st["glyphs"].values()), font.get("filled", [])),
+                "mark_filled": font.get("settings", {}).get("mark_filled", True)}
+
+    def build(self, font_id: str, step=None) -> Dict:
+        """Bring the glyphs up to date, then write the next build; returns its report."""
+        step = step or (lambda *a: None)
+        self.refresh(font_id, lambda d, t: step(d, t, "glyphs"))
+        font = self.projects.get(font_id)
+        st = self._loaded(font_id)
+        number = int(font.get("build", 0)) + 1
+        safe = re.sub(r"[^A-Za-z0-9]+", "-", font["name"]).strip("-") or font_id
+        out = self.projects.dir / font_id / "builds" / f"{safe}-{number}.ttf"
+        report = builder.build(font["name"], number, f"FontMaker{font_id}", list(st["glyphs"].values()),
+                               st["metrics"], font.get("filled", []),
+                               font.get("settings", {}).get("mark_filled", True),
+                               lambda g: self.contours(font_id, g), out,
+                               lambda d, t: step(d, t, "outlines"))
+        tmp = self._report_path(font_id).with_suffix(".tmp")
+        tmp.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, self._report_path(font_id))
+        self.projects.set_build(font_id, number)
+        return report
+
+    def start_build(self, font_id: str) -> Dict:
+        self.projects.get(font_id)
+        if self._job(font_id, lambda step: self.build(font_id, step)) is None:
+            raise Busy("The glyphs are still being made. Try again when that is done.")
+        return self.build_state(font_id)
 
     # -- your choice for one group ---------------------------------------------------------------------------
     def choose(self, font_id: str, group_id: int, choice: str, sample: Optional[int] = None) -> Dict:

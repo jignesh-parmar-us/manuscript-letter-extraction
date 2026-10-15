@@ -102,7 +102,7 @@ export default function Glyphs({ fontId }: { fontId: string }) {
       )}
       {job.running && (
         <div className="card">
-          Making glyphs: {job.done} of {job.total || "…"}
+          {job.phase === "outlines" ? "Building the font (outlines)" : "Making glyphs"}: {job.done} of {job.total || "…"}
           <progress value={job.done} max={job.total || 1} />
         </div>
       )}

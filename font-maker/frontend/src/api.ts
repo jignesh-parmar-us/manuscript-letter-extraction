@@ -111,7 +111,7 @@ export interface LostPick {
 }
 
 export interface GlyphState {
-  job: { running: boolean; done: number; total: number; error: string | null };
+  job: { running: boolean; done: number; total: number; error: string | null; phase?: string };
   glyphs: Glyph[];
   cut_errors: { group: number; code: string; label_dev: string; label_guj: string }[];
   lost: LostPick[];
@@ -127,9 +127,39 @@ export interface Copy {
 
 export type Choice = "system" | "copy" | "left_out" | "keep";
 
+// F5: what the font draws in the book's letters (counted from the glyphs, no image is opened)
+export interface Coverage {
+  base: number;
+  aksharas: number;
+  generated: number;
+  estimated: number;
+  left_out: string[];
+  duplicates: { group: number; label: string; used: number }[];
+  filled: string[];
+  missing: string[];
+  labels: string[];
+}
+
+export interface Report extends Coverage {
+  build: number;
+  file: string;
+  family: string;
+  glyphs: number;
+  rules: number;
+}
+
+export interface BuildState {
+  job: { running: boolean; done: number; total: number; error: string | null; phase: string };
+  report: Report | null;
+  coverage: Coverage;
+  builds: number;
+  mark_filled: boolean;
+}
+
 // Files are loaded by <img> tags, which cannot send the token header: it goes in the address.
 export const glyphUrl = (fontId: string, g: Glyph) => `/files/fonts/${fontId}/glyphs/${g.image}?token=${token()}`;
 export const copyUrl = (c: Copy) => `/files/books/${c.book}/${c.image}?token=${token()}`;
+export const fontFileUrl = (fontId: string, file: string) => `/files/fonts/${fontId}/builds/${file}?token=${token()}`;
 
 export const api = {
   app: () => request<AppInfo>("GET", "/api/app"),
@@ -138,9 +168,12 @@ export const api = {
   font: (id: string) => request<Font>("GET", `/api/fonts/${id}`),
   createFont: (name: string, bookId: number, statuses: Status[]) =>
     request<Font>("POST", "/api/fonts", { name, book_id: bookId, statuses }),
-  changeFont: (id: string, change: { name?: string; statuses?: Status[] }) =>
+  changeFont: (id: string, change: { name?: string; statuses?: Status[]; mark_filled?: boolean }) =>
     request<Font>("PATCH", `/api/fonts/${id}`, change),
   deleteFont: (id: string) => request<void>("DELETE", `/api/fonts/${id}`),
+  buildState: (id: string) => request<BuildState>("GET", `/api/fonts/${id}/build`),
+  build: (id: string) => request<BuildState>("POST", `/api/fonts/${id}/build`),
+  fill: (id: string, chars: string[], filled: boolean) => request<BuildState>("PUT", `/api/fonts/${id}/filled`, { chars, filled }),
   checkGlyphs: (id: string) => request<GlyphState>("POST", `/api/fonts/${id}/glyphs/check`),
   glyphs: (id: string) => request<GlyphState>("GET", `/api/fonts/${id}/glyphs`),
   outline: (id: string, group: number) =>

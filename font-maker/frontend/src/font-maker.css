@@ -63,3 +63,31 @@ svg.glyph-big path {
   right: 0;
   border-top: 1px solid #c9b8a8;
 }
+
+/* Build (F5): missing and filled characters; filled always has its own colour */
+.chars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.char {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.char-text {
+  font-size: 20px;
+  min-width: 1.2em;
+  text-align: center;
+}
+.char.missing {
+  border-style: dashed;
+}
+.char.filled {
+  border-color: var(--warn);
+  color: var(--warn);
+}

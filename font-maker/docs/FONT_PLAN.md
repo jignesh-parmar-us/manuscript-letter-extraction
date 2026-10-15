@@ -4,7 +4,7 @@ Make an installable font from a book's letter groups, so that typing क in Word
 draws the book's own क. **Devanagari only** (decided 2026-10-15, see section 7, decision 5). Phase 1 builds a small separate app (Font Maker) in this project. In it you pick a
 book, build its font, type into a test box to see the result, and download the font.
 
-**Status:** F0–F4 done (2026-10-15). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F5.
+**Status:** F0–F5 done (2026-10-16). Plan written 2026-10-15; decisions answered the same day (section 7). Next: F6.
 First book: 6, *Vachnamrut Printed 1944 Training Data*.
 
 **Building time:** about **18–22 hours**.
@@ -342,6 +342,39 @@ and must not be called "Noto". Phase 1 only copies outlines of single characters
 - Tests: HarfBuzz shaping of का, कि, क्ति, क्ष, र्य, १२; Gujarati text does not use the font's glyphs; a
   missing character gives the missing box; a filled
   one gives the Noto shape with its mark, and without the mark when the setting is off.
+
+**Done (2026-10-16).** As planned, with these differences:
+- **Short i gets two rules.** HarfBuzz (Chrome) puts ि right before the *last* consonant when the ones before
+  it form no half forms (क्ति → `क ् ि त`), not in front of the cluster; the test caught it. Other engines
+  (Word on the Mac may be one) can put it in front. Every akshara with ि gets a rule for both orders (for कि
+  they are the same). All rules are in `pres`, longest first.
+- **Missing list = the characters a normal text needs** (76): rare ones (ऌ ऍ ऎ ऒ ऩ ऱ ऴ ॄ ॅ ॆ ॊ ॠ ॰) are left
+  out of the list; a book's group for one still becomes a glyph. Each missing character has its own box glyph
+  (not one shared glyph), so the ligature rules stay distinct (का and के would otherwise both read `क box`).
+- **Same label twice:** the group with more copies is used; the others are listed (Build tab).
+- **Filled letters** come from a 20 KB static Regular subset of Noto Serif Devanagari (`data/`, with its OFL
+  licence; Devanagari block, outlines and widths only, no layout tables). Letters Noto makes of other letters
+  (आ ई ऐ ऑ ओ औ ि ॉ ॥) are copied as plain outlines. Scaled so Noto's क headline meets this font's. The line
+  under a filled letter sits below its lowest point; for a zero-width sign it spans the sign itself. When a
+  font has filled letters, its name table says so (licence description, OFL link).
+- Space = the measured word space; ZWJ and ZWNJ are empty. `.notdef` is the box too. Ascent and descent are
+  the tallest and lowest glyph (+20 units), the same in hhea, OS/2 typo and win, so Word gives every line
+  room. `fsType` 0 (installable: Word may embed the font in a .docx). Version 1.<n> and
+  `uniqueFontIdentifier` `<ps>;build <n>`.
+- One em = the book's median line height (book 6: 121 px → 8.26 units a page pixel).
+- The build runs in the background: the glyphs are brought up to date, then traced (outlines that are
+  saved are reused). The Build tab shows the coverage, the missing characters (**Fill**, **Fill all**,
+  **Generate** disabled), the filled ones (**Remove fill**, the mark setting), **Build font / Build again**
+  with progress, the newest build and a **Download** link (served at `/files/fonts/{id}/builds/<file>`).
+- **Book 6, built into the scratchpad (the library read-only):** 532 glyphs (47 letters, 485 aksharas; 116 made
+  by the system, place estimated), 578 glyphs in the font, 499 rules, 29 missing (among them the single danda
+  ।: the book has only a ॥ group). First build: glyphs 7 s, outlines 24 s; again: 2.3 s. Shaped with
+  HarfBuzz, श्री स्वामिनारायण भगवान, वचनामृत गढडा प्रथम, भक्त धर्म ज्ञान वैराग्य, कृष्ण गुरु come out in the book's
+  letters (30 of 32 aksharas as its own akshara glyphs); "Fill all" shows the 29 with their line.
+- Packages: `uharfbuzz` for the tests (`font-maker/requirements.txt`, `pyproject.toml` test extra).
+- Tests: 2 backend tests (HarfBuzz: का कि क्ति क्ष र्य, space, digits, Gujarati not in the font, version up;
+  missing box, filled with and without its line, a Noto letter made of others); the whole
+  `font-maker/tests` run ≈ 1.7 s. 1 screen smoke test (Fill, Generate disabled, Build).
 
 ### F6: Test page and download (≈ 2 h)
 - Screen **Try it**: a text box. The newest build is loaded with `@font-face` from

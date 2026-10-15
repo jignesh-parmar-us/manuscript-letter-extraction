@@ -8,13 +8,14 @@ Plan and status: [docs/FONT_PLAN.md](docs/FONT_PLAN.md) (F0–F6). Done: F0 (the
 delete fonts; a font's files are in `<library>/fonts/<id>/`) and F2 (Glyphs: one image per
 group from its best copies; pick a copy yourself or leave a group out) and F3 (where each glyph sits
 on the line, its width, letter gap and word space; view "On the line") and F4 (each glyph traced into
-outlines when needed, shown in its dialog).
+outlines when needed, shown in its dialog) and F5 (Build: the .ttf with the ligature rules; missing
+characters as boxes, or filled from Noto Serif Devanagari and marked with a line; download).
 
 ## Run (macOS, zsh, from the project folder)
 
 ```sh
 npm --prefix font-maker/frontend install        # once
-.venv/bin/python -m pip install -r font-maker/requirements.txt     # once (fontTools, potracer)
+.venv/bin/python -m pip install -r font-maker/requirements.txt     # once (fontTools, potracer, uharfbuzz)
 npm --prefix font-maker run build               # build the screen (again after changes in font-maker/frontend/)
 PYTHONPATH=src:font-maker/src .venv/bin/python -m font_maker --browser          # port 8676
 PYTHONPATH=src:font-maker/src .venv/bin/python -m font_maker --library DIR      # another library folder
@@ -38,7 +39,8 @@ The reading app's tests (`discover -s tests`, `npm test`) do not run these, and 
 ```
 src/font_maker/   main.py (start), api.py (backend), store.py (read-only library),
                   projects.py (font projects), glyphs.py (glyph images), metrics.py (places),
-                  trace.py (outlines)
+                  trace.py (outlines), build.py (the .ttf)
+                  data/: Noto Serif Devanagari subset, SIL Open Font License (OFL-NotoSerifDevanagari.txt)
 frontend/         the screen (React); uses the reading app's stylesheet (../frontend/src/styles.css)
 tests/            backend tests
 docs/             the plan; help pages from F6
