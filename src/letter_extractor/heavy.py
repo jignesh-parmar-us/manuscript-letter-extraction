@@ -123,8 +123,11 @@ def heavy_lock(what: str, say: Callable[[str], None] = lambda m: print(m, file=s
 
 
 def watch_parent(every: float = 2.0) -> None:
-    """In a worker process: stop it when the process that started it is gone (a stopped or crashed run)."""
+    """In a worker process: stop it when the process that started it is gone (a stopped or crashed run). A worker
+    still starting when its run died has been adopted by launchd (process 1) already: it stops at once."""
     parent = os.getppid()
+    if parent == 1:
+        os._exit(1)
 
     def loop():
         while True:

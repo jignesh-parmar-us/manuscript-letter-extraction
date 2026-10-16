@@ -3,8 +3,9 @@
 Comes **before Phase 3** (built from `docs/implementation_plan_phase3_lean.md`): every Phase 3 chunk is checked with the
 tests and with Measure, so they must be fast first.
 
-**Status:** S1–S4 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S5, the heavy session,
-started 2026-10-16 (questions 7–9 answered: section 5). Written 2026-10-15; the questions were answered the same day (section 5) and
+**Status:** S1–S4 are built (2026-10-16); S2 missed its `fast` target. S5 was stopped early by the user on
+2026-10-16: **the plan missed its main target** (a Measure in minutes). Results and the analysis are in S5,
+"Outcome"; a new plan starts from them. Written 2026-10-15; the questions were answered the same day (section 5) and
 the plan cut down to a lean scope the same day (section 6). S4 (faster reading and retraining) added the
 same day; its questions are open (section 5).
 
@@ -350,7 +351,32 @@ how it differs from the plan:
 - **Measure read a fold page by page**, and only the page's checked lines: most pages have fewer than 8, so the
   workers were never used. A fold's checked lines now go to the pool in one batch (`linesearch._read_many`).
 
-### S5. One heavy session, when the user chooses (about 2.5 h on the computer, mostly unattended)
+### S5. One heavy session
+
+#### Outcome (2026-10-16, stopped after the cold Measure)
+
+Numbers in `docs/TUNING_PHASE2.md` ("Speed plan S5"): Measure 5 h 56 min before, 4 h 14 min after (cold, without
+the two fixes above); our reader 7.77% -> 8.03% (chance level); reading about 1.9 s per line instead of 6.6 s.
+The full test suite after S5: 408 passed in 137 s. It found a race in S1 (a worker still starting when its run
+died watched launchd as its parent and never stopped), fixed with a test.
+
+**Why it missed** (for the next plan):
+
+1. **The wrong part was sped up.** The plan assumed features were most of a Measure. With the store they are
+   not; a Measure is now mostly the 8 fits (4 base readers x 15 epochs, 4 final readers x 40 epochs, about
+   115,000 rows each), which no cache can share between folds. S4c gave 1.5x there; S4d (batch 512) was not tried.
+2. **S1 slowed the fits.** One thread per process stops the fights, but the fits are matrix products that used
+   all 8 threads before; the 42 min baseline (2026-10-15) was taken that way.
+3. **No profile first.** The lean scope moved profiling to the end, so two real bottlenecks were found only in S5:
+   no index on `sample.line_id` (each "letters of this line" read the 900 MB sample table) and Measure reading
+   page by page (the workers idle). Both fixed (`d66d2e3`), not yet measured in a full run.
+4. **A busy computer.** The heavy job got about half a core; the old code also swapped (its leak, fixed in S3).
+
+**What a next plan should start with:** a profile of one Measure with the fixes (cProfile, 2 folds is enough to
+see the split), then, in order of expected gain: more threads for the fits while the heavy-job lock is held
+(2–3x), batch 512 (about 1.7x), the folds in parallel (up to about 3x, about 1 GB each), early stopping of the
+final reader. Each with a before/after Measure on the checked lines.
+, when the user chooses (about 2.5 h on the computer, mostly unattended)
 
 On a copy of the library in the scratchpad (S1's clone), one job after the other:
 

@@ -115,6 +115,21 @@ class HeavyTests(unittest.TestCase):
             time.sleep(0.2)
         self.assertFalse([x for x in pids if _alive(x)])
 
+    def test_a_worker_whose_run_died_while_it_started_stops(self):
+        run = (f"import sys,os,time; sys.path.insert(0,{SRC!r})\n"
+               "from letter_extractor import heavy\n"
+               "if os.fork():\n"
+               "    os._exit(0)\n"                                      # the parent dies at once
+               "time.sleep(0.5)\n"                                     # the child, adopted by launchd, starts
+               "heavy.watch_parent()\n"
+               "time.sleep(30)\n")
+        p = subprocess.Popen([sys.executable, "-c", run], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        p.wait()
+        time.sleep(1.5)
+        left = [pid for pid, cmd in heavy.orphans()] + [int(x) for x in subprocess.run(
+            ["pgrep", "-f", "heavy.watch_parent"], capture_output=True, text=True).stdout.split()]
+        self.assertEqual([x for x in left if x != os.getpid()], [])
+
     def test_left_over_workers_of_a_dead_run_are_found_and_stopped(self):
         pids = self._killed_run("None")                                      # workers without the watch
         try:

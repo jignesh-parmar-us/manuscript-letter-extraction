@@ -477,3 +477,23 @@ Our reader learned only letters on a line (it cuts each letter's window from its
 - The "drop" between the two copies was one unlucky run: the 99 checked lines are identical in both (ink and text); the training letters differ by about 20 per fold (the user's व / वा cleanup), and on average the fresh copy is slightly better.
 - The language model weights 0.35 and 0.5 (and the earlier single-run comparisons of about half a point) are within this noise: the app stays at 0.5.
 - From now on: compare a variant over at least three seeds, and trust only differences clearly larger than about 1 point.
+
+## Speed plan S5: before and after (2026-10-16, stopped early)
+
+On a copy of the library (book 6, printed; 119 checked lines on 15 pages, 9,578 letters), fold-fair, 4 folds.
+"Before" is the code at `89e16b3` (before the speed plan), "after" the code after S1–S4 (`6e2d1d1`), before the two
+fixes found in this session (`d66d2e3`). The computer was busy throughout (VS Code, an animated wallpaper,
+Spotlight; load 4–18), and every job had one thread (S1), so the times are high.
+
+| | Time | Ours | Tesseract | Tesseract + LM | Marked | Caught |
+|---|---|---|---|---|---|---|
+| Before | 5 h 56 min (folds 34, 96, 110, 116 min: swapping) | 7.77% | 5.38% | 4.45% | 13.2% | 351 of 410 |
+| After, cold (builds the feature store) | 4 h 14 min | 8.03% | 5.38% | 4.45% | 13.5% | 354 of 410 |
+
+- Our reader +0.26 points: the one-time change from the per-letter seeds (S3a), within the about 1 point that one
+  training differs from another by chance. 41 lines better, 56 worse, the rest the same. Printed only (the checked
+  lines are all printed).
+- Reading one page (13 lines) with the after code and 2 workers: 25 s, about 1.9 s per line (6.6 s before, stage 5).
+- A base reader of the warm Measure: 163 s (cold: 328 s, which built the store).
+- Not done (stopped by the user): the warm Measure, batch 512, base epochs 5 and 8, Retrain before and after.
+  Analysis of why the plan missed its target: `docs/SPEED_PLAN.md`, S5.
