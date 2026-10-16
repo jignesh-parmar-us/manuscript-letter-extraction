@@ -1056,6 +1056,18 @@ button.reading-move:hover {
   flex: 1;
 }
 
+/* ---- uploads (C21) ---- */
+.warn-text {
+  color: var(--warn);
+}
+.upload-more {
+  margin: 8px 0 12px;
+}
+.top-right .current {
+  font-weight: 700;
+  text-decoration: none;
+}
+
 /* ---- Read Book → Text (C16b) ---- */
 .text-tools {
   flex-wrap: wrap;

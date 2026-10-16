@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, AppInfo, Book, Job, PageInfo, PageProblem } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
+import { UploadMore } from "../components/UploadPages";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
@@ -118,12 +119,16 @@ export default function ReadBook({ book, info, onChanged }: Props) {
           ) : book.read_dir ? (
             <code>{book.read_dir}</code>
           ) : (
-            <span className="muted">none yet: choose a PDF or a folder of images below.</span>
+            <span className="muted">none yet: upload them, or choose a PDF or a folder of images below.</span>
           )}
         </p>
+        {!book.read_pdf && (
+          <UploadMore kind="book" id={book.id} disabled={running}
+            onDone={(j) => (j ? setJob(j) : onEnd())} onError={setError} />
+        )}
         <div className="read-source">
           <label className="small">
-            PDF file
+            {book.read_pdf ? "PDF file" : "or a PDF file on this computer (only read)"}
             <span className="row">
               <input
                 aria-label="PDF file"
@@ -137,7 +142,7 @@ export default function ReadBook({ book, info, onChanged }: Props) {
             </span>
           </label>
           <label className="small">
-            or a folder of page images
+            or a folder of page images, used where it is
             <span className="row">
               <input
                 aria-label="Folder of page images"

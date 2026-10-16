@@ -5,6 +5,7 @@ import { api, ApiError, AppInfo, Book, Job, localTime, PageInfo, PageProblem, Wr
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import FolderField from "../components/FolderField";
+import { UploadMore } from "../components/UploadPages";
 import { useJob } from "../components/useJob";
 import WritingChoice from "../components/WritingChoice";
 
@@ -24,6 +25,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   fix_bars: "Giving ા bars back to their letters",
   capture_read: "Preparing the book pages for reading",
   import_pdf: "Turning the PDF into page images",
+  copy_pages: "Copying the page images into the app",
   convert: "Converting pages into text",
   line_search: "Our reader (line search)",
   line_search_measure: "Measuring our reader on the checked lines",
@@ -100,6 +102,15 @@ export default function Capture({ book, info, onChanged }: Props) {
 
       <div className="card">
         <PageFolder book={book} info={info} onChanged={onEnd} onError={setError} />
+        <details className="small">
+          <summary>Upload page images or a PDF</summary>
+          <p className="muted">
+            Kept in the uploads folder (a PDF's pages become images), which becomes the dataset's folder. Not for a
+            dataset whose pages are in a folder of your own. New pages are then cut with <em>Add new pages</em>.
+          </p>
+          <UploadMore kind="dataset" id={book.id} disabled={running}
+            onDone={(j) => (j ? setJob(j) : onEnd())} onError={setError} />
+        </details>
         {book.input_dir && <p className="small">Last capture: {localTime(book.captured_at)}</p>}
         <WritingChoice value={book.writing} onChange={changeWriting} />
         {(book.writing === "printed" || cutMethod === "tesseract") && (

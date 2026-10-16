@@ -37,7 +37,7 @@ def _heavy(what: str, run: Callable[..., Dict]) -> Callable[..., Dict]:
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | convert | line_search | line_search_train | line_search_measure | train | use_reader
+    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | copy_pages | convert | line_search | line_search_train | line_search_measure | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -182,6 +182,37 @@ class Jobs:
                 raise BookHasReviewError(f"The book already has {n} Read Book pages; new pages replace them.")
         return self.start(book_id, "import_pdf",
                           lambda progress, cancel: self.lib.import_pdf(book_id, path, progress, cancel, force=force))
+
+    def uploaded_pdf(self, book_id: int, pdf, uploads) -> Job:
+        """A PDF just uploaded (C21) becomes page images: a book's in the book folder (import_pdf), a dataset's
+        in its upload folder. A PDF that fails is removed again, so it can be uploaded once more."""
+        from ..ocr.pdf import PdfError
+        from .db import BOOK
+
+        def run(progress, cancel):
+            try:
+                if self.lib.get_book(book_id).kind == BOOK:
+                    return self.lib.import_pdf(book_id, pdf, progress, cancel)
+                return self.lib.upload_pdf_pages(book_id, pdf, uploads, progress, cancel)
+            except PdfError as e:
+                pdf.unlink(missing_ok=True)
+                raise LibraryError(str(e)) from e
+            except BaseException:
+                pdf.unlink(missing_ok=True)
+                raise
+        try:
+            return self.start(book_id, "import_pdf", run)
+        except LibraryError:
+            pdf.unlink(missing_ok=True)
+            raise
+
+    def copy_pages(self, book_id: int, source: str, uploads) -> Job:
+        """A dataset's page images copied from a folder into its upload folder (C21)."""
+        from pathlib import Path
+        images, _ = self.lib.copy_plan(book_id, Path(source), uploads)      # refused now, not in the job
+        return self.start(book_id, "copy_pages",
+                          lambda progress, cancel: self.lib.copy_pages(book_id, Path(source), uploads, progress, cancel),
+                          total=len(images))
 
     def convert(self, book_id: int, page_ids=None, part: str = "read", tesseract_path: str = "",
                 mode: str = "letters") -> Job:

@@ -12,7 +12,10 @@ delete / restore, crop / join / split, settings) answers under both prefixes. Be
 and {B} /api/books/{id}; the older lines say /api/books/{id} for both.
   rows (C20) GET/POST /api/datasets, GET/POST /api/books (a book: `dataset_id`, the dataset it learns from),
              GET/PATCH/DELETE {B} or {D}; a row carries `kind`, `dataset_id`, `dataset_name`, `used_by`;
-             POST /api/app/uploads (the uploads folder, used from C21)
+             POST /api/app/uploads (the uploads folder)
+  uploads    POST {D}/upload?name= | {B}/upload?name= (C21; one page image or PDF, the file as the body; a PDF
+             answers with a job turning it into page images), POST {D}/copy-folder {"path"} (a job: a folder's
+             images copied into the uploads folder); deleting a row deletes its uploads
   books      POST {D}/folder (the Training Data page images), GET /api/books/{id}/page-problems
   jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11) | /fix-cuts (C12b),
              GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
@@ -212,6 +215,45 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         library.set_input_folder(book_id, Path(body.path))
         return get_book(book_id)
 
+    # ---- uploads (C21) -----------------------------------------------------------------------------------
+    def uploads() -> Path:
+        return uploads_dir(library.root, context.settings_file)
+
+    async def _upload(book_id: int, kind: str, request: Request, name: str) -> Dict:
+        """One file per request, the file itself as the body (no form parsing needed). An image is kept in the
+        row's upload folder; a PDF too, and then a job turns it into page images (`job` in the answer)."""
+        with library.session() as s:
+            b = s.get(Book, book_id)
+            if b is None or b.kind != kind:
+                raise HTTPException(404, f"No {'dataset' if kind == DATASET else 'book'} with id {book_id}.")
+        target = library.upload_target(book_id, name, uploads())
+        part = target.with_name(f".{target.name}.part")
+        try:
+            with open(part, "wb") as f:
+                async for chunk in request.stream():
+                    f.write(chunk)
+            if part.stat().st_size == 0:
+                raise HTTPException(400, f"'{target.name}' is empty.")
+            part.rename(target)
+        finally:
+            part.unlink(missing_ok=True)
+        if target.suffix.lower() == ".pdf":
+            return {"job": jobs.uploaded_pdf(book_id, target, uploads()).as_dict(), "book": None}
+        library.use_upload_folder(book_id, uploads())
+        return {"job": None, "book": get_book(book_id)}
+
+    @app.post("/api/datasets/{book_id}/upload", dependencies=auth)
+    async def upload_dataset_page(book_id: int, request: Request, name: str = Query(...)) -> Dict:
+        return await _upload(book_id, DATASET, request, name)
+
+    @app.post("/api/books/{book_id}/upload", dependencies=auth)
+    async def upload_book_page(book_id: int, request: Request, name: str = Query(...)) -> Dict:
+        return await _upload(book_id, BOOK, request, name)
+
+    @app.post("/api/datasets/{book_id}/copy-folder", dependencies=ds, status_code=202)
+    def copy_folder(book_id: int, body: FolderPath) -> Dict:
+        return jobs.copy_pages(book_id, body.path, uploads()).as_dict()
+
     @both("get", "/{book_id}", dependencies=auth)
     def get_book(book_id: int) -> Dict:
         summary = next((b for b in library.list_books() if b["id"] == book_id), None)
@@ -238,7 +280,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def delete_book(book_id: int) -> None:
         if jobs.running_for(book_id):
             raise HTTPException(409, "A capture is running for this book.")
-        library.delete_book(book_id)
+        library.delete_book(book_id, uploads())
 
     @both("get", "/{book_id}/page-problems", dependencies=auth)
     def page_problems(book_id: int, part: str = Query("training", pattern="^(training|read)$")) -> List[Dict]:

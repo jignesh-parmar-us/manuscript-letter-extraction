@@ -35,6 +35,18 @@ describe("api", () => {
     expect(error.needsConfirmation).toBe(false);
   });
 
+  it("sends an uploaded file as the body, its name in the address (C21)", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => reply(200, { book: null, job: null }));
+    const file = new File(["png"], "page 1.png", { type: "image/png" });
+    await api.uploadPage("book", 4, file);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/books/4/upload?name=page%201.png");
+    expect(init!.body).toBe(file);
+    expect((init!.headers as Record<string, string>)["Content-Type"]).toBe("application/octet-stream");
+    await api.uploadPage("dataset", 5, file);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/datasets/5/upload?name=page%201.png");
+  });
+
   it("returns nothing for 204", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => reply(204, undefined));
     expect(await api.deleteBook(3)).toBeUndefined();

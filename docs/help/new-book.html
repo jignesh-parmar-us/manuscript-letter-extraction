@@ -94,8 +94,11 @@
 
   <h2 id="before">1. Before you start</h2>
   <ul>
-    <li><strong>One folder per book</strong> with its page images (JPG, PNG, TIFF or BMP), in page order by name
-      (page2 comes before page10). The app only reads this folder; it never changes your images.</li>
+    <li><strong>The page images</strong> (JPG, PNG, TIFF or BMP) or a <strong>PDF</strong>, in page order by name
+      (page2 comes before page10). When you make a dataset or a book you upload them (or, for a dataset, copy a
+      folder): the app keeps the copies in its <strong>uploads folder</strong> (shown at the bottom of the Books and
+      Datasets screens; <span class="ui">change…</span> sends new uploads elsewhere, uploads already there stay). Your
+      originals are never changed. A folder can also be used where it is (Pages &amp; capture / Prepare).</li>
     <li><strong>Printed or handwritten?</strong> This decides how the letters are cut and who suggests labels:
       <span class="badge printed">printed</span> books are read by Tesseract;
       <span class="badge hand">handwritten</span> books learn from the books you have already labelled.</li>
@@ -110,10 +113,13 @@
     labelled right after capture, and more after step 4 if you have other labelled books.</p>
   <ol class="steps">
     <li><strong>Create the dataset</strong>
-      <span class="ui">Books</span> → <span class="ui">New</span> → <span class="ui">Dataset</span>: a name and Writing
-      <span class="ui">Printed</span>. Then <span class="ui">Pages &amp; capture</span> →
-      <span class="ui">Folder with the page images</span> → <span class="ui">Use this folder</span> (only read,
-      never changed; <span class="ui">Change…</span> points the book at a moved folder).</li>
+      <span class="ui">Datasets</span> (top right) → <span class="ui">New dataset</span>: a name, Writing
+      <span class="ui">Printed</span>, and the pages: <span class="ui">Upload page images or a PDF</span> (choose
+      several images, or one PDF: its pages become images), or <span class="ui">Copy a folder of page images</span>.
+      <span class="ui">Create dataset</span> opens Pages &amp; capture. Or choose <span class="ui">Later</span> and then
+      <span class="ui">Pages &amp; capture</span> → <span class="ui">Folder with the page images</span> →
+      <span class="ui">Use this folder</span>: a folder used where it is (only read, never changed;
+      <span class="ui">Change…</span> points the dataset at a moved folder).</li>
     <li><strong>Choose the cutting before the first capture</strong>
       <span class="ui">Pages &amp; capture</span> → <span class="ui">Cutting into letters</span> →
       <span class="ui">By Tesseract's reading</span>.
@@ -145,8 +151,8 @@
     from your other handwritten books.</p>
   <ol class="steps">
     <li><strong>Create the dataset</strong>
-      <span class="ui">Books</span> → <span class="ui">New</span> → <span class="ui">Dataset</span>, Writing <span class="ui">Handwritten</span>,
-      then choose the page images folder in <span class="ui">Pages &amp; capture</span>. The cutting stays <span class="ui">By the shapes of the ink</span>.</li>
+      <span class="ui">Datasets</span> → <span class="ui">New dataset</span>, Writing <span class="ui">Handwritten</span>,
+      and upload the page images (or copy their folder). The cutting stays <span class="ui">By the shapes of the ink</span>.</li>
     <li><strong>Capture</strong>
       <span class="ui">Capture letters</span>.</li>
     <li><strong>If you have another labelled handwritten book in the same hand</strong>
@@ -231,26 +237,30 @@
       old books ticked, so their labels reach the new one.</li>
     <li><strong>Accept and review</strong> in the new book (sections 2 and 4).</li>
     <li><strong>Then delete the old books</strong>
-      <span class="ui">Books</span> → <span class="ui">Delete</span>. This removes only the book's letters, groups
-      and labels in the library; your page images are never touched. It cannot be undone.</li>
+      <span class="ui">Datasets</span> → <span class="ui">Delete</span>. This removes the dataset's letters, groups
+      and labels in the library, and the pages uploaded into it; pages in a folder of your own are never touched. It cannot be undone.</li>
   </ol>
   <div class="box tip"><strong>Tip:</strong> keep at least one labelled book of each kind (one printed, one
     handwritten): new books of the same kind learn from it.</div>
 
   <h2 id="read">7. Reading the whole book (Read Book)</h2>
   <p>Everything above happens in a <strong>dataset</strong>: sample pages whose letters are cut, grouped, reviewed and
-    labelled. What is read into text is a <strong>book</strong>, a separate thing on the Books screen (since
+    labelled. What is read into text is a <strong>book</strong>, a separate thing on its own Books screen (since
     October 2026; before, one book held both parts). A book <em>learns from</em> a dataset: our reader learns that
-    dataset's reviewed letters, and the language model its labels. Make one with <span class="ui">Books</span> →
-    <span class="ui">New</span> → <span class="ui">Book</span>: a name, Writing, and <span class="ui">Learns from</span>
-    (a dataset of the same writing, or none yet). The book's header links its dataset; a dataset lists the books
+    dataset's reviewed letters, and the language model its labels. Make one on the <span class="ui">Books</span> screen →
+    <span class="ui">New book</span>: Writing, a name, <span class="ui">Learns from</span> (a dataset of the same
+    writing, or none yet), and its pages: several page images or one PDF (<span class="ui">Page images or a PDF</span>).
+    <span class="ui">Create book</span> uploads them and opens Prepare; a PDF's pages become images there (the job
+    shows its progress). The book's header links its dataset; a dataset lists the books
     that use it.</p>
   <div class="box tip"><strong>Tip:</strong> a printed book read only by Tesseract
     (<span class="ui">Text → Whole lines</span>) needs no dataset: choose <em>no dataset yet</em> and start here.</div>
   <ol class="steps">
-    <li><strong>Book → Prepare.</strong> Type the path of the book's <strong>PDF</strong> and click
-      <span class="ui">Use this PDF</span> (its pages become images in the book folder), or choose a
-      <strong>folder of page images</strong>.</li>
+    <li><strong>Book → Prepare.</strong> The pages uploaded when the book was made are here. More page images can be
+      added with <span class="ui">Upload page images or a PDF</span> → <span class="ui">Upload</span> (not to a book
+      read from a PDF, nor to one whose pages are in a folder of your own). Instead of uploading you can type the path
+      of the book's <strong>PDF</strong> and click <span class="ui">Use this PDF</span> (its pages become images in the
+      book folder), or choose a <strong>folder of page images</strong> used where it is.</li>
     <li><strong>Prepare for reading.</strong> The lines of every page are found (and their letters cut: our reader
       needs their ink) in the background, a few pages at a time; a prepared page says <em>Prepared</em>. Stopping
       keeps the pages already prepared; the next <span class="ui">Prepare the remaining pages</span> continues.

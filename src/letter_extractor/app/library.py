@@ -23,7 +23,7 @@ import shutil
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, Iterator, List, Optional
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
@@ -64,6 +64,8 @@ WRITING = ("handwritten", "printed")
 # (Read Book: read). The word the screens and messages use for each.
 KINDS = (DATASET, BOOK)
 KIND_WORD = {DATASET: "dataset", BOOK: "book"}
+UPLOAD_SUB = {DATASET: "datasets", BOOK: "books"}       # <uploads>/<sub>/<row folder> (C21)
+PDF = ".pdf"
 
 
 def _check_kind(kind: str) -> str:
@@ -261,6 +263,129 @@ class Library:
             self.need_kind(b, DATASET, "a folder of Training Data pages")
             b.input_dir, b.updated_at = folder, now()
 
+    # ---- uploads (C21) -------------------------------------------------------------------------------
+    # Uploaded pages are kept in the uploads folder (an app setting, main.uploads_dir): a dataset's in
+    # <uploads>/datasets/<folder>/, a book's in <uploads>/books/<folder>/. That folder then is the dataset's
+    # Training Data folder or the book's Read Book folder; the rule "not inside the library" does not apply to
+    # it (lean plan, decision 5). A book's PDF is kept there too, its pages become images as before (import_pdf).
+    def upload_dir(self, book: Book, uploads: Path) -> Path:
+        return (Path(uploads).expanduser() / UPLOAD_SUB[book.kind] / book.folder).resolve()
+
+    def _uses_other_folder(self, book: Book, folder: Path) -> str:
+        """The row's pages' folder (or PDF) if they come from somewhere else than its upload folder, else ''."""
+        if book.kind == DATASET:
+            return book.input_dir if book.input_dir and Path(book.input_dir).resolve() != folder else ""
+        if book.read_pdf:
+            return book.read_pdf
+        return book.read_dir if book.read_dir and Path(book.read_dir).resolve() != folder else ""
+
+    def upload_target(self, book_id: int, name: str, uploads: Path) -> Path:
+        """Where an uploaded page image or PDF named `name` goes, after checking that it may: an image or a PDF,
+        not uploaded already, and the row's pages not from a folder of their own (adding pages to those comes
+        with the page manager, C22). A book takes images or one PDF, not both."""
+        book = self.get_book(book_id)
+        name = Path(name.replace("\\", "/")).name.strip()
+        ext = Path(name).suffix.lower()
+        if not name or name.startswith(".") or ext not in io_utils.SUPPORTED_EXTENSIONS | {PDF}:
+            raise LibraryError(f"'{name}' is not a page image (jpg, png, tif, bmp) or a PDF.")
+        folder = self.upload_dir(book, uploads)
+        other = self._uses_other_folder(book, folder)
+        if other:
+            raise LibraryError(f"The pages of '{book.name}' come from {other}, not from uploads; uploading more "
+                               "pages to it comes with the page manager. Make a new one to upload pages.")
+        if book.kind == BOOK and ext == PDF:
+            with self.session() as s:
+                n = s.scalar(select(func.count(Page.id)).where(Page.book_id == book_id, Page.part == "read")) or 0
+            if n or book.read_dir:
+                raise LibraryError(f"'{book.name}' has page images already; a PDF is uploaded into a new book.")
+        target = folder / name
+        if target.exists():
+            raise LibraryError(f"'{name}' is uploaded already.")
+        folder.mkdir(parents=True, exist_ok=True)
+        return target
+
+    def use_upload_folder(self, book_id: int, uploads: Path) -> None:
+        """Make the row's upload folder its pages' folder (Training Data for a dataset, Read Book for a book)."""
+        with self.session() as s:
+            b = s.get(Book, book_id)
+            if b is None:
+                raise NotFound(f"No book with id {book_id}.")
+            folder = str(self.upload_dir(b, uploads))
+            if b.kind == DATASET:
+                b.input_dir = folder
+            else:
+                b.read_dir, b.read_pdf = folder, ""
+            b.updated_at = now()
+
+    def upload_pdf_pages(self, book_id: int, pdf: Path, uploads: Path, progress: Optional[ProgressFn] = None,
+                         cancel: Optional[Callable[[], bool]] = None) -> Dict:
+        """A PDF uploaded into a dataset: its pages become images `<pdf name>-page-0001.jpg` … in the dataset's
+        upload folder, beside the PDF (a book's PDF goes through import_pdf instead)."""
+        from ..ocr.pdf import pdf_pages
+        book = self.get_book(book_id)
+        self.need_kind(book, DATASET, "PDF pages for Training Data")
+        folder = self.upload_dir(book, uploads)
+        tmp = folder / f".{Path(pdf).stem}.pages"
+        shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            names = pdf_pages(pdf, tmp, dpi=self.book_config(book).pdf_dpi, progress=progress, cancel=cancel)
+            if cancel and cancel():
+                raise Cancelled("Cancelled; no page of the PDF was added.")
+            final = [f"{Path(pdf).stem}-{n}" for n in names]
+            taken = [n for n in final if (folder / n).exists()]
+            if taken:
+                raise LibraryError(f"{taken[0]} is in the dataset's upload folder already.")
+            for n, f in zip(names, final):
+                (tmp / n).rename(folder / f)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.use_upload_folder(book_id, uploads)
+        return {"pages": len(final), "pdf": Path(pdf).name}
+
+    def copy_pages(self, book_id: int, source: Path, uploads: Path, progress: Optional[ProgressFn] = None,
+                   cancel: Optional[Callable[[], bool]] = None) -> Dict:
+        """A dataset from a folder of page images, copied into its upload folder (the folder is only read).
+        Refused before copying anything when a file of that name was uploaded already. A cancel keeps the
+        copied pages."""
+        from ..ocr.pdf import PageDone
+        images, folder = self.copy_plan(book_id, source, uploads)
+        folder.mkdir(parents=True, exist_ok=True)
+        done = 0
+        for i, p in enumerate(images, 1):
+            if cancel and cancel():
+                break
+            part = folder / f".{p.name}.part"
+            shutil.copy2(p, part)
+            part.rename(folder / p.name)
+            done = i
+            if progress:
+                progress(i, len(images), PageDone(p.name, "OK", "copied", 0.0))
+        if done:
+            self.use_upload_folder(book_id, uploads)
+        return {"pages": done, "pages_left": len(images) - done}
+
+    def copy_plan(self, book_id: int, source: Path, uploads: Path) -> Tuple[List[Path], Path]:
+        """The images copy_pages would copy and where to, or LibraryError why it is refused."""
+        book = self.get_book(book_id)
+        self.need_kind(book, DATASET, "a folder of Training Data pages")
+        source = Path(source).expanduser()
+        if not source.is_dir():
+            raise LibraryError(f"Folder does not exist or is not a folder: {source}")
+        images, _ = io_utils.scan_folder(source)
+        if not images:
+            raise LibraryError(f"No page images (jpg, png, tif, bmp) in {source}.")
+        folder = self.upload_dir(book, uploads)
+        if source.resolve() == folder:
+            raise LibraryError("That is the dataset's upload folder itself.")
+        other = self._uses_other_folder(book, folder)
+        if other:
+            raise LibraryError(f"The pages of '{book.name}' come from {other}; copying more pages into it comes "
+                               "with the page manager.")
+        taken = [p.name for p in images if (folder / p.name).exists()]
+        if taken:
+            raise LibraryError(f"{len(taken)} of the images are uploaded already, for example {taken[0]}.")
+        return images, folder
+
     def get_book(self, book_id: int) -> Book:
         with self.session() as s:
             book = s.get(Book, book_id)
@@ -326,17 +451,21 @@ class Library:
                 raise NotFound(f"No book with id {book_id}.")
             book.writing = writing
 
-    def delete_book(self, book_id: int) -> None:
-        """Delete the book from the database and its folder in the library (never the input pages)."""
+    def delete_book(self, book_id: int, uploads: Optional[Path] = None) -> None:
+        """Delete the book from the database and its folder in the library, and (with `uploads`) the pages
+        uploaded into it (C21); never pages in a folder of their own."""
         with self.session() as s:
             book = s.get(Book, book_id)
             if book is None:
                 raise NotFound(f"No book with id {book_id}.")
             folder = self.book_dir(book)
+            uploaded = self.upload_dir(book, uploads) if uploads else None
             s.delete(book)
         books = (self.root / "books").resolve()
         if folder.exists() and folder.resolve().parent == books:
             shutil.rmtree(folder)
+        if uploaded and uploaded.is_dir() and uploaded.parent.parent == Path(uploads).expanduser().resolve():
+            shutil.rmtree(uploaded)
 
     def set_book_config(self, book_id: int, cfg: Config) -> None:
         """New settings for the book's next capture or re-cut (what is in the book does not change)."""

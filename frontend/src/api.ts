@@ -30,11 +30,16 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
+/** `body`: sent as JSON, or as it is when it is a file (an upload, C21). */
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  const raw = body instanceof Blob;
   const response = await fetch(path, {
     method,
-    headers: { "X-Token": token(), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    headers: {
+      "X-Token": token(),
+      ...(body !== undefined ? { "Content-Type": raw ? "application/octet-stream" : "application/json" } : {}),
+    },
+    body: body === undefined ? undefined : raw ? (body as Blob) : JSON.stringify(body),
   });
   if (!response.ok) {
     let detail = response.statusText || `Error ${response.status}`;
@@ -72,7 +77,7 @@ export interface AppInfo {
   library: string;
   mode: "window" | "browser";
   can_pick_folder: boolean;
-  uploads?: string; // where new uploads go (C20; used from C21)
+  uploads?: string; // where uploaded pages are kept (C20, C21)
 }
 
 /** How a book is written. Printed books can be read by Tesseract to suggest labels (Phase 2);
@@ -132,6 +137,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
+    | "copy_pages"
     | "convert" | "line_search" | "line_search_train" | "line_search_measure" | "train" | "use_reader" | "generate_letters"
     | "top_up";
   status: "running" | "done" | "failed" | "cancelled";
@@ -563,6 +569,7 @@ export const api = {
   app: () => get<AppInfo>("/api/app"),
   chooseLibrary: (path: string) => post<{ library: string; restart_needed: boolean }>("/api/app/library", { path }),
   pickFolder: () => post<{ path: string | null }>("/api/app/pick-folder"),
+  chooseUploads: (path: string) => post<{ uploads: string }>("/api/app/uploads", { path }),
   openHelp: (page: string) => post<{ opened: string }>("/api/app/open-help", { page }),
 
   books: () => get<BookSummary[]>("/api/books"),
@@ -573,6 +580,13 @@ export const api = {
   createBook: (name: string, writing: Writing, datasetId: number | null = null) =>
     post<Book>("/api/books", { name, writing, dataset_id: datasetId }),
   setInputFolder: (id: number, path: string) => post<Book>(`/api/datasets/${id}/folder`, { path }),
+  /** One page image or PDF uploaded into a dataset or a book (C21); a PDF answers with the job that turns it
+   *  into page images. */
+  uploadPage: (kind: Kind, id: number, file: File) =>
+    request<{ book: Book | null; job: Job | null }>("POST",
+      `/api/${kind === "book" ? "books" : "datasets"}/${id}/upload?name=${encodeURIComponent(file.name)}`, file),
+  /** A folder's page images copied into a dataset's upload folder (a job, C21). */
+  copyFolder: (id: number, path: string) => post<Job>(`/api/datasets/${id}/copy-folder`, { path }),
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
   setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
   suggest: (id: number) => post<Job>(`/api/datasets/${id}/suggest`, { engine: "tesseract" }),

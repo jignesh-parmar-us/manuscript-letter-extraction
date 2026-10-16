@@ -7,7 +7,7 @@ import ReadBook from "./ReadBook";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), readPdf: vi.fn(), readFolder: vi.fn(),
-    readCapture: vi.fn(), cancelJob: vi.fn(), job: vi.fn(), pickFolder: vi.fn(), setSettings: vi.fn() } };
+    readCapture: vi.fn(), cancelJob: vi.fn(), job: vi.fn(), pickFolder: vi.fn(), setSettings: vi.fn(), uploadPage: vi.fn() } };
 });
 
 const book = (over: Partial<Book> = {}): Book => ({
@@ -36,6 +36,21 @@ describe("ReadBook", () => {
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace" }));
     await waitFor(() => expect(api.readPdf).toHaveBeenLastCalledWith(4, "/books/vachnamrut.pdf", true));
     expect(await screen.findByText(/Turning the PDF into page images/)).toBeInTheDocument();
+  });
+
+  it("uploads a PDF and follows the job that turns it into page images (C21)", async () => {
+    vi.mocked(api.uploadPage).mockResolvedValue({ book: null, job: job("import_pdf") });
+    render(<ReadBook book={book()} info={null} onChanged={() => {}} />);
+    await userEvent.upload(screen.getByLabelText("Upload page images or a PDF"),
+      new File(["%PDF"], "book.pdf", { type: "application/pdf" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(api.uploadPage).toHaveBeenCalledWith("book", 4, expect.any(File));
+    expect(await screen.findByText(/Turning the PDF into page images/)).toBeInTheDocument();
+  });
+
+  it("offers no upload to a book read from a PDF", async () => {
+    render(<ReadBook book={book({ read_pdf: "book.pdf" })} info={null} onChanged={() => {}} />);
+    expect(screen.queryByLabelText("Upload page images or a PDF")).not.toBeInTheDocument();
   });
 
   it("takes a folder, prepares the remaining pages for reading and lists them", async () => {

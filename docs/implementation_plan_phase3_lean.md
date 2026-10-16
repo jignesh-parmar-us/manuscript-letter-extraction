@@ -6,9 +6,9 @@ section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two 
 
 **Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); dry run on a copy and the split of your
 library done the same day (all counts equal; book 6 → dataset 6 + book 8, book 7 a book; backup
-`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). Written 2026-10-15
-from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
-(`docs/SPEED_PLAN.md`, S1–S4). Next: C21.
+`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21 built (2026-10-16).
+Written 2026-10-15 from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
+(`docs/SPEED_PLAN.md`, S1–S4). Next: C22.
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -214,7 +214,39 @@ The plan as written:
 
 **Stop 2:** you check the counts and the app on your library.
 
-### C21. Two lists, two creators, 2–3 h
+### C21. Two lists, two creators, 2–3 h — built 2026-10-16
+
+As built (what differs from the points below, and why, is in section 8):
+
+- **Two screens:** `#/` **Books** (`screens/Books.tsx`) and `#/datasets` **Datasets** (`screens/Datasets.tsx`), with
+  links *Books* / *Datasets* in the top bar (`AppBar`, the open one marked). A row still opens at `#/books/<id>`.
+  Rename / delete and the folders card are shared (`components/RowList.tsx`). Both screens show the **library
+  folder** and the **uploads folder**, each with *change…* (new uploads go to the new folder; old ones stay).
+- **New book:** writing, name, *Learns from* (as in C20), then **Page images or a PDF** (a file picker: several
+  images, or one PDF; a mix or two PDFs is refused on the screen and in the backend). *Create book* makes the row,
+  uploads the files one by one ("Uploading 2 of 12: …") and opens Prepare, where a PDF's job is followed.
+- **New dataset:** name, writing, and *Pages*: **Upload page images or a PDF**, **Copy a folder of page images**
+  (a job `copy_pages`; the folder is only read), or **Later** (Pages & capture, also a folder used where it is).
+  Opens Pages & capture.
+- **Backend** (`library.py`): `upload_dir` = `<uploads>/datasets/<row folder>/` or `<uploads>/books/<row folder>/`;
+  `upload_target` checks a name (file name only, an image or `.pdf`, not uploaded already, the row's pages not from a
+  folder of its own or a PDF); `use_upload_folder` makes that folder the dataset's `input_dir` or the book's
+  `read_dir`. A **book's PDF** is kept in its upload folder and goes through `import_pdf` (pages into
+  `<book folder>/read/pages/`, as before); a **dataset's PDF** becomes `<pdf name>-page-0001.jpg` … beside it
+  (`upload_pdf_pages`). A PDF that fails (not a PDF) is removed again. `copy_pages` / `copy_plan` copy a folder's
+  images (refused before copying when a name is taken). `delete_book(…, uploads)` also deletes the row's upload
+  folder, never a folder of the user's own.
+- **API** (`api.py`): `POST /api/datasets/{id}/upload?name=` and `POST /api/books/{id}/upload?name=` (one file per
+  request, the file as the body; answers `{book}` or, for a PDF, `{job}` of kind `import_pdf`; 404 for the other
+  kind), `POST /api/datasets/{id}/copy-folder` (a job). `jobs.uploaded_pdf`, `jobs.copy_pages`.
+- **Uploading more** (`components/UploadPages.tsx`, `UploadMore`): in Prepare (not for a book read from a PDF) and
+  in Pages & capture (*Upload page images or a PDF*), into a row whose pages come from uploads or that has none.
+- **Files:** `app/library.py`, `app/jobs.py`, `app/api.py`; `frontend/src/{App.tsx,api.ts,styles.css}`,
+  `components/{AppBar,RowList,UploadPages}.tsx`, `screens/{Books,Datasets,ReadBook,Capture}.tsx`; tests
+  `tests/test_uploads.py` (new), `screens/{Books,Datasets,ReadBook}.test.tsx`, `api.test.ts`;
+  `docs/help/{new-book,workflow}.html`, README.
+
+The plan as written:
 
 *After C20:* the Books screen already lists both kinds and creates either (without uploads); C21 splits it into the
 two screens and adds the uploads. `GET/POST /api/datasets` and `/api/books` exist; the setting `uploads` too.
@@ -227,6 +259,11 @@ two screens and adds the uploads. `GET/POST /api/datasets` and `/api/books` exis
   `App.tsx`, `app/api.py` (upload endpoints), `app/library.py`, tests.
 
 ### C22. Page manager for a book and a dataset, 3 h
+
+*After C21:* uploading exists (`library.upload_target` / `use_upload_folder`, `POST …/upload?name=`, the screen's
+`UploadMore` in Prepare and Pages & capture); **Add pages** can reuse it. Today uploading is refused into a row whose
+pages are in a folder of the user's own or (a book) come from a PDF: C22 decides whether *Add pages* copies into the
+uploads folder for those too. Deleting a page that came from uploads should delete its file there.
 
 - One page manager for both. Pages tab: thumbnails and a table; **Add pages** (upload more), **Delete**,
   **Exclude / Include** (an excluded page is skipped by Prepare, Read and export in a book, and by capture,
@@ -348,3 +385,23 @@ About **16–20 hours** of building, after the speed plan's 5–7.
 9. **Show Cut letters moved** from Pages & capture (now a dataset's) to the book's Prepare → Settings, where the
    setting acts.
 10. **Later chunks:** C21, C23 and C24 have a note "After C20" with what is already there.
+
+**C21 (2026-10-16):**
+
+1. **One file per request, the file as the body** (`?name=` in the address), not a multipart form: FastAPI needs the
+   `python-multipart` package for forms, which is not installed; this needs nothing new and lets the screen show
+   "Uploading 3 of 12". A failed file stops the upload and says which one; the ones before it are kept.
+2. **A book takes page images or one PDF**, not both: a PDF replaces the Read Book pages (`import_pdf`), images are a
+   folder. A dataset takes images or one PDF per upload too (one job per row at a time).
+3. **A book's PDF** is kept in its upload folder and its pages become images in the book folder as before
+   (`import_pdf`, so Prepare and its tests are unchanged); **a dataset's PDF** pages are put beside it in the upload
+   folder (`<pdf name>-page-0001.jpg`), since a dataset's pages are a folder.
+4. **A dataset can still use a folder where it is** (*Later* → Pages & capture → *Use this folder*); the plan's
+   "pick a folder" is *Copy a folder of page images* (copied into the uploads folder, a job).
+5. **Uploading more is in Prepare and Pages & capture already** (planned for C22's *Add pages*), so a creation whose
+   upload failed half-way can be finished; only into a row whose pages come from uploads or that has none.
+6. **Deleting a row deletes its uploaded pages** (the plan did not say): they are the app's copies, and an id taken
+   again by SQLite would otherwise find the old files in the new row's upload folder. The delete question says so.
+   Pages in a folder of the user's own are never touched.
+7. **The uploads folder is shown and changeable** at the bottom of both screens (C20 had only the API).
+8. **`route.ts` unchanged:** the address `#/datasets` is read in `App.tsx`; rows keep opening at `#/books/<id>`.
