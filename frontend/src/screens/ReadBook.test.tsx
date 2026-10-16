@@ -11,7 +11,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book = (over: Partial<Book> = {}): Book => ({
-  id: 4, name: "B", kind: "book", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/train", writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
+  id: 4, name: "B", kind: "book", datasets: [], used_by: [], input_dir: "/train", writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
   pages: 23, samples: 100, groups: 10, labelled: 5, unsure: 3, created_at: null, updated_at: null, captured_at: null,
   settings: {}, undo: 0, redo: 0, job: null, ...over,
 });

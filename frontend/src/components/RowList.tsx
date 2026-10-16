@@ -76,6 +76,23 @@ export function useRowEditing(reload: () => void, onError: (e: unknown) => void)
   return { dialog, nameCell, actions };
 }
 
+/** Links to the datasets a book learns from (C23: one or more), or "no dataset yet". */
+export function DatasetLinks({ datasets, small = false }: { datasets: { id: number; name: string }[]; small?: boolean }) {
+  if (!datasets.length) return <span className="muted small">no dataset yet</span>;
+  return (
+    <>
+      {datasets.map((d, i) => (
+        <span key={d.id}>
+          {i > 0 && ", "}
+          <button className={small ? "link small" : "link"} onClick={() => go(`/books/${d.id}`)}>
+            {d.name}
+          </button>
+        </span>
+      ))}
+    </>
+  );
+}
+
 /** The library folder and the uploads folder (where uploaded pages are kept), each changeable. */
 export function AppFolders(props: { info: AppInfo | null; onChanged: () => void; onError: (e: unknown) => void }) {
   const [open, setOpen] = useState<"" | "library" | "uploads">("");

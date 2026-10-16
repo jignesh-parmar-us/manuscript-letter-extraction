@@ -89,7 +89,8 @@ class SplitTests(unittest.TestCase):
         (done,) = r["rows"]
         book = self.lib.get_book(done["book"])
         dataset = self.lib.get_book(self.row)
-        self.assertEqual((book.kind, book.name, book.read_dataset_id, dataset.kind), (BOOK, dataset.name, self.row, DATASET))
+        self.assertEqual((book.kind, book.name, self.lib.training_sources(book), dataset.kind),
+                         (BOOK, dataset.name, [self.row], DATASET))                 # C23: its reading model's dataset
         self.assertEqual((book.read_dir, dataset.read_dir), (str(self.read.resolve()), ""))
         self.assertEqual(done["dataset counts"]["read pages"], 0)
         self.assertEqual(done["book counts"]["training pages"], 0)
@@ -120,7 +121,8 @@ class SplitTests(unittest.TestCase):
         self.assertEqual(sorted(x["dataset"] is None for x in r["rows"]), [False, True])   # only one row split in two
         self.assertTrue(r["same"])
         self.assertEqual(self.lib.get_book(other).kind, BOOK)
-        self.assertIsNone(self.lib.get_book(other).read_dataset_id)
+        self.assertEqual(self.lib.training_sources(self.lib.get_book(other)), [])
+        self.assertIsNotNone(self.lib.get_book(other).reading_model_id)
 
     def test_problems_stop_it_before_anything_changes(self):
         with self.lib.session() as s:

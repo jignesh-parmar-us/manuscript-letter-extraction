@@ -51,7 +51,7 @@ DATASET, BOOK = "dataset", "book"     # Book.kind (Phase 3, C20)
 class Book(Base):
     """A dataset or a book (Phase 3, C20: `kind`), one table for both. A **dataset** holds Training Data pages,
     whose letters are cut, grouped, reviewed and labelled; a **book** holds Read Book pages, which are read.
-    `read_dataset_id`: the dataset a book learns from (until C23 chooses several). A name is unique per kind."""
+    `reading_model_id` (C23): what a book reads with (`ReadingModel`, its datasets). A name is unique per kind."""
     __tablename__ = "book"
     __table_args__ = (UniqueConstraint("kind", "name", name="uq_book_kind_name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -65,8 +65,8 @@ class Book(Base):
     read_dir: Mapped[str] = mapped_column(Text, default="")
     read_pdf: Mapped[str] = mapped_column(String(500), default="")
     reader_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reader.id", ondelete="SET NULL"), nullable=True)  # C14
-    read_dataset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("book.id", ondelete="SET NULL"),
-                                                           nullable=True)                                # C20
+    reading_model_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reading_model.id", ondelete="SET NULL"),
+                                                            nullable=True)                               # C23
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now, onupdate=now)
     captured_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
@@ -76,6 +76,24 @@ class Book(Base):
                                                order_by="Page.id")
     groups: Mapped[List["LetterGroup"]] = relationship(back_populates="book", cascade="all, delete-orphan",
                                                        order_by="LetterGroup.id")
+
+
+class ReadingModel(Base):
+    """What a book reads with (Phase 3, C23): the line-search reader, trained on the reviewed letters of its
+    datasets, and the language model of their labels (with the book's proofread lines and word lists). Its files are
+    in <library>/models/<folder>/. Each book has its own; the table lets books share one later."""
+    __tablename__ = "reading_model"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    folder: Mapped[str] = mapped_column(String(200), unique=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), default=now, nullable=True)
+
+
+class ReadingModelDataset(Base):
+    """A dataset a reading model learns from (several allowed); a deleted dataset leaves every model."""
+    __tablename__ = "reading_model_dataset"
+    model_id: Mapped[int] = mapped_column(ForeignKey("reading_model.id", ondelete="CASCADE"), primary_key=True)
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("book.id", ondelete="CASCADE"), primary_key=True)
 
 
 class Page(Base):

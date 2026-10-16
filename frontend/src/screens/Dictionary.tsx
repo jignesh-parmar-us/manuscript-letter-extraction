@@ -1,5 +1,5 @@
-// Read Book → Dictionary (C15): the book's language model. When converting, it may change uncertain letters
-// to readings that make more likely text; it learns from the book's own labels (its Training Data letters
+// Read Book → Reading setup → word lists (C15; its own tab before C23): the book's language model. When converting, it may change uncertain letters
+// to readings that make more likely text; it learns from the labels of the book's datasets (their Training Data letters
 // in reading order), its proofread lines and the word lists the book uses (imported text files, Gujarati or
 // Devanagari). Letters it changed are underlined in the Text view and stay marked uncertain.
 import { useCallback, useEffect, useState } from "react";
@@ -72,7 +72,7 @@ export default function Dictionary({ book, onChanged }: Props) {
           <table className="list compact" aria-label="Learns from">
             <tbody>
               <tr>
-                <td>Your labels (the letters of the book's dataset, in reading order)</td>
+                <td>Your labels (the letters of the book's datasets, in reading order)</td>
                 <td className="num">{n(info.labels.aksharas)} letters</td>
               </tr>
               <tr>

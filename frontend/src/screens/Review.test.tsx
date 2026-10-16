@@ -12,7 +12,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: Book = {
-  id: 1, name: "B", kind: "dataset", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/p", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
+  id: 1, name: "B", kind: "dataset", datasets: [], used_by: [], input_dir: "/p", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
   pages: 2, samples: 10, groups: 3, labelled: 1, unsure: 4, created_at: null,
   updated_at: null, captured_at: null, settings: {}, undo: 2, redo: 0, job: null,
 };

@@ -203,10 +203,18 @@ def _language_model(lib: Library, book: Book, cfg):
 
 
 def _groups_for(s, book: Book):
-    """The labelled groups (and centres) that check a book's letters: its dataset's since C20 (none when it has
-    no dataset; a dataset's own)."""
-    src = Library.training_source(book)
-    return centres(s, src if src is not None else book.id, labelled_only=True)
+    """The labelled groups (and centres) that check a book's letters: its datasets' (C23; the book's own when it
+    has none; a dataset's own)."""
+    srcs = Library.sources_in(s, book) or [book.id]
+    if len(srcs) == 1:
+        return centres(s, srcs[0], labelled_only=True)
+    groups, rows = [], []
+    for src in srcs:
+        g, r = centres(s, src, labelled_only=True)
+        if g:
+            groups += g
+            rows.append(r)
+    return groups, (np.concatenate(rows) if rows else np.zeros((0, 0), np.float32))
 
 
 def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None,

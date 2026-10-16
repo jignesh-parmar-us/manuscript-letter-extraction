@@ -1584,3 +1584,8 @@ a.button.disabled {
 tr.excluded td {
   opacity: 0.6;
 }
+
+/* ---- Reading setup (C23) ---- */
+.reading-setup .setup-part {
+  margin: 20px 0 4px;
+}

@@ -36,6 +36,10 @@ class PageExclude(PageFile):
     excluded: bool = True
 
 
+class DatasetChoice(BaseModel):
+    dataset_ids: List[int]                        # the datasets a book's reading model learns from (C23)
+
+
 class PageMove(BaseModel):
     by: int                                       # -1 up, +1 down
 

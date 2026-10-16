@@ -94,7 +94,7 @@ class ReadBookTests(PartsTestCase):
         self.assertEqual((rows[self.book]["pages"], rows[self.book]["read_pages"], rows[self.book]["kind"]),
                          (0, 3, "book"))
         self.assertEqual((rows[self.dataset]["pages"], rows[self.dataset]["read_pages"]), (2, 0))
-        self.assertEqual((rows[self.book]["dataset_id"], rows[self.book]["dataset_name"]), (self.dataset, "B"))
+        self.assertEqual(rows[self.book]["datasets"], [{"id": self.dataset, "name": "B"}])     # C23
         self.assertEqual(rows[self.dataset]["used_by"], [{"id": self.book, "name": "B"}])
         self.assertEqual(rows[self.dataset]["unsure"],
                          self.count(Sample, Sample.part == "training", Sample.group_id.is_(None),
@@ -166,9 +166,9 @@ class KindsTests(PartsTestCase):
             self.lib.rename_book(other, "B")
         with self.assertRaisesRegex(LibraryError, "A dataset named 'B'"):
             self.lib.create_book("B")
-        self.assertEqual(self.lib.training_source(self.lib.get_book(other)), None)   # learns from nothing yet
-        self.assertEqual(self.lib.training_source(self.lib.get_book(self.book)), self.dataset)
-        self.assertEqual(self.lib.training_source(self.lib.get_book(self.dataset)), self.dataset)
+        self.assertEqual(self.lib.training_sources(self.lib.get_book(other)), [])   # learns from nothing yet
+        self.assertEqual(self.lib.training_sources(self.lib.get_book(self.book)), [self.dataset])
+        self.assertEqual(self.lib.training_sources(self.lib.get_book(self.dataset)), [self.dataset])
 
     def test_pages_are_not_moved_between_the_parts(self):
         self.lib.set_read_folder(self.book, self.read)
@@ -184,7 +184,7 @@ class KindsTests(PartsTestCase):
 
     def test_deleting_a_dataset_leaves_its_books(self):
         self.lib.delete_book(self.dataset)
-        self.assertIsNone(self.lib.get_book(self.book).read_dataset_id)
+        self.assertEqual(self.lib.training_sources(self.lib.get_book(self.book)), [])   # C23: left the model
 
 
 class ApiTests(PartsTestCase):
@@ -215,7 +215,7 @@ class ApiTests(PartsTestCase):
         self.assertEqual([b["id"] for b in c.get("/api/books", headers=h).json()], [self.book])
         self.assertEqual([b["id"] for b in c.get("/api/datasets", headers=h).json()], [self.dataset])
         made = c.post("/api/books", headers=h, json={"name": "New", "dataset_id": self.dataset}).json()
-        self.assertEqual((made["kind"], made["dataset_id"]), ("book", self.dataset))
+        self.assertEqual((made["kind"], made["datasets"]), ("book", [{"id": self.dataset, "name": "B"}]))
         self.assertEqual(c.post("/api/books", headers=h, json={"name": "Bad", "input_dir": str(self.train)}).status_code,
                          400)
         self.assertEqual(c.get(f"/api/datasets/{self.dataset}", headers=h).json()["kind"], "dataset")   # both prefixes

@@ -7,7 +7,7 @@ pages (read). Migration 0017 makes every row a dataset; this module separates th
   checker and the undo history of its Training Data, as a **dataset**. A new **book** row with the same name
   gets its Read Book pages, with their lines, whole-line readings, line truth, page texts, letters (never
   grouped) and the undo history of those letters, its Read Book folder or PDF, settings and letter checker,
-  and `read_dataset_id` = the dataset. The book's files move from the dataset's folder to its own:
+  and a reading model (C23) learning from the dataset. The book's files move from the dataset's folder to its own:
   `read/`, `line-search/` (our reader, its Measure and caches), `text/read/` and `cache/read-*`.
 * A row with Read Book pages and **no** Training Data becomes a book in place (no empty dataset).
 * A row without Read Book pages stays a dataset.
@@ -163,16 +163,18 @@ def split_library(lib: Library) -> Dict:
                 d = s.get(Book, p["id"])
                 if p["how"] == "book":                    # Read Book only: it becomes a book in place
                     d.kind = BOOK
+                    Library._new_model(s, d, [])            # C23: its reading model, no dataset yet
                     done.append({"dataset": None, "book": d.id, "name": d.name})
                     continue
                 if s.scalar(select(Book.id).where(Book.kind == BOOK, Book.name == d.name)) is not None:
                     raise LibraryError(f"A book named '{d.name}' exists already; rename it first.")
                 b = Book(name=d.name, kind=BOOK, folder=f"new-{d.id}", input_dir="", settings=d.settings,
                          writing=d.writing, read_dir=d.read_dir, read_pdf=d.read_pdf, reader_id=d.reader_id,
-                         read_dataset_id=d.id, created_at=d.created_at, updated_at=now(), captured_at=None)
+                         created_at=d.created_at, updated_at=now(), captured_at=None)
                 s.add(b)
                 s.flush()
                 b.folder = f"{b.id:04d}-{_slug(d.name)}"
+                Library._new_model(s, b, [d.id])            # C23: the book's reading model learns from the dataset
                 read_pages = select(Page.id).where(Page.book_id == d.id, Page.part == "read")
                 read_steps, _, _ = _action_parts(s, d.id)
                 s.execute(Sample.__table__.update().where(Sample.book_id == d.id, Sample.part == "read")

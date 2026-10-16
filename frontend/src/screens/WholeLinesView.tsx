@@ -507,7 +507,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         </span>
         <span className="spacer" />
         {!ours && (
-          <label className="row small" title="Tesseract's reading corrected by the book's language model (Read Book → Dictionary)">
+          <label className="row small" title="Tesseract's reading corrected by the book's language model (Read Book → Reading setup)">
             <input type="checkbox" checked={lm} onChange={(e) => chooseLm(e.target.checked)} />
             With the language model
           </label>

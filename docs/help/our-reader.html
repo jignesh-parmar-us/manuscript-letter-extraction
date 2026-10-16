@@ -101,7 +101,7 @@
   <h2>The language model (not a reader)</h2>
   <p>The language model never looks at the ink. It only knows <strong>which aksharas follow each other</strong> in
     this book: from the labels of your Training Data pages in reading order, the lines you proofread in Cut letters, and your
-    word lists (Read Book → Dictionary). Your checked lines are not in it (yet): they teach the letter reader. For two or three aksharas in a row it knows how often the next one comes.</p>
+    word lists (Read Book → Reading setup). Your checked lines are not in it (yet): they teach the letter reader. For two or three aksharas in a row it knows how often the next one comes.</p>
   <p>Example (from your book's language model): after <span class="ex">भग</span> it has seen
     <span class="ex">वा</span> (भगवान) nearly every time and <span class="ex">बा</span> practically never, so when the letter reader is unsure between वा and बा there, it tips the
     choice to वा. Where the shape is clear, the letter reader wins.</p>
@@ -151,8 +151,9 @@
   <h2>Retrain, Read and Measure</h2>
   <dl>
     <dt>Retrain (about half an hour)</dt>
-    <dd>Learns again from your reviewed groups and every checked line. It does not read: the pages keep their
-      reading until you read them again. The tab says when your groups or checked lines changed since it learned.</dd>
+    <dd>Learns again from the reviewed groups of the book's datasets (chosen in Reading setup, one or several) and
+      every checked line. It does not read: the pages keep their reading until you read them again. The tab and
+      Reading setup say when the datasets, their groups or the checked lines changed since it learned.</dd>
     <dt>Read all pages / Read unread pages / Read this page (about 7 s per line before 16 October; faster now:
       to be measured)</dt>
     <dd>Reads with the reader as it is, 2 lines at a time in separate processes (on pages with 8 lines or more;
@@ -200,7 +201,9 @@
     same for every idea about the reader or the search. So for the experiments they are computed once per group of
     pages and kept in files (about 5 GB), a <em>cache</em>; then a new idea, such as another language model weight,
     takes minutes instead of hours.</p>
-  <p>Since 16 October the app keeps a cache of its own, in <code>line-search/features/</code> in the book folder:
+  <p>Since 16 October the app keeps a cache of its own, in <code>features/</code> in the book's reading model folder
+    (<code>models/&lt;book folder&gt;/</code> in the library since C23; <code>line-search/</code> in the book folder
+    before, moved there the first time it is used):
     each training letter's features (about 14 rows of numbers per letter: the letter, its window on the line, the
     window shifted a little, its varied copies and its "not a letter" pieces) and every letter mask in one file.
     Retrain and Measure compute only the features of letters that changed (a new page, a recut line, a changed
@@ -209,7 +212,7 @@
     (the next Retrain or Measure then takes as long as the first). The random choices for a letter (its shifts and
     varied copies) now come from the letter itself, so the same letter gets the same rows in every group of pages
     and every run.</p>
-  <p>What else the app keeps is the trained reader (<code>line-search/reader.npz</code>), the last measure
+  <p>What else the app keeps, in the same folder, is the trained reader (<code>reader.npz</code>), the last measure
     (<code>line-search/measure.json</code>; a quick one in <code>measure-quick.json</code>) and each line's
     reading in the library.</p>
 </main>

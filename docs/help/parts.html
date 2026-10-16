@@ -6,7 +6,7 @@
 <title>The parts explained</title>
 <!--
   Help page, served at /help/parts.html (linked from new-book.html and tech.html): what Training Data,
-  groups, labels, the letter checker, the language model, the Dictionary, Tesseract, whole lines and line
+  groups, labels, the letter checker, the language model, the Reading setup, Tesseract, whole lines and line
   truth are, and how they relate. Numbers are from TUNING_PHASE2.md (checked lines, 2026-10-11).
 -->
 <link rel="stylesheet" href="tech.css">
@@ -34,7 +34,7 @@
     <a href="tech.html">How it works (technical)</a>
   </nav>
   <h1>The parts explained</h1>
-  <p class="lead">Training Data, groups, labels, the letter checker, the language model, the Dictionary, Tesseract,
+  <p class="lead">Training Data, groups, labels, the letter checker, the language model, the Reading setup, Tesseract,
     whole lines and line truth: what each one is, what it learns from, where you find it, and whether it helps.</p>
 
   <h2>Two kinds of knowledge</h2>
@@ -48,7 +48,7 @@
         texts, and picks between readings that the others gave.</p></div>
     <div class="node k-data"><h3>Where they learn from</h3>
       <p><strong>Training Data</strong> (your labelled letters), your <strong>proofread lines</strong> and your
-        <strong>word lists</strong> (Dictionary).</p></div>
+        <strong>word lists</strong> (Reading setup).</p></div>
   </div>
   <p>So a reader and the language model are different things: a reader reads <em>shapes</em>, the language model
     knows <em>words</em>. Some screens use one, some the other, some both.</p>
@@ -90,22 +90,23 @@
       <td><strong>Language model</strong></td>
       <td>Counts of which letters follow which (sequences of three aksharas). When a reading is doubtful, it prefers the
         alternative that makes a more likely word. It does not see the image.</td>
-      <td>Your labels in reading order, your proofread lines, and your word lists</td>
-      <td>Read Book → Dictionary (what it learns from, on or off)</td>
+      <td>The labels of the book's datasets in reading order, your proofread lines, and your word lists</td>
+      <td>Read Book → Reading setup (what it learns from, on or off)</td>
     </tr>
     <tr>
-      <td><strong>Dictionary</strong></td>
-      <td>The <em>screen</em> for the language model: it shows what the model learns from, imports text files (word
-        lists) and turns the model on or off. "Dictionary" is the screen, "language model" is what it manages.</td>
+      <td><strong>Reading setup</strong> (the Dictionary before C23)</td>
+      <td>The <em>screen</em> for what a book reads with, its <strong>reading model</strong>: the datasets it learns
+        from (one or several), the word lists of the language model (and the model on or off), and our reader: what it
+        was trained on, Train / Retrain, Measure.</td>
       <td>—</td>
-      <td>Read Book → Dictionary</td>
+      <td>Read Book → Reading setup</td>
     </tr>
     <tr>
       <td><strong>Word list</strong></td>
       <td>A text file you import (for example the Vachanamrut's text), so the language model knows real words, not only
         the few lines you labelled.</td>
       <td>—</td>
-      <td>Read Book → Dictionary → Import</td>
+      <td>Read Book → Reading setup → Import</td>
     </tr>
     <tr>
       <td><strong>Tesseract</strong></td>
@@ -131,7 +132,7 @@
     <tr><td>Text → <strong>Whole lines</strong></td><td>yes, on the whole line</td><td>—</td><td>—</td><td>yes, if "With the language model" is ticked</td></tr>
     <tr><td>Text → <strong>Whole lines (our reader)</strong></td><td>—</td><td>yes: the reviewed letters teach the line search (Retrain after changes)</td><td>its own (learns "not a letter" too)</td><td>yes</td></tr>
     <tr><td>Text → Cut letters (hidden), "Tesseract only"</td><td>yes, per letter</td><td>—</td><td>—</td><td>—</td></tr>
-    <tr><td>Text → Cut letters (hidden), "Tesseract + your checker and groups"</td><td>yes, per letter</td><td>yes</td><td>yes, if trained</td><td>yes, if on in Dictionary</td></tr>
+    <tr><td>Text → Cut letters (hidden), "Tesseract + your checker and groups"</td><td>yes, per letter</td><td>yes</td><td>yes, if trained</td><td>yes, if on in Reading setup</td></tr>
     <tr><td>Line truth</td><td>yes (to fill in the line for you to correct)</td><td>—</td><td>—</td><td>—</td></tr>
   </table>
 

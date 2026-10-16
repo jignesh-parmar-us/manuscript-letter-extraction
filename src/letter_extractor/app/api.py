@@ -10,8 +10,10 @@ review actions, the letter checker, export) is under /api/datasets/{id}/... (404
 /api/books/{id}/...; what both have (the row, pages, page-problems, recut, undo / redo / history, label-samples,
 delete / restore, crop / join / split, settings) answers under both prefixes. Below, {D} is /api/datasets/{id}
 and {B} /api/books/{id}; the older lines say /api/books/{id} for both.
-  rows (C20) GET/POST /api/datasets, GET/POST /api/books (a book: `dataset_id`, the dataset it learns from),
-             GET/PATCH/DELETE {B} or {D}; a row carries `kind`, `dataset_id`, `dataset_name`, `used_by`;
+  rows (C20) GET/POST /api/datasets, GET/POST /api/books (a new book: `dataset_id`, a first dataset to learn from),
+             GET/PATCH/DELETE {B} or {D}; a row carries `kind`, `datasets` (a book's, C23), `used_by` (a dataset's);
+  setup(C23) GET /api/books/{id}/reading-setup (its reading model: datasets, other datasets, reader, measures),
+             PUT /api/books/{id}/datasets {"dataset_ids"} (the datasets its reading model learns from);
              POST /api/app/uploads (the uploads folder)
   pages(C22) GET {B}/page-list (the page manager: order, excluded, not prepared yet, what is on each page),
              POST {B}/page-list/exclude {"file", "excluded", "force"}, POST {B}/page-list/delete {"file", "force"},
@@ -69,7 +71,7 @@ from .centres import suggestions
 from .db import BOOK, DATASET, GENERATED, Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (PageExclude, PageFile, PageMove, AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+from .schemas import (DatasetChoice, PageExclude, PageFile, PageMove, AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
@@ -379,6 +381,33 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         from .linesearch import last_measure, line_reader_info
         return {"reader": line_reader_info(library, book_id), "measure": last_measure(library, book_id),
                 "quick_measure": last_measure(library, book_id, quick=True)}
+
+    # ---- Reading setup (C23) -------------------------------------------------------------------------
+    @app.get("/api/books/{book_id}/reading-setup", dependencies=auth)
+    def reading_setup(book_id: int) -> Dict:
+        """The book's reading model: the datasets it learns from (and the other datasets, to add), what its reader
+        was trained on (`changed`: out of date) and the last measures."""
+        from .db import ReadingModel
+        from .linesearch import last_measure, line_reader_info
+        book = library.get_book(book_id)
+        library.need_kind(book, BOOK, "a reading setup")
+        used = library.training_sources(book)
+        rows = {b["id"]: _book_json(b) for b in library.list_books(DATASET)}
+        with library.session() as s:
+            m = s.get(ReadingModel, book.reading_model_id) if book.reading_model_id else None
+            model = {"id": m.id, "name": m.name, "folder": str(library.root / "models" / m.folder)} if m else None
+        return {"model": model, "writing": book.writing,
+                "datasets": [rows[d] for d in used if d in rows],
+                "others": [r for d, r in rows.items() if d not in used],
+                "reader": line_reader_info(library, book_id), "measure": last_measure(library, book_id),
+                "quick_measure": last_measure(library, book_id, quick=True)}
+
+    @app.put("/api/books/{book_id}/datasets", dependencies=auth)
+    def choose_datasets(book_id: int, body: DatasetChoice) -> Dict:
+        if jobs.running_for(book_id):
+            raise HTTPException(409, "A job is running for this book; choose its datasets when it has finished.")
+        library.set_book_datasets(book_id, body.dataset_ids)
+        return reading_setup(book_id)
 
     @app.post("/api/books/{book_id}/line-search/train", dependencies=auth, status_code=202)
     def line_search_train(book_id: int) -> Dict:

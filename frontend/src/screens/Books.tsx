@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api, AppInfo, BookSummary, localTime, Writing, WRITING_LABEL } from "../api";
 import WritingChoice from "../components/WritingChoice";
 import ErrorBox from "../components/ErrorBox";
-import { AppFolders, useRowEditing } from "../components/RowList";
+import { AppFolders, DatasetLinks, useRowEditing } from "../components/RowList";
 import { filesProblem, PageFilePicker, uploadPages } from "../components/UploadPages";
 import { go } from "../route";
 
@@ -32,7 +32,7 @@ export default function Books({ info, onLibraryChanged }: Props) {
       <ErrorBox error={error} onClose={() => setError(null)} />
       <h1>Books</h1>
       <p className="muted small">
-        What is read into text. A book learns from a dataset (see{" "}
+        What is read into text. A book learns from one or more datasets, chosen in its Reading setup (see{" "}
         <button className="link" onClick={() => go("/datasets")}>
           Datasets
         </button>
@@ -59,13 +59,7 @@ export default function Books({ info, onLibraryChanged }: Props) {
                 <td>{nameCell(b, WRITING_LABEL[b.writing])}</td>
                 <td className="num">{b.read_pages}</td>
                 <td>
-                  {b.dataset_id ? (
-                    <button className="link" onClick={() => go(`/books/${b.dataset_id}`)}>
-                      {b.dataset_name}
-                    </button>
-                  ) : (
-                    <span className="muted small">no dataset</span>
-                  )}
+                  <DatasetLinks datasets={b.datasets ?? []} />
                 </td>
                 <td className="small">{localTime(b.updated_at)}</td>
                 {actions(b)}

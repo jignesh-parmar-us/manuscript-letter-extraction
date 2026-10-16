@@ -75,7 +75,7 @@
   <div class="box tip"><strong>New here, or lost?</strong> <a href="workflow.html">The steps in order</a> shows the
     whole route as a flowchart, from creating a book to downloading its text. <a href="parts.html">The parts explained</a> (and <a href="our-reader.html">How our reader reads</a>,
     for Whole lines (our reader))
-    says what Training Data, groups, the letter checker, the language model and the Dictionary each are.
+    says what Training Data, groups, the letter checker, the language model and the Reading setup each are.
     <a href="tech.html">How it works</a> explains each step technically: the algorithms, scores and image processing.</div>
 
   <nav class="toc" aria-label="Contents">
@@ -290,7 +290,7 @@
     <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span> or <span class="ui">Whole lines (our reader)</span>
       at the top. <strong>Whole lines</strong> (the best on the checked lines): <span class="ui">Read all
       pages</span> (or <span class="ui">Read unread pages</span>: only the pages not read yet, e.g. after adding pages); Tesseract reads each line image as it is, no letters are cut; <em>With the language model</em> applies
-      the corrections of Read Book → Dictionary (underlined). <span class="ui">Whole page</span> shows the page
+      the corrections of the language model (Read Book → Reading setup; underlined). <span class="ui">Whole page</span> shows the page
       <span class="ui">As a page</span> (the page image, its text below) or as <span class="ui">Line strips</span> (every
       line as its strip of the page with its text under it); <span class="ui">Line by line</span> shows one line at a time
       (◀ ▶). <span class="ui">Aligned text</span> puts each akshara under its letter (untick it for plain text). Click an akshara to see it on the page; ← → move between aksharas,
@@ -327,11 +327,20 @@
     <li><span class="ui">Line truth</span>: type what a few lines really say (Tesseract's reading of the whole
       line is filled in: correct it and press Enter). 30 to 50 lines from a few pages are the test set every way of
       reading is measured on, independent of how the letters were cut.</li>
-    <li><span class="ui">Dictionary</span>: the language model corrects some uncertain letters when you convert,
-      from the text it knows (underlined in the Text view, still marked uncertain). It learns from your labels and
-      proofread lines; <span class="ui">Import</span> a UTF-8 text file in Gujarati or Devanagari (the full text of the
-      book, or works like it) to give it much more, then convert again. Untick <em>Use the language model</em> to
-      turn it off.</li>
+    <li><span class="ui">Reading setup</span> (the Dictionary tab before; its old address opens here) has three parts.
+      <strong>1. Datasets used:</strong> the datasets whose reviewed letters our reader learns and whose labels the
+      language model learns, one or several: <span class="ui">Add dataset</span> (one of another writing is allowed,
+      with a warning), <span class="ui">Remove from this book</span> (the dataset itself is untouched),
+      <span class="ui">Open</span>, <span class="ui">New dataset…</span>. A dataset can only be deleted on the Datasets
+      screen, which says which books use it. <strong>2. Word lists and the language model:</strong> the language model
+      corrects some uncertain letters from the text it knows (underlined in the Text view, still marked uncertain). It
+      learns from the datasets' labels and your proofread lines; <span class="ui">Import</span> a UTF-8 text file in
+      Gujarati or Devanagari (the full text of the book, or works like it) to give it much more, then read again.
+      Untick <em>Use the language model</em> to turn it off. It follows the datasets and word lists by itself.
+      <strong>3. Reading model:</strong> what our reader was trained on, <em>out of date</em> when the datasets, their
+      reviewed letters or the checked lines changed since, <span class="ui">Train</span> /
+      <span class="ui">Retrain</span> and <span class="ui">Measure</span> (fold-fair on the checked lines; takes a
+      while). Each book has its own reading model, kept in <code>models/</code> in the library folder.</li>
   </ol>
   <div class="box tip"><strong>Printed books</strong> are read by Tesseract and checked against your labelled groups;
     <strong>handwritten books</strong> by your groups alone for now, so their text is rough until many groups are reviewed.

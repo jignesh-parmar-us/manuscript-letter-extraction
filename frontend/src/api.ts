@@ -89,7 +89,7 @@ export const WRITING_LABEL: Record<Writing, string> = { handwritten: "Handwritte
 export type Part = "training" | "read"; // the two parts of a book (C16a): Training Data, Read Book
 
 /** What a library row is (Phase 3, C20): a dataset (Training Data: cut, grouped, reviewed, labelled) or a book
- *  (Read Book: read). A book learns from its dataset (`dataset_id`). */
+ *  (Read Book: read). A book learns from the datasets of its reading model (`datasets`, C23). */
 export type Kind = "dataset" | "book";
 
 export const KIND_LABEL: Record<Kind, string> = { dataset: "Dataset", book: "Book" };
@@ -98,9 +98,9 @@ export interface BookSummary {
   id: number;
   name: string;
   kind: Kind;
-  dataset_id: number | null; // a book: the dataset it learns from (C20)
-  dataset_name: string;
+  datasets?: { id: number; name: string }[]; // a book: the datasets its reading model learns from (C23)
   used_by: { id: number; name: string }[]; // a dataset: the books that learn from it
+  reading_model_id?: number | null; // a book: its reading model (C23)
   input_dir: string;
   writing: Writing;
   read_dir: string; // Read Book: a folder of images, or...
@@ -320,6 +320,17 @@ export interface LineSearchMeasure {
     chars: number;
     wrong: { ours: number; tesseract: number; tesseract_lm: number };
   }[];
+}
+
+/** Read Book → Reading setup (C23): the book's reading model, the datasets it learns from, its reader. */
+export interface ReadingSetupInfo {
+  model: { id: number; name: string; folder: string } | null;
+  writing: Writing;
+  datasets: BookSummary[];
+  others: BookSummary[]; // the datasets not chosen, to add
+  reader: LineSearchState["reader"];
+  measure: LineSearchMeasure | null;
+  quick_measure: LineSearchMeasure | null;
 }
 
 /** The line truth screen: checked text of whole lines. */
@@ -659,6 +670,9 @@ export const api = {
   lineSearchMeasure: (id: number, quick = false) =>
     post<Job>(`/api/books/${id}/line-search/measure${quick ? "?quick=true" : ""}`, {}),
   lineSearchTrain: (id: number) => post<Job>(`/api/books/${id}/line-search/train`, {}),
+  readingSetup: (id: number) => get<ReadingSetupInfo>(`/api/books/${id}/reading-setup`),
+  setBookDatasets: (id: number, datasetIds: number[]) =>
+    put<ReadingSetupInfo>(`/api/books/${id}/datasets`, { dataset_ids: datasetIds }),
   wholeLines: (pageId: number, engine: LineEngine = "tesseract") =>
     get<WholeLines>(`/api/pages/${pageId}/whole-lines?engine=${engine}`),
   saveWholeLine: (lineId: number, change: { text?: string; reviewed?: boolean; shown?: string }) =>

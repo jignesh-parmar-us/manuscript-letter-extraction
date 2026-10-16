@@ -34,7 +34,7 @@ from .. import io_utils
 from ..config import Config, load_config
 from ..grouping import UNSURE
 from ..pipeline import ProgressFn, process_folder
-from .db import BOOK, DATASET, Action, Book, LetterGroup, Line, Page, Sample, now
+from .db import BOOK, DATASET, Action, Book, LetterGroup, Line, Page, ReadingModel, ReadingModelDataset, Sample, now
 
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
@@ -156,12 +156,73 @@ class Library:
             self._folders[book_id] = self.get_book(book_id).folder
         return self.root / "books" / self._folders[book_id]
 
-    # ---- datasets and books (C20) -------------------------------------------------------------
+    # ---- datasets and books (C20), reading models (C23) -----------------------------------------------
+    def training_sources(self, book: Book) -> List[int]:
+        """The rows whose reviewed Training Data letters (and labels) a row's reading learns from: the datasets of a
+        book's reading model (C23; none yet: []), a dataset's own."""
+        with self.session() as s:
+            return self.sources_in(s, book)
+
     @staticmethod
-    def training_source(book: Book) -> Optional[int]:
-        """The row whose reviewed Training Data letters (and labels) a row's reading learns from: a book's
-        linked dataset (None: it has none yet), a dataset's own. Until C23, where a book chooses datasets."""
-        return book.read_dataset_id if book.kind == BOOK else book.id
+    def sources_in(s: Session, book: Book) -> List[int]:
+        """`training_sources` inside an open session."""
+        if book.kind != BOOK:
+            return [book.id]
+        if book.reading_model_id is None:
+            return []
+        return list(s.scalars(select(ReadingModelDataset.dataset_id)
+                              .where(ReadingModelDataset.model_id == book.reading_model_id)
+                              .order_by(ReadingModelDataset.dataset_id)))
+
+    def model_dir(self, book: Book) -> Path:
+        """The folder of a book's reading model, <library>/models/<folder>/ (C23): its line-search reader, Measure
+        results and caches. The reader of a book from before C23 is moved here from <book folder>/line-search/ the
+        first time (a rename). A dataset (or a book without a model) keeps <row folder>/line-search/."""
+        old = self.book_dir(book) / "line-search"
+        if book.kind != BOOK or book.reading_model_id is None:
+            return old
+        with self.session() as s:
+            m = s.get(ReadingModel, book.reading_model_id)
+            folder = m.folder if m is not None else None
+        if folder is None:
+            return old
+        out = self.root / "models" / folder
+        if old.is_dir() and not out.exists():
+            out.parent.mkdir(parents=True, exist_ok=True)
+            old.rename(out)
+        return out
+
+    @staticmethod
+    def _new_model(s: Session, book: Book, dataset_ids: List[int]) -> ReadingModel:
+        """A reading model of the book's own, named and foldered like it, learning from `dataset_ids`."""
+        m = ReadingModel(name=book.name, folder=book.folder)
+        s.add(m)
+        s.flush()
+        for d in dict.fromkeys(dataset_ids):
+            s.add(ReadingModelDataset(model_id=m.id, dataset_id=d))
+        book.reading_model_id = m.id
+        return m
+
+    def set_book_datasets(self, book_id: int, dataset_ids: List[int]) -> List[int]:
+        """The datasets a book's reading model learns from (C23, Reading setup); the datasets themselves are not
+        changed. Any writing is allowed (the screen warns when it differs from the book's)."""
+        with self.session() as s:
+            book = s.get(Book, book_id)
+            if book is None:
+                raise NotFound(f"No book with id {book_id}.")
+            self.need_kind(book, BOOK, "choosing datasets to learn from")
+            for d in dataset_ids:
+                row = s.get(Book, d)
+                if row is None or row.kind != DATASET:
+                    raise NotFound(f"No dataset with id {d}.")
+            m = s.get(ReadingModel, book.reading_model_id) if book.reading_model_id else None
+            if m is None:
+                m = self._new_model(s, book, [])
+            s.execute(delete(ReadingModelDataset).where(ReadingModelDataset.model_id == m.id))
+            for d in dict.fromkeys(dataset_ids):
+                s.add(ReadingModelDataset(model_id=m.id, dataset_id=d))
+            book.updated_at = now()
+        return self.training_sources(self.get_book(book_id))
 
     @staticmethod
     def need_kind(book: Book, kind: str, what: str) -> None:
@@ -234,7 +295,7 @@ class Library:
         if kind == BOOK and input_dir:
             raise LibraryError("A book has no Training Data folder: its pages are read. Make a dataset for that.")
         if kind == DATASET and dataset_id is not None:
-            raise LibraryError("Only a book learns from a dataset.")
+            raise LibraryError("Only a book learns from datasets.")
         folder = self._check_input_dir(input_dir) if input_dir else ""
         settings = json.dumps(dataclasses.asdict(cfg or Config()))
         with self.session() as s:
@@ -245,10 +306,12 @@ class Library:
                 if d is None or d.kind != DATASET:
                     raise NotFound(f"No dataset with id {dataset_id}.")
             book = Book(name=name, folder=uuid.uuid4().hex, input_dir=folder, settings=settings,
-                        writing=writing, kind=kind, read_dataset_id=dataset_id)
+                        writing=writing, kind=kind)
             s.add(book)
             s.flush()
             book.folder = f"{book.id:04d}-{_slug(name)}"
+            if kind == BOOK:                                # its reading model (C23)
+                self._new_model(s, book, [dataset_id] if dataset_id is not None else [])
         self.book_dir(book).mkdir(parents=True, exist_ok=True)
         return book
 
@@ -404,23 +467,26 @@ class Library:
 
     def list_books(self, kind: Optional[str] = None) -> List[Dict]:
         """One summary per row (or per row of `kind`), most recently changed first. A dataset lists the books
-        that learn from it (`used_by`); a book names its dataset (`dataset_id`, `dataset_name`)."""
+        that learn from it (`used_by`); a book lists the datasets its reading model learns from (`datasets`, C23)."""
         with self.session() as s:
             q = select(Book).order_by(Book.updated_at.desc())
             books = s.scalars(q.where(Book.kind == _check_kind(kind)) if kind else q).all()
             names = dict(s.execute(select(Book.id, Book.name)).all())
             users: Dict[int, List[Dict]] = {}
-            for i, n, d in s.execute(select(Book.id, Book.name, Book.read_dataset_id)
-                                     .where(Book.read_dataset_id.is_not(None))).all():
+            learns: Dict[int, List[Dict]] = {}
+            for i, n, d in s.execute(select(Book.id, Book.name, ReadingModelDataset.dataset_id)
+                                     .join(ReadingModelDataset, ReadingModelDataset.model_id == Book.reading_model_id)
+                                     .order_by(Book.id, ReadingModelDataset.dataset_id)).all():
                 users.setdefault(d, []).append({"id": i, "name": n})
+                learns.setdefault(i, []).append({"id": d, "name": names.get(d, "")})
             out = []
             for b in books:
                 def count(q):
                     return s.scalar(q) or 0
                 out.append({
                     "id": b.id, "name": b.name, "kind": b.kind, "input_dir": b.input_dir, "writing": b.writing,
-                    "dataset_id": b.read_dataset_id, "dataset_name": names.get(b.read_dataset_id, ""),
-                    "used_by": users.get(b.id, []),
+                    "datasets": learns.get(b.id, []), "used_by": users.get(b.id, []),
+                    "reading_model_id": b.reading_model_id,
                     "read_dir": b.read_dir, "read_pdf": b.read_pdf, "reader_id": b.reader_id,
                     "pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "training",
                                                                      Page.excluded.is_(False))),
@@ -453,6 +519,10 @@ class Library:
                                               Book.id != book_id)) is not None:
                 raise LibraryError(f"A {KIND_WORD[book.kind]} named '{name}' already exists.")
             book.name = name
+            if book.reading_model_id is not None:          # its own reading model is named like it (C23)
+                m = s.get(ReadingModel, book.reading_model_id)
+                if m is not None:
+                    m.name = name
 
     def set_book_writing(self, book_id: int, writing: str) -> None:
         _check_writing(writing)
@@ -471,10 +541,19 @@ class Library:
                 raise NotFound(f"No book with id {book_id}.")
             folder = self.book_dir(book)
             uploaded = self.upload_dir(book, uploads) if uploads else None
+            model = s.get(ReadingModel, book.reading_model_id) if book.reading_model_id else None
+            model_folder = self.root / "models" / model.folder if model is not None else None
+            if model is not None and not s.scalar(select(func.count(Book.id)).where(
+                    Book.reading_model_id == model.id, Book.id != book_id)):
+                s.delete(model)                            # its own model goes with it (C23)
+            else:
+                model_folder = None
             s.delete(book)
         books = (self.root / "books").resolve()
         if folder.exists() and folder.resolve().parent == books:
             shutil.rmtree(folder)
+        if model_folder is not None and model_folder.is_dir():
+            shutil.rmtree(model_folder)
         if uploaded and uploaded.is_dir() and uploaded.parent.parent == Path(uploads).expanduser().resolve():
             shutil.rmtree(uploaded)
 

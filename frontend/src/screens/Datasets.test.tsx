@@ -11,7 +11,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const dataset: BookSummary = {
-  id: 1, name: "Vachanamrut", kind: "dataset", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
+  id: 1, name: "Vachanamrut", kind: "dataset", datasets: [], used_by: [], input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
   pages: 2, samples: 854, groups: 54, labelled: 27, unsure: 236,
   created_at: null, updated_at: "2026-10-04T09:00:00+00:00", captured_at: null,
 };

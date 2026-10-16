@@ -105,9 +105,12 @@ def delete_word_list(lib: Library, list_id: int) -> None:
 
 # ---- what a book's model learns from ----------------------------------------------------------------------
 def _labels_of(s, book: Book, skip_files: Sequence[str] = ()) -> List[str]:
-    """The labelled letters the book's model learns: those of its dataset since C20 (a dataset's own)."""
-    src = Library.training_source(book)
-    return [] if src is None else _label_lines(s, src, skip_files)
+    """The labelled letters the book's model learns: those of its reading model's datasets (C23; a dataset's
+    own), dataset after dataset."""
+    out: List[str] = []
+    for src in Library.sources_in(s, book):
+        out += _label_lines(s, src, skip_files)
+    return out
 
 
 def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
@@ -149,9 +152,9 @@ def _lists_of(s, book_id: int) -> List[WordList]:
 def _signature(s, book: Book) -> tuple:
     edited = s.scalar(select(func.max(PageText.edited_at)).join(Page, PageText.page_id == Page.id)
                       .where(Page.book_id == book.id))
-    src = Library.training_source(book)
-    labels_at = s.scalar(select(Book.updated_at).where(Book.id == src)) if src not in (None, book.id) else None
-    return (book.updated_at, labels_at, edited, tuple((w.id, w.aksharas) for w in _lists_of(s, book.id)))
+    srcs = tuple(x for x in Library.sources_in(s, book) if x != book.id)
+    labels_at = tuple(s.scalar(select(Book.updated_at).where(Book.id == x)) for x in srcs)
+    return (book.updated_at, srcs, labels_at, edited, tuple((w.id, w.aksharas) for w in _lists_of(s, book.id)))
 
 
 def book_model(lib: Library, book_id: int) -> LanguageModel:

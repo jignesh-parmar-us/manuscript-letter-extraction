@@ -6,9 +6,9 @@ section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two 
 
 **Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); dry run on a copy and the split of your
 library done the same day (all counts equal; book 6 → dataset 6 + book 8, book 7 a book; backup
-`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21 and C22 built (2026-10-16).
+`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21, C22 and C23 built (2026-10-16; C23's one training not run yet).
 Written 2026-10-15 from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
-(`docs/SPEED_PLAN.md`, S1–S4). Next: C23.
+(`docs/SPEED_PLAN.md`, S1–S4). Next: C24.
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -315,7 +315,47 @@ uploads folder for those too. Deleting a page that came from uploads should dele
 - **Files:** `app/db.py` (`page.excluded`), `app/library.py`, `app/api.py`, `frontend/src/screens/ReadBook.tsx`
   → `BookPages.tsx`, tests.
 
-### C23. Reading setup and a reading model per book, 4–5 h
+### C23. Reading setup and a reading model per book, 4–5 h — built 2026-10-16 (its one training: not run yet)
+
+As built (what differs from the points below, and why, is in section 8):
+
+- **Migration `0019`:** tables `reading_model` (name, folder, created) and `reading_model_dataset` (model, dataset;
+  both cascade), `book.reading_model_id` (set null); every book gets a model named and foldered like it, learning
+  from its C20 dataset (none if it had none); `book.read_dataset_id` is dropped. One transaction, foreign keys
+  checked afterwards (`library.migrate`); no file is moved by it. A downgrade restores `read_dataset_id` (the lowest
+  dataset id).
+- **Library:** `training_sources(book)` (the model's datasets; a dataset's own row) and `sources_in(s, book)` replace
+  `training_source`; `model_dir(book)` = `<library>/models/<folder>/`, the old `<book folder>/line-search/` moved
+  there by a rename the first time; `set_book_datasets`; a new book (and a split one) gets its model
+  (`_new_model`); renaming a book renames its model; deleting a book deletes its model and folder; deleting a dataset
+  takes it out of every model. Rows list a book's `datasets` and a dataset's `used_by` from the models.
+- **Learning from several datasets:** the line search (`_sources`, `_signature`, `_training_set`, `usual_spacing`),
+  the language model (`_labels_of`: dataset after dataset; its cache key holds the datasets) and the hidden Cut
+  letters' groups (`texts._groups_for`: the groups of every dataset) take every chosen dataset. With one dataset
+  every query is the same as before, so the numbers and the reader's signature do not change. The training is
+  unchanged otherwise: every label weighs the same in total, varied copies per label by its count across all chosen
+  datasets (the fairness rule), excluded pages left out (C22).
+- **Caches:** `FeatureStore(features=…)` and `MaskPack(…, features=…)` take the model folder's `features/`.
+- **API:** `GET /api/books/{id}/reading-setup` (model, datasets used, other datasets, reader, measures),
+  `PUT /api/books/{id}/datasets {"dataset_ids"}` (refused while a job runs). Rows: `datasets` instead of
+  `dataset_id` / `dataset_name`; a new book still takes one `dataset_id`.
+- **Screen:** `screens/ReadingSetup.tsx`, the tab *Reading setup* (`#/books/<id>/setup`; `…/dictionary` opens it):
+  1. Datasets used (table: writing with a warning when it differs from the book's, pages, reviewed letters, Open,
+  Remove from this book; Add dataset from a list that marks another writing; New dataset… opens Datasets), 2. Word
+  lists and the language model (`Dictionary.tsx` inside, unchanged), 3. Reading model (trained on, *up to date* /
+  *out of date*, Train / Retrain, Measure with its last numbers, its job, its folder). The header and the Books list
+  show every dataset (`components/RowList.tsx`, `DatasetLinks`).
+- **Files:** `app/db.py`, `app/migrations/versions/0019_reading_models.py`, `app/library.py`, `app/linesearch.py`,
+  `app/linestore.py`, `app/dictionary.py`, `app/texts.py`, `app/split.py`, `app/api.py`, `app/schemas.py`;
+  `frontend/src/api.ts`, `screens/{ReadingSetup (new),BookView,Books,Dictionary,WholeLinesView}.tsx`,
+  `components/RowList.tsx`, `styles.css`; tests `tests/test_reading_setup.py` (new), `test_split.py`,
+  `test_book_parts.py`, `screens/ReadingSetup.test.tsx` (new), `BookView.test.tsx`, fixtures of seven screen tests;
+  help (`new-book`, `parts`, `workflow`, `our-reader`), README.
+- **Not run yet (heavy, only when you ask):** the one training on your library (Retrain of book 8 after the
+  migration). The reader's files move to `models/0008-…/` the first time they are used; its signature should say
+  *up to date* there (same datasets, same letters).
+
+The plan as written:
 
 *After C20:* replace `Library.training_source` (one linked dataset, `book.read_dataset_id`) by the chosen datasets
 in every place that calls it (`linesearch`, `dictionary._labels_of`, `texts._groups_for`); the reader's files are in
@@ -462,3 +502,22 @@ About **16–20 hours** of building, after the speed plan's 5–7.
 6. **The order survives Cut again, Prepare again and Capture again** (they made new rows numbered by file name).
 7. **Later chunks:** C23's training queries already filter excluded pages (`Page.excluded.is_not(True)`): keep
    the filter when they take several datasets. C24's `sha256` matching should ignore rows with status *Not prepared*.
+
+**C23 (2026-10-16):**
+
+1. **Datasets of a model in a link table** (`reading_model_dataset`), not a list of ids in a column: deleting a
+   dataset then takes it out of every model by itself (cascade), and "used by" is one query.
+2. **Word lists stay linked to the book** (`word_list.books`, as before), not to the model: the Dictionary is
+   "unchanged inside", and only the language model uses them, which is rebuilt by itself when they change (it is
+   never out of date). When models are shared (section 6), the link moves to the model.
+3. **No trained-on hash or trained-at column:** what the reader was trained on, when, and its signature stay in its
+   `meta.json` in the model folder (one place, moved with the reader). *Out of date* is the reader's (`changed`).
+4. **The reader moves lazily**, the first time it is used, by a rename (same disk), not in the migration: a
+   migration that moves files cannot be undone with the database transaction.
+5. **`book.read_dataset_id` is dropped**, not kept beside the models (two places for one fact); the split command
+   (C20) makes a model instead, also for a row that becomes a book in place.
+6. **A dataset of another writing can be added** (with a warning), as section 3 says; the New book form still offers
+   only datasets of the same writing.
+7. **Train and Measure are also in Reading setup**, besides Whole lines (our reader) where they were.
+8. **Later chunks:** C24's Measure leaves out pages of every chosen dataset (`training_sources`); the reader's folder
+   is `lib.model_dir(book)`.

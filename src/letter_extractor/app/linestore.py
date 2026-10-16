@@ -1,5 +1,5 @@
-"""What the line-search reader's training keeps between trainings (docs/SPEED_PLAN.md, S3), in the book folder's
-`line-search/features/`. A cache: deleting the folder is always safe, it is built again; it holds no labels.
+"""What the line-search reader's training keeps between trainings (docs/SPEED_PLAN.md, S3), in the reader's
+`features/` folder (a book's reading model folder since C23, `line-search/` in a row's folder before; `features`). A cache: deleting the folder is always safe, it is built again; it holds no labels.
 
 - **MaskPack** (S3c): every letter mask the training opens, from one file instead of a PNG per letter. A mask is
   read again when its file changed (path, size or time); `digest` is a hash of its content.
@@ -39,10 +39,11 @@ class MaskPack:
     `folder_of(book id)`: the folder of a sample's own row, when the pack also holds letters of another row (a
     book's pack holds its dataset's letters too, C20); without it every mask is in `book_dir`."""
 
-    def __init__(self, book_dir: Path, folder_of: Optional[Callable[[int], Path]] = None):
+    def __init__(self, book_dir: Path, folder_of: Optional[Callable[[int], Path]] = None,
+                 features: Optional[Path] = None):
         self.book_dir = Path(book_dir)
         self.folder_of = folder_of
-        self.path = store_folder(book_dir) / "masks.npz"
+        self.path = (Path(features) if features else store_folder(book_dir)) / "masks.npz"
         self.masks: Dict[int, np.ndarray] = {}
         self.stamp: Dict[int, tuple] = {}         # sample id -> (mask path, size, mtime_ns)
         self.hash: Dict[int, str] = {}
@@ -110,8 +111,8 @@ class Entry:
 class FeatureStore:
     """Each training letter's rows by sample id (see the module notes), kept in `rows.npz` + `keys.json`."""
 
-    def __init__(self, book_dir: Path):
-        self.folder = store_folder(book_dir)
+    def __init__(self, book_dir: Optional[Path] = None, features: Optional[Path] = None):
+        self.folder = Path(features) if features else store_folder(book_dir)
         self.entries: Dict[int, Entry] = {}
         self.computed = 0                         # letters whose base rows were computed (tests)
         self.copies = 0                           # varied copies computed (tests)

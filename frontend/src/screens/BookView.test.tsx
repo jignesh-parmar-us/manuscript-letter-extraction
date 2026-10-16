@@ -10,7 +10,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: Book = {
-  id: 7, name: "Vachnamrut Printed", kind: "dataset", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/pages", writing: "printed", read_dir: "", read_pdf: "", read_pages: 312, reviewed: 2823, reader_id: null, pages: 23, samples: 15169, groups: 531,
+  id: 7, name: "Vachnamrut Printed", kind: "dataset", datasets: [], used_by: [], input_dir: "/pages", writing: "printed", read_dir: "", read_pdf: "", read_pages: 312, reviewed: 2823, reader_id: null, pages: 23, samples: 15169, groups: 531,
   labelled: 82, unsure: 3644, created_at: null, updated_at: null, captured_at: null, settings: {}, undo: 0, redo: 0,
   job: null,
 };
@@ -40,8 +40,7 @@ describe("BookView", () => {
   });
 
   it("a book has the Read Book sections and links its dataset; another section opens its first", async () => {
-    vi.mocked(api.book).mockResolvedValue({ ...book, id: 8, name: "Vachnamrut 1933", kind: "book", dataset_id: 7,
-      dataset_name: "Vachnamrut Printed", pages: 0, reviewed: 0, unsure: 0 });
+    vi.mocked(api.book).mockResolvedValue({ ...book, id: 8, name: "Vachnamrut 1933", kind: "book", datasets: [{ id: 7, name: "Vachnamrut Printed" }], pages: 0, reviewed: 0, unsure: 0 });
     vi.mocked(api.pages).mockResolvedValue([]);
     vi.mocked(api.pageList).mockResolvedValue({ part: "read", folder: "", owned: false, pages: [] });
     vi.mocked(api.pageProblems).mockResolvedValue([]);
@@ -53,8 +52,14 @@ describe("BookView", () => {
     expect(bar).toHaveTextContent("Book · Printed · 312 pages · learns from Vachnamrut Printed");
     const menu = screen.getByRole("combobox", { name: "Section" });
     expect([...menu.querySelectorAll("option")].map((o) => o.textContent))
-      .toEqual(["Prepare", "Book pages", "Text", "Dictionary", "Line truth"]);
+      .toEqual(["Prepare", "Book pages", "Text", "Reading setup", "Line truth"]);     // C23: no Dictionary tab
     await userEvent.click(screen.getByRole("button", { name: "Vachnamrut Printed" }));
     expect(window.location.hash).toBe("#/books/7");
+  });
+
+  it("the old Dictionary address of a book opens Reading setup", async () => {
+    vi.mocked(api.book).mockResolvedValue({ ...book, id: 8, kind: "book" });
+    render(<BookView bookId={8} tab="dictionary" info={null} />);
+    await waitFor(() => expect(window.location.hash).toBe("#/books/8/setup"));
   });
 });

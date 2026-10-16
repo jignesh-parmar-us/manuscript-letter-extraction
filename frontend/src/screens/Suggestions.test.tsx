@@ -19,7 +19,7 @@ const sug = (over: Partial<LabelSuggestion> = {}): LabelSuggestion => ({
   label_dev: "क", label_guj: "ક", share: 0.9, count: 18, read: 20, engine: "tesseract", merge_into: null, ...over,
 });
 const book = (over: Partial<Book> = {}): Book => ({
-  id: 1, name: "B", kind: "dataset", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/p", writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null, pages: 1, samples: 10, groups: 3, labelled: 0, unsure: 0,
+  id: 1, name: "B", kind: "dataset", datasets: [], used_by: [], input_dir: "/p", writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null, pages: 1, samples: 10, groups: 3, labelled: 0, unsure: 0,
   created_at: null, updated_at: null, captured_at: null, settings: { bulk_accept_share: 0.9 }, undo: 0, redo: 0,
   job: null, ocr_runs: [], ...over,
 });

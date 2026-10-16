@@ -1,18 +1,19 @@
 // One dataset or book (C20: separate rows; before, one book held both parts, C16a): the top bar holds a menu of
 // its sections and its name and numbers on one line. A dataset has the Training Data sections (Pages & capture,
 // Review groups, Pages, Letter checker, Export dataset), a book the Read Book ones (Prepare, Book pages, Text,
-// Dictionary, Line truth) and a link to the dataset it learns from. Each section is its own screen file.
+// Reading setup (C23; it holds the old Dictionary), Line truth) and links to the datasets it learns from. Each section is its own screen file.
 // The address is #/books/<id>/<section>, for both kinds; a section of the other kind opens the first of its own.
 import { useCallback, useEffect, useState } from "react";
 import { api, AppInfo, Book, Kind, WRITING_LABEL } from "../api";
 import AppBar from "../components/AppBar";
+import { DatasetLinks } from "../components/RowList";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
 import Capture from "./Capture";
 import Export from "./Export";
 import PageViewer from "./PageViewer";
 import ReadBook from "./ReadBook";
-import Dictionary from "./Dictionary";
+import ReadingSetup from "./ReadingSetup";
 import Readers from "./Readers";
 import TruthView from "./TruthView";
 import TextView from "./TextView";
@@ -27,7 +28,7 @@ export const TABS: { id: string; label: string; part: "Training Data" | "Read Bo
   { id: "read", label: "Prepare", part: "Read Book" },
   { id: "readpages", label: "Book pages", part: "Read Book" },
   { id: "text", label: "Text", part: "Read Book" },
-  { id: "dictionary", label: "Dictionary", part: "Read Book" },
+  { id: "setup", label: "Reading setup", part: "Read Book" },
   { id: "truth", label: "Line truth", part: "Read Book" },
 ];
 const PART_OF: Record<Kind, "Training Data" | "Read Book"> = { dataset: "Training Data", book: "Read Book" };
@@ -56,7 +57,8 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
   const own = tabsOf(kind);
   const wrongTab = book !== null && !own.some((t) => t.id === tab);
   useEffect(() => {
-    if (wrongTab) go(`/books/${bookId}/${own[0].id}`);
+    // the old Dictionary address opens Reading setup, where the word lists are now (C23)
+    if (wrongTab) go(`/books/${bookId}/${tab === "dictionary" && kind === "book" ? "setup" : own[0].id}`);
   }, [wrongTab, bookId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const section = (
@@ -101,13 +103,7 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
               {kind === "book" ? (
                 <>
                   {book.read_pages} pages · learns from{" "}
-                  {book.dataset_id ? (
-                    <button className="link small" onClick={() => go(`/books/${book.dataset_id}`)}>
-                      {book.dataset_name}
-                    </button>
-                  ) : (
-                    "no dataset yet"
-                  )}
+                  <DatasetLinks datasets={book.datasets ?? []} small />
                 </>
               ) : (
                 <>
@@ -138,7 +134,7 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
         )}
         {tab === "read" && <ReadBook book={book} info={info} onChanged={reload} />}
         {tab === "readers" && <Readers book={book} onChanged={reload} />}
-        {tab === "dictionary" && <Dictionary book={book} onChanged={reload} />}
+        {tab === "setup" && <ReadingSetup book={book} onChanged={reload} />}
         {tab === "truth" && <TruthView book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} />}
         {tab === "text" && (
           <TextView book={book} pageId={sub && /^\d+$/.test(sub) ? Number(sub) : null} onChanged={reload} />
