@@ -12,16 +12,17 @@ Always on a **copy** of the library, never the real one (`CLAUDE.md`, data safet
 ## Steps
 
 ```zsh
-# 1. a copy of the library (database by SQLite backup, the book's folder, the word lists)
+# 1. a copy of the library (database by SQLite backup, the book's folder and the word lists as APFS clones:
+#    about 40 s, no extra disk space; exports/ and headline-backup/ left out)
 tools/harness/copy_library.sh ~/harness/libcopy
 
-# 2. the cache, one process per fold (about 20 minutes; about 5 GB on disk)
+# 2. the cache, fold by fold (about 20 minutes each; about 5 GB on disk)
 mkdir -p ~/harness/cache
 for k in 0 1 2 3; do
-  PYTHONPATH=src .venv/bin/python tools/harness/build.py --library ~/harness/libcopy --cache ~/harness/cache --fold $k > ~/harness/cache/build$k.log 2>&1 &
-done; wait
+  PYTHONPATH=src .venv/bin/python tools/harness/build.py --library ~/harness/libcopy --cache ~/harness/cache --fold $k > ~/harness/cache/build$k.log 2>&1
+done
 
-# 3. variants (each about 20-40 minutes; run at most two at a time on 8 GB of memory)
+# 3. variants (each about 20-40 minutes)
 PYTHONPATH=src .venv/bin/python tools/harness/run.py --library ~/harness/libcopy --cache ~/harness/cache --name base --lm 0.35 0.5
 PYTHONPATH=src .venv/bin/python tools/harness/run.py --library ~/harness/libcopy --cache ~/harness/cache --name generated --unlined
 ```
@@ -29,6 +30,11 @@ PYTHONPATH=src .venv/bin/python tools/harness/run.py --library ~/harness/libcopy
 `run.py` prints the characters wrong (all checked lines, and the newest pages), the most common
 confusions, and writes `<cache>/<name>_lm<weight>.html`: every checked line with its checked text, our
 reader's and Tesseract's reading, the differences marked, to check by eye.
+
+**One heavy job at a time** (`docs/SPEED_PLAN.md`, S1): `build.py` and `run.py` take the heavy-job lock
+(`~/.manuscript-letters-heavy.lock`), as do the full test suite and the app's Measure and Retrain. A second
+one started meanwhile says what is running and waits. They run with one thread and at lower priority.
+`tools/cleanup.sh` shows left-over runs, workers, copies and caches, and stops / deletes them when you say yes.
 
 Options: `--lm` (weights to try; the readers are trained once), `--hidden 384` (a network instead of the
 linear reader), `--epochs`, `--seed` (to see how much a result moves by chance), `--no-corrections`

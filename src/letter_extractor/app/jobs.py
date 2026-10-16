@@ -18,6 +18,21 @@ from typing import Callable, Dict, List, Optional
 from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFound
 
 
+def _heavy(what: str, run: Callable[..., Dict]) -> Callable[..., Dict]:
+    """`run` as one heavy job at a time (heavy.heavy_lock, docs/SPEED_PLAN.md S1): while another (a test run,
+    the harness, a Measure) holds the lock, the job says so and waits; cancelling stops the wait."""
+    from ..heavy import heavy_lock
+    from .suggest import LineDone
+
+    def wrapped(progress, cancel):
+        try:
+            with heavy_lock(what, say=lambda m: progress(0, 1, LineDone(m, "OK", "", 0.0)), cancel=cancel):
+                return run(progress, cancel)
+        except InterruptedError:
+            raise Cancelled("Cancelled while waiting for another heavy job; nothing was changed.")
+    return wrapped
+
+
 @dataclass
 class Job:
     id: str
@@ -219,14 +234,14 @@ class Jobs:
             progress(1, 1, LineDone("line search reader", "OK",
                                     f"{r['letters']} letters, {r['lines']} checked lines", time.time() - t0))
             return r
-        return self.start(book_id, "line_search_train", run, total=1)
+        return self.start(book_id, "line_search_train", _heavy(f"Retrain (book {book_id})", run), total=1)
 
     def line_search_measure(self, book_id: int) -> Job:
         """Score the line search fold-fair on the checked lines (linesearch.measure): one step per fold."""
         from .linesearch import measure
         self.lib.get_book(book_id)
-        return self.start(book_id, "line_search_measure", lambda progress, cancel: measure(
-            self.lib, book_id, progress=progress, cancel=cancel), total=4)
+        return self.start(book_id, "line_search_measure", _heavy(f"Measure (book {book_id})", lambda progress, cancel:
+                          measure(self.lib, book_id, progress=progress, cancel=cancel)), total=4)
 
     def train(self, book_id: int, books=None, min_samples: int = 5, include_unreviewed: bool = False,
               include_words: bool = False, name: str = "") -> Job:

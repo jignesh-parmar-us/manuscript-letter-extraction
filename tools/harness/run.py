@@ -27,6 +27,7 @@ import unicodedata
 import numpy as np
 
 from letter_extractor.app import linesearch
+from letter_extractor.heavy import heavy_lock, lower_priority
 from letter_extractor.app.dictionary import book_model_without
 from letter_extractor.app.library import Library
 from letter_extractor.ocr.aksharas import split_aksharas
@@ -130,6 +131,12 @@ def main():
     ap.add_argument("--unlined", action="store_true")
     ap.add_argument("--unreviewed-generated", action="store_true")
     a = ap.parse_args()
+    lower_priority()
+    with heavy_lock(f"harness run ({a.library})"):
+        _main(a)
+
+
+def _main(a):
     lib = Library(a.library)
 
     datas = {k: fold_data(a.cache, k) for k in range(FOLDS)}

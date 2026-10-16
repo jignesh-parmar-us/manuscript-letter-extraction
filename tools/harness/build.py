@@ -14,6 +14,7 @@ import numpy as np
 from sqlalchemy import select
 
 from letter_extractor.app import linesearch
+from letter_extractor.heavy import heavy_lock, lower_priority
 from letter_extractor.app.db import Line, LineTruth, Page, WholeLine
 from letter_extractor.app.library import Library
 from letter_extractor.app.wholelines import trim_edges
@@ -39,6 +40,12 @@ def main():
     ap.add_argument("--fold", type=int, required=True)
     ap.add_argument("--book", type=int, default=6)
     a = ap.parse_args()
+    lower_priority()
+    with heavy_lock(f"harness build ({a.library})"):
+        _main(a)
+
+
+def _main(a):
     lib = Library(a.library)
     book = lib.get_book(a.book)
     rows = checked_rows(lib, a.book)

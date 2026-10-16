@@ -59,6 +59,25 @@ What makes the computer slow today, fixed first, because it is cheap and helps a
 **Done when:** two heavy jobs started together run one after the other; killing a test run leaves no
 Python process behind; a copy of the library takes seconds.
 
+**Built (2026-10-16)** in `src/letter_extractor/heavy.py`, tests `tests/test_heavy.py`. What differs from the plan:
+
+- **One thread** is set when the package is imported (`letter_extractor/__init__.py`, before NumPy): the
+  thread variables of Accelerate, OpenMP, OpenBLAS and `OPENCV_FOR_THREADS_NUM`, each only if not already set.
+  So it covers the app as well: Measure and Retrain run in the app's process, and NumPy cannot change its
+  thread count after it is loaded. Processes started from it (page workers, Tesseract) inherit it.
+- **The lock** is taken by the app's Measure **and Retrain** (Retrain is as heavy: 28 min), `tools/harness/build.py`
+  and `run.py`, and (S2) the full test suite. In the app a waiting job shows "waiting: ... is running" and
+  can be cancelled. A process started by the lock holder (`MANUSCRIPT_HEAVY_HELD`: the test workers of S2)
+  runs inside its lock.
+- **Left-over workers:** on macOS a venv's python runs as the framework's `Python.app`, so workers are found
+  by the base installation's path and `from multiprocessing.` with parent process 1. Every page worker
+  watches its parent (every 2 s) and stops itself when it is gone.
+- **Lower priority:** the page workers and the harness run with `nice 10`; the app's own Measure runs in a
+  thread of the app, which macOS cannot give a lower priority (S4b's workers will be niced).
+- **Copies:** APFS clones, but one clone per file: book 6 has about 150,000 letter pictures, so a copy takes
+  **about 40 s** (6 folders at once; 71 s one by one), not seconds, and no disk space. `exports/` and
+  `headline-backup/` are left out. The database copy is 5 s.
+
 ### S2. Backend tests in about 1.5–2 minutes (1.5–2 h)
 
 - `tools/test_parallel.py` (no new package): runs the test modules in 4 processes at once, the slowest
@@ -255,7 +274,7 @@ measured in turn to find which one.
 |---|---|---|
 | Backend tests | about 6 min, 1 core | about 1.5–2 min; `fast` under 1 min |
 | App Measure | 42 min | about 10 min the first time, about 5 min when nothing changed |
-| A library copy | 3.2 GB, minutes | seconds, almost no disk |
+| A library copy | 3.2 GB, minutes | about 40 s, almost no disk (S1) |
 | Running two heavy jobs by mistake | both slow, swapping | the second waits |
 | Retrain (book 6) | 28 min | about 15 min; about 8–10 min if S4d/e are kept |
 | Reading | 6.6 s per line | about 1.5–2 s per line |
@@ -294,7 +313,7 @@ To cut the building time from 11–13 h to **about 5–7 h**, the first plan was
 
 | Chunk | My work | Heavy runs |
 |---|---|---|
-| S1 CPU fights, copies | about 1 h | — |
+| S1 CPU fights, copies (built) | about 1 h | — |
 | S2 parallel tests | 1.5–2 h | — |
 | S3 Measure cache | 3–4 h | — |
 | S4 faster reading and retraining | 3–4 h | — |

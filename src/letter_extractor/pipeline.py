@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-import cv2
 import numpy as np
 from PIL import Image
 
@@ -149,7 +148,8 @@ _W_CFG: Optional[Config] = None
 def _init_worker(cfg: Config) -> None:
     global _W_CFG
     _W_CFG = cfg
-    cv2.setNumThreads(1)
+    from .heavy import worker_init
+    worker_init()                                     # one thread, lower priority, stops with its parent
 
 
 def _work(src: str, out_dir: str) -> PageResult:
