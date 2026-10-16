@@ -4,10 +4,11 @@ The plan to **build**. It is the full Phase 3 plan (`docs/implementation_plan_ph
 the reference) cut down to what is needed to separate datasets from books. Everything left out is listed in
 section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two plans can be read side by side.
 
-**Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); its dry run on a copy of your library
-and the split of your library are not run yet (heavy runs, only when you ask), then Stop 2. Written 2026-10-15
+**Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); dry run on a copy and the split of your
+library done the same day (all counts equal; book 6 → dataset 6 + book 8, book 7 a book; backup
+`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). Written 2026-10-15
 from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
-(`docs/SPEED_PLAN.md`, S1–S4). Next: the C20 dry run, then C21.
+(`docs/SPEED_PLAN.md`, S1–S4). Next: C21.
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
