@@ -377,11 +377,15 @@ def page_text(lib: Library, page_id: int) -> Optional[Dict]:
         return None if row is None else _page_text(lib, s, row)
 
 
-def book_page_texts(lib: Library, book_id: int, part: str = "read", page_id: Optional[int] = None) -> List[Tuple[Page, Dict]]:
-    """The converted pages of a part (or one page) as they are now, in page order."""
+def book_page_texts(lib: Library, book_id: int, part: str = "read", page_id: Optional[int] = None,
+                    page_ids: Optional[Sequence[int]] = None) -> List[Tuple[Page, Dict]]:
+    """The converted pages of a part (or one page, or the pages `page_ids` of the part) as they are now, in
+    page order."""
     with lib.session() as s:
         q = select(Page, PageText).join(PageText, PageText.page_id == Page.id).where(Page.book_id == book_id)
         q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part)
+        if page_ids:
+            q = q.where(Page.id.in_(list(page_ids)))
         out = []
         for page, row in s.execute(q.order_by(Page.number, Page.id)).all():
             s.expunge(page)

@@ -319,8 +319,10 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                       page_id: Optional[int] = None, script: str = Query("gujarati", pattern="^(gujarati|devanagari)$"),
                       part: str = Query("read", pattern="^(training|read)$"),
                       marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$"),
-                      readers: str = Query("both", pattern="^(both|tesseract|lines|lines_lm|search)$")):
-        """The text of one page or of every converted page of a part, as .txt (UTF-8) or Word."""
+                      readers: str = Query("both", pattern="^(both|tesseract|lines|lines_lm|search)$"),
+                      page_ids: Optional[str] = Query(None, pattern=r"^\d+(,\d+)*$")):
+        """The text of one page, of the pages `page_ids` (the ticked pages, comma-separated; C19) or of every
+        converted page of a part, as .txt (UTF-8) or Word."""
         from urllib.parse import quote
         from ..mapping import mapping_for
         from ..ocr.docx import write_docx
@@ -328,9 +330,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         book = library.get_book(book_id)
         cfg = library.book_config(book)
         mapping = mapping_for(cfg)
+        ids = [int(i) for i in page_ids.split(",")] if page_ids else None
+        if ids and len(ids) == 1 and not page_id:          # one ticked page: as that page alone
+            page_id, ids = ids[0], None
         if readers in ("lines", "lines_lm", "search"):   # lines read whole by Tesseract (+ the language
             from .wholelines import whole_line_texts      # model), or by the line search (our reader)
-            rows = whole_line_texts(library, book_id, part, page_id, "search" if readers == "search" else "tesseract")
+            rows = whole_line_texts(library, book_id, part, page_id, "search" if readers == "search" else "tesseract",
+                                    page_ids=ids)
             if not rows:
                 raise HTTPException(404, "No lines read yet.")
             mark = marker or cfg.uncertain_marker
@@ -348,7 +354,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             pages = [(f"{p.number or i} · {p.file}" if not page_id else "", [line_of(ln) for ln in lines])
                      for i, (p, lines) in enumerate(rows, 1)]
         else:
-            rows = book_page_texts(library, book_id, part, page_id)
+            rows = book_page_texts(library, book_id, part, page_id, page_ids=ids)
             if not rows:
                 raise HTTPException(404, "Nothing converted yet.")
             pages = [(f"{p.number or i} · {p.file}" if not page_id else "",
@@ -367,8 +373,10 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     @app.get("/files/page-images/{book_id}", dependencies=auth)
     def download_page_images(book_id: int, page_id: Optional[int] = None,
-                             part: str = Query("read", pattern="^(training|read)$")):
-        """The page images of one page or of every page of a part, as one PDF (a page for each image)."""
+                             part: str = Query("read", pattern="^(training|read)$"),
+                             page_ids: Optional[str] = Query(None, pattern=r"^\d+(,\d+)*$")):
+        """The page images of one page, of the pages `page_ids` (comma-separated; C19) or of every page of a
+        part, as one PDF (a page for each image)."""
         import tempfile
         from urllib.parse import quote
         from starlette.background import BackgroundTask
@@ -378,6 +386,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             q = select(Page).where(Page.book_id == book_id, Page.part == part)
             if page_id:
                 q = q.where(Page.id == page_id)
+            if page_ids:
+                q = q.where(Page.id.in_([int(i) for i in page_ids.split(",")]))
             rows = s.scalars(q.order_by(Page.number, Page.id)).all()
             files = [library.page_path(book, p) for p in rows]
         if not files:
@@ -392,7 +402,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         except Exception:
             os.unlink(tmp)
             raise
-        name = f"{files[0].stem if page_id else book.name} - page images.pdf"
+        name = f"{files[0].stem if page_id or len(files) == 1 else book.name} - page images.pdf"
         return FileResponse(tmp, media_type="application/pdf", background=BackgroundTask(os.unlink, tmp),
                             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})
 

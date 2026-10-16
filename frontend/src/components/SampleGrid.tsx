@@ -94,7 +94,7 @@ function Tile(props: {
         </span>
       )}
       {props.mixup && (
-        <span className="mixup-chip" title={`Possible mix-up: your letter reader reads it as ${props.mixup.read_guj} (${Math.round(props.mixup.prob * 100)}% sure)`}>
+        <span className="mixup-chip" title={`Possible mix-up: your letter checker reads it as ${props.mixup.read_guj} (${Math.round(props.mixup.prob * 100)}% sure)`}>
           {props.mixup.read_guj}?
         </span>
       )}

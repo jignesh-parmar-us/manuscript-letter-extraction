@@ -1,7 +1,8 @@
-// Read Book (C16a): the whole book to read into text, as a PDF or a folder of images. Its pages are
-// cut into lines and letters like the training pages, but never grouped or reviewed: conversion (C16b)
-// reads them. Cutting runs in the background a few pages at a time, so a cancelled or interrupted
-// capture keeps the pages already cut and the next one continues where it stopped.
+// Read Book → Prepare (C16a; named "Prepare" in C19): the whole book to read into text, as a PDF or a folder
+// of images. Preparing for reading cuts its pages into lines and letters like the training pages (our
+// reader needs the letters' ink), but they are never grouped or reviewed: reading (C16b) uses them. It runs
+// in the background a few pages at a time, so a cancelled or interrupted run keeps the pages already
+// prepared and the next one continues where it stopped.
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, AppInfo, Book, Job, PageInfo, PageProblem } from "../api";
 import { useConfirm } from "../components/Confirm";
@@ -95,9 +96,9 @@ export default function ReadBook({ book, info, onChanged }: Props) {
       <div className="card">
         <h2>Read Book</h2>
         <p className="small muted">
-          The whole book to read into text. Its pages are cut into letters like the training pages, but never grouped or
-          reviewed: the text comes from your labelled letters and readers. A page that reads badly can be used for
-          training from the Pages section.
+          The whole book to read into text. Preparing for reading finds the lines of every page (and cuts their letters,
+          which our reader needs); nothing is grouped or reviewed here. Then read the pages in Text. A page that reads
+          badly can be used for training from the Book pages section.
         </p>
         <p className="small">
           Pages:{" "}
@@ -148,20 +149,20 @@ export default function ReadBook({ book, info, onChanged }: Props) {
         </div>
         <div className="row">
           <button className="primary" disabled={running || !hasSource || notCut === 0} onClick={capture}>
-            {pages.length ? "Cut the remaining pages" : "Cut the pages"}
+            {pages.length ? "Prepare the remaining pages" : "Prepare for reading"}
             {notCut > 0 && ` (${notCut})`}
           </button>
           <span className="small muted">
-            {pages.length} of {pages.length + notCut} pages cut
+            {pages.length} of {pages.length + notCut} pages prepared
           </span>
         </div>
       </div>
 
       {job && (
         <>
-          <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />
+          <JobPanel job={job} reading onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />
           {job.kind === "capture_read" && job.status === "cancelled" && (
-            <p className="small muted">Stopped: the pages already cut are kept, and the next capture continues from there.</p>
+            <p className="small muted">Stopped: the pages already prepared are kept, and the next Prepare continues from there.</p>
           )}
         </>
       )}
@@ -184,15 +185,15 @@ export default function ReadBook({ book, info, onChanged }: Props) {
                 <td className="num">{p.number}</td>
                 <td>{p.file}</td>
                 <td>
-                  <span className={p.status === "OK" ? "badge ok" : "badge warn"}>{p.status}</span>{" "}
+                  <span className={p.status === "OK" ? "badge ok" : "badge warn"}>{p.status === "OK" ? "Prepared" : p.status}</span>{" "}
                   <span className="muted small">{p.message}</span>
                 </td>
                 <td className="num">{p.lines}</td>
                 <td className="num">{p.samples}</td>
                 <td className="actions">
                   <button onClick={() => go(`/books/${book.id}/readpages/${p.id}`)}>Open</button>
-                  <button disabled={running} onClick={() => recut(p.id)} title="Cut this page again, for example after a failure">
-                    Cut again
+                  <button disabled={running} onClick={() => recut(p.id)} title="Prepare this page again, for example after a failure">
+                    Prepare again
                   </button>
                 </td>
               </tr>

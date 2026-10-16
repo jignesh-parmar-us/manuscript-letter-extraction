@@ -1,6 +1,6 @@
 // One book: the top bar holds a menu of its sections, grouped into the book's two parts (C16a):
-// Training Data (Pages & capture, Review groups, Pages, Export dataset) and Read Book (Upload & capture, Book pages,
-// Text);
+// Training Data (Pages & capture, Review groups, Pages, Letter checker, Export dataset) and Read Book (Prepare,
+// Book pages, Text, Dictionary, Line truth);
 // and its name and the numbers of both parts on one line. Each section is its own screen file.
 // The address is #/books/<id>/<section>.
 import { useCallback, useEffect, useState } from "react";
@@ -22,9 +22,9 @@ export const TABS: { id: string; label: string; part: "Training Data" | "Read Bo
   { id: "capture", label: "Pages & capture", part: "Training Data" },
   { id: "review", label: "Review groups", part: "Training Data" },
   { id: "pages", label: "Pages", part: "Training Data" },
-  { id: "readers", label: "Readers", part: "Training Data" },
+  { id: "readers", label: "Letter checker", part: "Training Data" },
   { id: "export", label: "Export dataset", part: "Training Data" },
-  { id: "read", label: "Upload & capture", part: "Read Book" },
+  { id: "read", label: "Prepare", part: "Read Book" },
   { id: "readpages", label: "Book pages", part: "Read Book" },
   { id: "text", label: "Text", part: "Read Book" },
   { id: "dictionary", label: "Dictionary", part: "Read Book" },

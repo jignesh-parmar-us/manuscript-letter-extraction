@@ -22,14 +22,14 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   suggest: "Reading with Tesseract",
   fix_cuts: "Fixing cuts with Tesseract",
   fix_bars: "Giving ા bars back to their letters",
-  capture_read: "Cutting the Read Book pages",
+  capture_read: "Preparing the book pages for reading",
   import_pdf: "Turning the PDF into page images",
   convert: "Converting pages into text",
   line_search: "Our reader (line search)",
   line_search_measure: "Measuring our reader on the checked lines",
   line_search_train: "Training our reader (reviewed letters and checked lines)",
-  train: "Training a letter reader",
-  use_reader: "Reading with the letter reader",
+  train: "Training a letter checker",
+  use_reader: "Checking the letters with the letter checker",
   generate_letters: "Making the missing letters",
   top_up: "Making variants for small groups",
 };
@@ -247,14 +247,16 @@ function PageFolder(props: { book: Book; info: AppInfo | null; onChanged: () => 
   );
 }
 
-export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) {
+/** A background job's progress. `reading`: a Read Book job, whose cutting is called preparing (C19). */
+export function JobPanel({ job, onCancel, reading = false }: { job: Job; onCancel: () => void; reading?: boolean }) {
   const pct = job.total > 0 ? Math.round((100 * job.done) / job.total) : 0;
+  const preparing = reading || job.kind === "capture_read";
   const result = job.result as Record<string, number> | null;
   return (
     <div className="card" aria-live="polite">
       <div className="row between">
         <strong>
-          {JOB_NAMES[job.kind]}:{" "}
+          {preparing && job.kind === "recut_page" ? "Preparing a page again" : JOB_NAMES[job.kind]}:{" "}
           {job.status === "running"
             ? `${job.done} of ${job.total} pages`
             : job.status === "done"
@@ -271,7 +273,7 @@ export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) 
             {pct}%
           </progress>
           <div className="row between small">
-            <span className="muted">{job.current ? `Last page: ${job.current}` : "Cutting the first pages…"}</span>
+            <span className="muted">{job.current ? `Last page: ${job.current}` : preparing ? "Preparing the first pages…" : "Cutting the first pages…"}</span>
             <button onClick={onCancel}>Cancel</button>
           </div>
         </>
@@ -347,9 +349,17 @@ function Settings({ book, onSaved, onError }: { book: Book; onSaved: () => void;
       onError(err);
     }
   }
+  async function showCutLetters(on: boolean) {
+    try {
+      await api.setSettings(book.id, { ...book.settings, show_cut_letters: on });
+      onSaved();
+    } catch (err) {
+      onError(err);
+    }
+  }
   return (
     <details className="card subtle">
-      <summary>Settings for the next capture</summary>
+      <summary>Settings</summary>
       <p className="small muted">
         Most books work with the defaults. A settings file (JSON) names the values that differ from the defaults, for
         example <code>{'{"group_distance": 0.6, "digits": "western"}'}</code>; every other value is the default. Letters
@@ -362,6 +372,11 @@ function Settings({ book, onSaved, onError }: { book: Book; onSaved: () => void;
         </label>
         <button onClick={reset}>Back to the defaults</button>
       </div>
+      <label className="row small" title="The older way of reading, hidden since it reads worse than whole lines; its data is kept">
+        <input type="checkbox" checked={book.settings.show_cut_letters === true}
+          onChange={(e) => showCutLetters(e.target.checked)} />
+        Show <em>Cut letters</em> in Read Book → Text (for experiments)
+      </label>
       <pre className="settings">{JSON.stringify(book.settings, null, 2)}</pre>
     </details>
   );

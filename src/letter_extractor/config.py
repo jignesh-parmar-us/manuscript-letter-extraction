@@ -152,6 +152,7 @@ class Config:
     lm_min_gain: float = 3.0              # ...a letter changes only if the line gains this much (log probability)
     text_space_gap: float = 0.5           # printed books: a gap wider than this x the line's letter width is a space
     uncertain_marker: str = "mark"        # in text files: "mark" [?], "guess" [?क], "none" (the plain guess)
+    show_cut_letters: bool = False        # Read Book → Text: show the hidden "Cut letters" view (experiments; C19)
     cut_method: str = "shapes"            # cutting letters: "shapes" (C3a, C3b) or "tesseract" (by its reading, C12c)
     tesseract_cut_min_gap: float = 0.3    # Tesseract cutting: cuts closer than this x a letter width are not made
     recut_window: float = 0.3             # fixing cuts (C12b): a cut may move this x a letter width from Tesseract's

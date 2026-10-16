@@ -1073,6 +1073,24 @@ button.reading-move:hover {
   gap: 4px 6px;
   margin-bottom: 8px;
 }
+/* the pages to download (C19): a tick box per page */
+.export-pages {
+  margin-bottom: 8px;
+}
+.export-pages .spacer {
+  flex: 1;
+}
+.export-page-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 2px 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+.export-page-list label.current {
+  font-weight: 600;
+}
 a.button.disabled {
   opacity: 0.45;
   pointer-events: none;

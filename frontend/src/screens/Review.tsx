@@ -168,7 +168,7 @@ export default function Review({ book, view, onChanged }: Props) {
             <button
               className={`side-item${view === "check" ? " active" : ""}`}
               onClick={() => go(`/books/${book.id}/review/check`)}
-              title="Letters your letter reader is sure belong to another letter than their group's"
+              title="Letters your letter checker is sure belong to another letter than their group's"
             >
               Check these
             </button>
@@ -182,7 +182,7 @@ export default function Review({ book, view, onChanged }: Props) {
               <option value="unreviewed">Not reviewed</option>
               <option value="mixed">Possibly mixed</option>
               <option value="mixups" disabled={!book.reader_id}>
-                Possible mix-ups{book.reader_id ? ` (${mixupCount.size})` : " (train a letter reader)"}
+                Possible mix-ups{book.reader_id ? ` (${mixupCount.size})` : " (train a letter checker)"}
               </option>
               <option value="suggested">Suggested</option>
               <option value="readmixed">Mixed readings</option>
@@ -222,7 +222,7 @@ export default function Review({ book, view, onChanged }: Props) {
                     </span>
                   )}
                   {mixupCount.has(g.id) && (
-                    <span className="badge-mixup" title={`${mixupCount.get(g.id)} possible mix-ups: letters your letter reader reads as another letter`}>
+                    <span className="badge-mixup" title={`${mixupCount.get(g.id)} possible mix-ups: letters your letter checker reads as another letter`}>
                       ⚠{mixupCount.get(g.id)}{" "}
                     </span>
                   )}

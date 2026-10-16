@@ -6,7 +6,7 @@
 <title>The parts explained</title>
 <!--
   Help page, served at /help/parts.html (linked from new-book.html and tech.html): what Training Data,
-  groups, labels, the letter reader, the language model, the Dictionary, Tesseract, whole lines and line
+  groups, labels, the letter checker, the language model, the Dictionary, Tesseract, whole lines and line
   truth are, and how they relate. Numbers are from TUNING_PHASE2.md (checked lines, 2026-10-11).
 -->
 <link rel="stylesheet" href="tech.css">
@@ -34,15 +34,15 @@
     <a href="tech.html">How it works (technical)</a>
   </nav>
   <h1>The parts explained</h1>
-  <p class="lead">Training Data, groups, labels, the letter reader, the language model, the Dictionary, Tesseract,
+  <p class="lead">Training Data, groups, labels, the letter checker, the language model, the Dictionary, Tesseract,
     whole lines and line truth: what each one is, what it learns from, where you find it, and whether it helps.</p>
 
   <h2>Two kinds of knowledge</h2>
   <p>Everything that reads your book uses one of two kinds of knowledge:</p>
   <div class="who">
     <div class="node k-shape"><h3>What letters look like</h3>
-      <p><strong>Tesseract</strong>, your <strong>groups</strong> and your <strong>letter reader</strong> look at the
-        image and say which letter it is.</p></div>
+      <p><strong>Tesseract</strong>, your <strong>groups</strong>, your <strong>letter checker</strong> and
+        <strong>our reader</strong> look at the image and say which letter it is.</p></div>
     <div class="node k-text"><h3>Which letters go together</h3>
       <p>The <strong>language model</strong> never looks at the image. It knows which letter sequences are common in your
         texts, and picks between readings that the others gave.</p></div>
@@ -50,7 +50,7 @@
       <p><strong>Training Data</strong> (your labelled letters), your <strong>proofread lines</strong> and your
         <strong>word lists</strong> (Dictionary).</p></div>
   </div>
-  <p>So "the reader" and "the language model" are different things: the reader reads <em>shapes</em>, the language model
+  <p>So a reader and the language model are different things: a reader reads <em>shapes</em>, the language model
     knows <em>words</em>. Some screens use one, some the other, some both.</p>
 
   <h2>Each part</h2>
@@ -61,7 +61,7 @@
       <td>The few sample pages of a book that are cut into letters and labelled by you. Not a reader itself: the material
         the others learn from.</td>
       <td>—</td>
-      <td>Training Data part of the book (Pages &amp; capture, Review groups, Readers, Export)</td>
+      <td>Training Data part of the book (Pages &amp; capture, Review groups, Letter checker, Export)</td>
     </tr>
     <tr>
       <td><strong>Groups</strong></td>
@@ -72,17 +72,18 @@
     </tr>
     <tr>
       <td><strong>Labels</strong></td>
-      <td>The letter a group is, given by you (or suggested by Tesseract, other books or the reader, and accepted by
+      <td>The letter a group is, given by you (or suggested by Tesseract, other books or the letter checker, and accepted by
         you).</td>
       <td>—</td>
       <td>Review groups</td>
     </tr>
     <tr>
-      <td><strong>Letter reader</strong> ("reader")</td>
+      <td><strong>Letter checker</strong> (called "letter reader" before October 2026)</td>
       <td>A small neural network trained on your labelled letters: shown one cut letter, it says which letter it is, with
-        a probability.</td>
+        a probability. It finds letters probably in the wrong group (Check these) and suggests labels; it does not read
+        books.</td>
       <td>Reviewed letters of Training Data</td>
-      <td>Training Data → Readers (train it); Review groups → Check these (uses it)</td>
+      <td>Training Data → Letter checker (train it); Review groups → Check these (uses it)</td>
     </tr>
     <tr>
       <td><strong>Language model</strong></td>
@@ -123,13 +124,13 @@
 
   <h2>Which parts each screen uses</h2>
   <table>
-    <tr><th>Screen</th><th>Tesseract</th><th>Groups</th><th>Letter reader</th><th>Language model</th></tr>
+    <tr><th>Screen</th><th>Tesseract</th><th>Groups</th><th>Letter checker</th><th>Language model</th></tr>
     <tr><td>Review groups: suggestions</td><td>yes</td><td>—</td><td>yes (once trained)</td><td>—</td></tr>
     <tr><td>Review groups: Check these</td><td>—</td><td>—</td><td>yes</td><td>—</td></tr>
     <tr><td>Text → <strong>Whole lines</strong></td><td>yes, on the whole line</td><td>—</td><td>—</td><td>yes, if "With the language model" is ticked</td></tr>
     <tr><td>Text → <strong>Whole lines (our reader)</strong></td><td>—</td><td>yes: the reviewed letters teach the line search (Retrain after changes)</td><td>its own (learns "not a letter" too)</td><td>yes</td></tr>
-    <tr><td>Text → Cut letters, "Tesseract only"</td><td>yes, per letter</td><td>—</td><td>—</td><td>—</td></tr>
-    <tr><td>Text → Cut letters, "Tesseract + your groups (and reader)"</td><td>yes, per letter</td><td>yes</td><td>yes, if trained</td><td>yes, if on in Dictionary</td></tr>
+    <tr><td>Text → Cut letters (hidden), "Tesseract only"</td><td>yes, per letter</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>Text → Cut letters (hidden), "Tesseract + your checker and groups"</td><td>yes, per letter</td><td>yes</td><td>yes, if trained</td><td>yes, if on in Dictionary</td></tr>
     <tr><td>Line truth</td><td>yes (to fill in the line for you to correct)</td><td>—</td><td>—</td><td>—</td></tr>
   </table>
 
@@ -140,22 +141,25 @@
     <tr><td>Whole lines: Tesseract alone</td><td class="num">5.1%</td><td></td></tr>
     <tr><td>Cut letters: Tesseract + groups + language model</td><td class="num">5.4%</td><td>cutting letters costs accuracy</td></tr>
     <tr><td>Cut letters: Tesseract only</td><td class="num">6.1%</td><td></td></tr>
-    <tr><td>Cut letters: + letter reader + language model</td><td class="num">7.5%</td><td>the letter reader makes the text worse on badly cut letters</td></tr>
+    <tr><td>Cut letters: + letter checker + language model</td><td class="num">7.5%</td><td>the letter checker makes the text worse on badly cut letters</td></tr>
     <tr><td>No Tesseract: groups + reader + language model</td><td class="num">27.7%</td><td>for printed books Tesseract is needed</td></tr>
   </table>
   <p>The <strong>line search</strong> (no Tesseract; it tries every place a letter could start and end along the line and
     keeps the best-reading path) gets 10.2% wrong alone: too many to replace Tesseract, but where it disagrees with
     Tesseract it points at 88% of the remaining mistakes while marking a fifth of the aksharas. Its own text is
     <em>Whole lines (our reader)</em>; its marks show in both Whole lines tabs. It is a different reader from
-    <em>Train a letter reader</em> (Readers), which reads letters already cut and is used by Cut letters.</p>
+    the <em>Letter checker</em> (Training Data), which reads letters already cut and is used by Check these and the
+    hidden Cut letters view.</p>
   <p>In short: <strong>Tesseract reads, the language model corrects</strong>. Groups and labels are how you teach the app
-    your book; the letter reader is useful for finding wrongly grouped letters (Check these), but not for reading the
-    text.</p>
+    your book; the letter checker is useful for finding wrongly grouped letters (Check these), but not for reading the
+    text. That is why <em>Cut letters</em> is hidden in Text since October 2026 (its data is kept; Pages &amp; capture →
+    Settings → <em>Show Cut letters</em> brings it back for experiments).</p>
 
   <h2>Short definitions</h2>
   <dl>
     <dt>Akshara</dt><dd>One written unit: a consonant or conjunct with its vowel signs and marks (ક્યા, ર્ત્તા, નં).</dd>
-    <dt>Cut letters</dt><dd>The page cut into one image per akshara, so each can be grouped, labelled and read alone.</dd>
+    <dt>Cut letters</dt><dd>The page cut into one image per akshara, so each can be grouped, labelled and read alone.
+      Preparing a book for reading still cuts its letters (our reader needs their ink).</dd>
     <dt>Whole lines</dt><dd>The page cut only into lines; each line image goes to Tesseract as it is.</dd>
     <dt>Uncertain</dt><dd>A letter a reader is not sure about, highlighted in the text and written as [?] in downloads if you want.</dd>
     <dt>Proofread line</dt><dd>A line of the Cut letters text you marked ✓ as right; the language model learns from it.</dd>

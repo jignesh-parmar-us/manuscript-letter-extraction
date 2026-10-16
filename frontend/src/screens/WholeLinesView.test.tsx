@@ -36,6 +36,7 @@ describe("Whole lines", () => {
     localStorage.removeItem("whole-lines-lm");
     localStorage.removeItem("text-page-style");
     localStorage.removeItem("text-aligned");
+    localStorage.removeItem("export-pages-4");
     vi.mocked(api.pages).mockResolvedValue(pages as never);
     vi.mocked(api.bookWholeLines).mockResolvedValue([{ page_id: 9, lines: 2 }]);
     vi.mocked(api.wholeLines).mockResolvedValue(text());
@@ -47,7 +48,7 @@ describe("Whole lines", () => {
     expect(screen.getByRole("button", { name: "Whole page" })).toHaveClass("active");
     const pane = await screen.findByLabelText("Lines");
     await waitFor(() => expect(within(pane).getByText("ણ")).toHaveClass("lm"));
-    expect(screen.getByRole("link", { name: "Page .txt" }).getAttribute("href")).toMatch(/readers=lines_lm&page_id=9/);
+    expect(screen.getByRole("link", { name: ".txt" }).getAttribute("href")).toMatch(/readers=lines_lm&token/); // every page
     await userEvent.click(screen.getByLabelText("With the language model"));
     expect(within(pane).getByText("વ")).toHaveClass("uncertain");
     await userEvent.click(within(pane).getByText("વ"));
@@ -170,11 +171,11 @@ describe("Whole lines", () => {
     expect(api.wholeLines).toHaveBeenLastCalledWith(9, "search");
     expect(api.bookWholeLines).toHaveBeenCalledWith(4, "search");
     expect(screen.queryByLabelText("With the language model")).toBeNull();
-    expect(screen.getByRole("link", { name: "Page .txt" }).getAttribute("href")).toMatch(/readers=search&page_id=9/);
-    expect(screen.getByRole("link", { name: "Page Word" }).getAttribute("href")).toMatch(/format=docx.*readers=search/);
+    expect(screen.getByRole("link", { name: ".txt" }).getAttribute("href")).toMatch(/readers=search&token/);
+    expect(screen.getByRole("link", { name: "Word" }).getAttribute("href")).toMatch(/format=docx.*readers=search/);
     window.print = vi.fn();
     vi.mocked(api.wholeLines).mockClear();
-    await userEvent.click(screen.getByRole("button", { name: "Page PDF" }));
+    await userEvent.click(screen.getByRole("button", { name: "PDF" }));
     expect(api.wholeLines).toHaveBeenCalledWith(9, "search");                    // the PDF prints this tab's reading
     await waitFor(() => expect(window.print).toHaveBeenCalled());
     await userEvent.click(within(pane).getByText("ણ"));
@@ -225,7 +226,8 @@ describe("Whole lines", () => {
       current: "", pages: [], result: null, error: "", seconds: 0 });
     vi.mocked(api.bookTexts).mockResolvedValue([]);
     vi.mocked(api.proofreadStats).mockResolvedValue({ lines: 0, chars: 0, cer: null, cer_tesseract: null });
-    render(<TextView book={book} pageId={10} onChanged={() => {}} />);
+    // Cut letters is hidden unless the book's setting shows it (C19)
+    render(<TextView book={{ ...book, settings: { show_cut_letters: true } }} pageId={10} onChanged={() => {}} />);
     expect(await screen.findByText(/not read yet/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Read this page" }));
     expect(api.convert).toHaveBeenCalledWith(4, [10], "lines");
@@ -233,6 +235,34 @@ describe("Whole lines", () => {
     expect(await screen.findByText(/not converted yet/)).toBeInTheDocument();
     expect(localStorage.getItem("text-mode")).toBe("letters");
   });
+  it("downloads the ticked pages, or every page when none is ticked", async () => {
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await screen.findByLabelText("Lines");
+    const txt = () => screen.getByRole("link", { name: ".txt" }).getAttribute("href") ?? "";
+    expect(txt()).not.toMatch(/page_id/);                                       // none ticked: every page
+    await userEvent.click(screen.getByRole("button", { name: /All 2 pages/ }));
+    const list = screen.getByLabelText("Pages to download");
+    await userEvent.click(within(list).getByLabelText(/2\. page-0002\.jpg/));
+    expect(within(list).getByText("(not read)")).toBeInTheDocument();
+    expect(screen.getByText(".txt")).toHaveClass("disabled");            // the ticked page is not read
+    await userEvent.click(within(list).getByRole("button", { name: "Select all" }));
+    expect(txt()).toMatch(/page_ids=9,10&/);
+    expect(screen.getByRole("link", { name: "Word" }).getAttribute("href")).toMatch(/format=docx.*page_ids=9,10&/);
+    expect(screen.getByRole("link", { name: "Page images (PDF)" }).getAttribute("href")).toMatch(/page_ids=9,10&/);
+    expect(JSON.parse(localStorage.getItem("export-pages-4") ?? "[]")).toEqual([9, 10]);   // kept for the book
+    await userEvent.click(within(list).getByRole("button", { name: "Only this page" }));
+    expect(txt()).toMatch(/page_ids=9&/);
+    expect(screen.getByRole("button", { name: /1 ticked pages/ })).toBeInTheDocument();
+    window.print = vi.fn();
+    vi.mocked(api.wholeLines).mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "PDF" }));
+    expect(api.wholeLines).toHaveBeenCalledTimes(1);
+    expect(api.wholeLines).toHaveBeenCalledWith(9, "tesseract");
+    await userEvent.click(within(list).getByRole("button", { name: "Select none" }));
+    expect(txt()).not.toMatch(/page_id/);
+    expect(screen.getByRole("link", { name: "Page images (PDF)" }).getAttribute("href")).not.toMatch(/page_id/);
+  });
+
   it("reads only the pages not read yet, with Tesseract and with our reader", async () => {
     const job = { id: "j", book_id: 4, status: "running", done: 0, total: 1, current: "", pages: [], result: null, error: "", seconds: 0 };
     vi.mocked(api.convert).mockResolvedValue({ ...job, kind: "convert" } as never);

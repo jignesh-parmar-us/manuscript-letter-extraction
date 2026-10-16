@@ -45,6 +45,6 @@ describe("CheckView", () => {
 
   it("explains when the book has no reader", () => {
     renderView((ctx) => <CheckView ctx={ctx} readerId={null} />);
-    expect(screen.getByText(/no letter reader yet/)).toBeInTheDocument();
+    expect(screen.getByText(/no letter checker yet/)).toBeInTheDocument();
   });
 });

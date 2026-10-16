@@ -71,11 +71,11 @@
 <main>
   <h1>Adding a new book</h1>
   <p class="lead">How to turn a folder of page images into clean letters with clean labels, with as little hand work
-    as possible, and get it ready for training the letter reader.</p>
+    as possible, and get it ready for training the letter checker and our reader.</p>
   <div class="box tip"><strong>New here, or lost?</strong> <a href="workflow.html">The steps in order</a> shows the
     whole route as a flowchart, from creating a book to downloading its text. <a href="parts.html">The parts explained</a> (and <a href="our-reader.html">How our reader reads</a>,
     for Whole lines (our reader))
-    says what Training Data, groups, the letter reader, the language model and the Dictionary each are.
+    says what Training Data, groups, the letter checker, the language model and the Dictionary each are.
     <a href="tech.html">How it works</a> explains each step technically: the algorithms, scores and image processing.</div>
 
   <nav class="toc" aria-label="Contents">
@@ -85,7 +85,7 @@
       <li><a href="#printed">A printed book</a></li>
       <li><a href="#handwritten">A handwritten book</a></li>
       <li><a href="#review">Reviewing the labels</a></li>
-      <li><a href="#ready">Training the letter reader</a></li>
+      <li><a href="#ready">Training the letter checker</a></li>
       <li><a href="#cleanup">Replacing old books</a></li>
       <li><a href="#read">Reading the whole book</a></li>
       <li><a href="#trouble">If something goes wrong</a></li>
@@ -155,7 +155,7 @@
     <li><strong>Otherwise, label the biggest groups by hand</strong>
       Sort the group list <span class="ui">by size</span> and label the largest 30 to 50 groups: they hold most
       of the letters. Use <span class="ui">Letters…</span> or type in Gujarati or Devanagari.
-      <div class="result">These labels are what the letter reader (C14) learns this hand from, and what the next
+      <div class="result">These labels are what the letter checker (C14) and our reader learn this hand from, and what the next
         handwritten book will learn from.</div></li>
     <li><strong>Unsure</strong>
       Accept the suggested groups (→) for the letters that clearly belong to one.</li>
@@ -200,27 +200,28 @@
     letter (↑ ↓ the one above or below), and Shift+arrow adds to the selection. Then U sends the selected letters to
     Unsure, N makes a new group, Delete deletes them, Esc clears the selection.</div>
 
-  <h2 id="ready">5. Training the letter reader</h2>
-  <p class="lead"><strong>Training Data → Readers → Train</strong> teaches a letter reader your reviewed letters
-    (about a minute). Train again whenever you have reviewed or corrected more: each training makes a new reader, and
-    older ones are kept.</p>
+  <h2 id="ready">5. Training the letter checker</h2>
+  <p class="lead"><strong>Training Data → Letter checker → Train</strong> teaches the letter checker your reviewed
+    letters (about a minute). It finds letters that are probably in the wrong group (<em>Check these</em>) and
+    suggests labels; it does not read books (that is our reader, section 7). Train again whenever you have reviewed or
+    corrected more: each training makes a new checker, and older ones are kept. (Until October 2026 this section was
+    called <em>Readers</em>, and the checker a <em>letter reader</em>.)</p>
   <ul>
     <li><strong>Not every label is needed.</strong> It learns only from labelled letters; labels with fewer letters
       than the minimum you choose (5 by default, down to 1) are left out and listed. Its report shows how many letters
       of pages it did not learn from it reads right, and the accuracy of every letter, so you see which ones need more
       samples.</li>
     <li><strong>Wrong labels are the problem.</strong> A group labelled ने that still holds ते letters teaches the
-      reader that both are ने. That is why the review matters more than the number of labels.</li>
+      checker that both are ने. That is why the review matters more than the number of labels.</li>
     <li><strong>It learns only from groups you reviewed</strong>, unless you tick <em>also groups not reviewed</em>.</li>
-    <li><strong>Check these</strong> (Review groups, side bar) lists the letters the reader is sure are in the wrong
-      group: <strong>Move to …</strong>, or <strong>It is right</strong> if the reader is wrong. The same letters are
+    <li><strong>Check these</strong> (Review groups, side bar) lists the letters the checker is sure are in the wrong
+      group: <strong>Move to …</strong>, or <strong>It is right</strong> if the checker is wrong. The same letters are
       <strong>outlined in their group</strong> as possible mix-ups, with the letter each reads as (the list on the left
       shows ⚠ and a count; <em>Show → Possible mix-ups</em> lists those groups): <strong>Select the possible
       mix-ups</strong>, then <strong>Move to their likely letters</strong> or <strong>Not a mix-up</strong>. Fix them,
       then train again (the list is from the last training).</li>
-    <li><strong>The reader also reads the Read Book text</strong> when you convert (section 7), on the letters it
-      was taught: a big group you have not reviewed is a letter it does not know. Review the big groups, train again,
-      then convert again.</li>
+    <li><strong>The checker also votes in the hidden Cut letters view</strong> (section 7), on the letters it
+      was taught. The text of a book comes from Whole lines (Tesseract or our reader), not from the checker.</li>
     <li><strong>Good enough to start:</strong> the big groups reviewed, and the mixed ones split.</li>
   </ul>
 
@@ -243,11 +244,13 @@
     (<span class="ui">Text → Whole lines</span>) needs no Training Data: create it with just a name, skip
     <span class="ui">Pages &amp; capture</span>, and start here.</div>
   <ol class="steps">
-    <li><strong>Read Book → Upload &amp; capture.</strong> Type the path of the book's <strong>PDF</strong> and click
+    <li><strong>Read Book → Prepare.</strong> Type the path of the book's <strong>PDF</strong> and click
       <span class="ui">Use this PDF</span> (its pages become images in the book folder), or choose a
       <strong>folder of page images</strong>.</li>
-    <li><strong>Cut the pages.</strong> The pages are cut into lines and letters in the background, a few at a time.
-      Stopping keeps the pages already cut; the next <span class="ui">Cut the remaining pages</span> continues.</li>
+    <li><strong>Prepare for reading.</strong> The lines of every page are found (and their letters cut: our reader
+      needs their ink) in the background, a few pages at a time; a prepared page says <em>Prepared</em>. Stopping
+      keeps the pages already prepared; the next <span class="ui">Prepare the remaining pages</span> continues.
+      <span class="ui">Prepare again</span> does one page again, for example after a failure.</li>
     <li><span class="ui">Book pages</span> shows each page with its letters, to fix cuts (draw a box, join, split,
       delete). Read Book letters are never grouped automatically; only the letters you correct in the Text view (step
       6) go into groups.</li>
@@ -255,8 +258,8 @@
       Data, where its letters go to Unsure to be labelled.</li>
   </ol>
   <ol class="steps" start="5">
-    <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span>, <span class="ui">Whole lines (our reader)</span> or <span class="ui">Cut
-      letters</span> at the top. <strong>Whole lines</strong> (the best on the checked lines): <span class="ui">Read all
+    <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span> or <span class="ui">Whole lines (our reader)</span>
+      at the top. <strong>Whole lines</strong> (the best on the checked lines): <span class="ui">Read all
       pages</span> (or <span class="ui">Read unread pages</span>: only the pages not read yet, e.g. after adding pages); Tesseract reads each line image as it is, no letters are cut; <em>With the language model</em> applies
       the corrections of Read Book → Dictionary (underlined). <span class="ui">Whole page</span> shows the page
       <span class="ui">As a page</span> (the page image, its text below) or as <span class="ui">Line strips</span> (every
@@ -264,7 +267,7 @@
       (◀ ▶). <span class="ui">Aligned text</span> puts each akshara under its letter (untick it for plain text). Click an akshara to see it on the page; ← → move between aksharas,
       ↑ ↓ between lines. <span class="ui">✎ Correct</span> a line and <span class="ui">Save</span>; <span class="ui">✓</span>
       marks it reviewed (a reviewed line is also a checked line in Line truth). <strong>Whole lines (our reader)</strong>
-      (it needs only the cut pages; Tesseract need not have read them): <span class="ui">Read all pages</span>: our reader (the line search) reads the
+      (it needs only the prepared pages; Tesseract need not have read them): <span class="ui">Read all pages</span>: our reader (the line search) reads the
       same lines without Tesseract, from this book's reviewed letters (the first time it learns them, a few minutes; then
       about 7 s per line). Its text is shown in the same views; the aksharas where the two readers differ (the <em>second opinion</em>: the places most likely to be wrong) are
       highlighted in both tabs, while the text of each tab stays that reader's own, and clicking one shows what the other read. On the checked lines the marks fall on about
@@ -274,13 +277,18 @@
       about half an hour); it does not read the pages: <span class="ui">Read all pages</span> (or a page) afterwards,
       and new pages can be read without retraining. <span class="ui">Measure</span> scores
       it on your checked lines, fairly (trained again without the pages it is scored on, about 2 hours), beside
-      Tesseract, with every line listed. A correction or ✓ belongs to the line: the same in both tabs. <strong>Cut letters</strong>: <span class="ui">Convert all pages</span> (or one page). Each page is shown beside its
-      text: <span class="ui">Tesseract only</span> shows what Tesseract read, <span class="ui">Tesseract + your
-      groups</span> adds your groups' check, which is what marks most mistakes (Tesseract is confident even when it
-      is wrong). Uncertain letters are highlighted on both, and clicking one shows it on the page and what each reader
-      read. <span class="ui">Download</span> the page or the whole book as .txt, Word, PDF or a picture, with
-      uncertain letters as [?], [?ક] or the best guess.</li>
-    <li><strong>Proofread</strong> in the Text view: click a wrong letter (or <span class="ui">Next uncertain ▶</span>)
+      Tesseract, with every line listed. A correction or ✓ belongs to the line: the same in both tabs.
+      <strong>Download</strong> as .txt, Word, PDF, a picture of the text per page, or the page images (PDF), with
+      uncertain letters as [?], [?ક] or the best guess. The button before them chooses the pages: with none ticked,
+      every page (<em>All 312 pages</em>); click it for a tick box per page, <span class="ui">Select all</span>,
+      <span class="ui">Select none</span> and <span class="ui">Only this page</span>. The ticks are kept for the book in
+      this browser. <strong>Cut letters</strong> (the older way: the page cut into letters, read by Tesseract and checked
+      with your groups and letter checker; it reads worse than whole lines) is hidden; its data is kept. To bring it back
+      for experiments, tick <em>Show Cut letters</em> in Pages &amp; capture → Settings. There:
+      <span class="ui">Convert all pages</span> (or one page); <span class="ui">Tesseract only</span> shows what
+      Tesseract read, <span class="ui">Tesseract + your groups</span> adds your groups' check. Uncertain letters are
+      highlighted on both, and clicking one shows it on the page and what each reader read.</li>
+    <li><strong>Proofread letters</strong> (Cut letters only): click a wrong letter (or <span class="ui">Next uncertain ▶</span>)
       and type the right one, then <span class="ui">Correct</span>. The correction labels that letter, so it shows in
       Review groups and the next reader training learns from it; <span class="ui">Undo</span> takes it back.
       <span class="ui">Two letters…</span> splits a box (click where the letters meet), <span class="ui">Join with the
@@ -297,7 +305,7 @@
       turn it off.</li>
   </ol>
   <div class="box tip"><strong>Printed books</strong> are read by Tesseract and checked against your labelled groups;
-    <strong>handwritten books</strong> by your groups alone for now, so their text is rough until the letter reader.
+    <strong>handwritten books</strong> by your groups alone for now, so their text is rough until many groups are reviewed.
     Every letter you correct teaches the next reader training.</div>
 
   <h2 id="trouble">8. If something goes wrong</h2>

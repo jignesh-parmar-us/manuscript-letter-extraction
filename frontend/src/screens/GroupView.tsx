@@ -222,7 +222,7 @@ export default function GroupView({ group, ctx }: { group: Group; ctx: ReviewCon
       {mixups.length > 0 && (
         <p className="note-mixup small" role="note">
           ⚠ <strong>{mixups.length} possible mix-up{mixups.length > 1 ? "s" : ""}</strong> (outlined, with what each reads as):
-          letters your letter reader is sure are another letter. Select them, then move them or mark them as no mix-up.{" "}
+          letters your letter checker is sure are another letter. Select them, then move them or mark them as no mix-up.{" "}
           <button className="link" onClick={() => setSelection({ ids: new Set(mixups.map((c) => c.sample_id)), anchor: null })}>
             Select the possible mix-ups
           </button>

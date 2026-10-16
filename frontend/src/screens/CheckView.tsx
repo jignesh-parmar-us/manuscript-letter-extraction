@@ -54,13 +54,13 @@ export default function CheckView({ ctx, readerId }: { ctx: ReviewContext; reade
         Check these <span className="muted">({shown.length})</span>
       </h2>
       <p className="small muted">
-        Letters your letter reader is sure belong to another letter than their group's (read by a reader that did not learn
+        Letters your letter checker is sure belong to another letter than their group's (read by a reader that did not learn
         from their page). Most are letters in the wrong group; some are the reader's mistakes. Train the reader again after
         fixing them.
       </p>
       <ErrorBox error={error} onClose={() => setError(null)} />
       {!readerId ? (
-        <p className="muted">This book has no letter reader yet: train one in Training Data → Readers.</p>
+        <p className="muted">This book has no letter checker yet: train one in Training Data → Letter checker.</p>
       ) : items === null ? (
         <p className="muted">Loading…</p>
       ) : shown.length === 0 ? (

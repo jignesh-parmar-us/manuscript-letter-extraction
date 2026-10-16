@@ -1,7 +1,8 @@
-// Training Data → Readers (C14): train a letter reader on the reviewed letters, as often as wanted;
-// every training makes a new reader, kept with its report (accuracy on pages it did not learn from,
-// per letter, the most confused pairs, the letters left out). One reader is the book's active one: it
-// reads the book's letters for suggestions and "Check these" in Review groups.
+// Training Data → Letter checker (C14; "Readers" until C19): train a letter checker on the reviewed letters,
+// as often as wanted; every training makes a new checker, kept with its report (accuracy on pages it did not
+// learn from, per letter, the most confused pairs, the letters left out). One checker is the book's active
+// one: it reads the book's letters for suggestions and "Check these" in Review groups. It does not read books
+// (that is our reader, Read Book → Text).
 import { useCallback, useEffect, useState } from "react";
 import { api, Book, BookSummary, localTime, ReaderInfo } from "../api";
 import { useConfirm } from "../components/Confirm";
@@ -58,7 +59,7 @@ export default function Readers({ book, onChanged }: Props) {
     }
   }
   async function remove(r: ReaderInfo) {
-    if (!(await confirm(`Delete ${r.name}? Books that use it will have no active reader.`, "Delete"))) return;
+    if (!(await confirm(`Delete ${r.name}? Books that use it will have no active letter checker.`, "Delete"))) return;
     try {
       await api.deleteReader(r.id);
       if (open?.id === r.id) setOpen(null);
@@ -80,10 +81,14 @@ export default function Readers({ book, onChanged }: Props) {
       {dialog}
       <ErrorBox error={error} onClose={() => setError(null)} />
       <div className="card">
-        <h2>Train a letter reader</h2>
+        <h2>Letter checker</h2>
+        <p>
+          Finds letters that are probably in the wrong group (<em>Check these</em> in Review groups) and suggests labels.
+          It does not read books: that is our reader, in Read Book → Text.
+        </p>
         <p className="small muted">
-          The reader learns the letters of your reviewed groups and is tested on pages it did not learn from. Train again
-          whenever you have reviewed or corrected more: every training makes a new reader, and older ones are kept.
+          The checker learns the letters of your reviewed groups and is tested on pages it did not learn from. Train again
+          whenever you have reviewed or corrected more: every training makes a new checker, and older ones are kept.
         </p>
         <fieldset className="plain">
           <legend className="small muted">Learn from (books with the same writing)</legend>
@@ -140,10 +145,10 @@ export default function Readers({ book, onChanged }: Props) {
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
 
       {readers.length > 0 && (
-        <table className="list" aria-label="Readers">
+        <table className="list" aria-label="Letter checkers">
           <thead>
             <tr>
-              <th>Reader</th>
+              <th>Checker</th>
               <th>Trained</th>
               <th className="num">Letters</th>
               <th className="num">Labels</th>
@@ -185,7 +190,7 @@ export default function Readers({ book, onChanged }: Props) {
           </tbody>
         </table>
       )}
-      {readers.length === 0 && !job && <p className="muted">No reader trained yet.</p>}
+      {readers.length === 0 && !job && <p className="muted">No letter checker trained yet.</p>}
 
       {open && <Report reader={open} book={book} />}
     </div>

@@ -4,8 +4,9 @@ The plan to **build**. It is the full Phase 3 plan (`docs/implementation_plan_ph
 the reference) cut down to what is needed to separate datasets from books. Everything left out is listed in
 section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two plans can be read side by side.
 
-**Status:** a plan, not built. Written 2026-10-15 from the full plan of 2026-10-14 and its answered
-decisions. Comes **after the speed plan** (`docs/SPEED_PLAN.md`, S1–S4). Next: C19.
+**Status:** C19 built (2026-10-16), waiting for Stop 1 (your check of the screens). Written 2026-10-15 from the
+full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan** (`docs/SPEED_PLAN.md`, S1–S4).
+Next: C20.
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -91,11 +92,39 @@ The tab "Dictionary" disappears; its help page points to Reading setup.
   `docs/help/` and the README in the same commit.
 - A new session per chunk (this file carries what it needs). Suggested model: Sonnet for the screen-only
   chunks C19, C21, C22; Opus for C20, C23, C24.
-- C19 touches only `frontend/`, so it may be built in a separate git worktree while the speed plan is built.
+- C19 was planned to touch only `frontend/`; as built it also needed two small backend additions (section 8).
 
 ## 5. Chunks
 
-### C19. Names and small screens (no data change), 2–3 h
+### C19. Names and small screens (no data change), 2–3 h — built 2026-10-16
+
+As built (what differs from the points below is in section 8):
+
+- **Text:** *Cut letters* (the tab, its Convert buttons and its downloads) is hidden unless the **book setting
+  `show_cut_letters`** (default off; `config.py`) is on. It is switched with a tick box *Show Cut letters* in
+  Pages & capture → Settings, which keeps the book's other settings. A remembered choice of Cut letters falls back to
+  Whole lines (Tesseract) while the setting is off. No data is changed.
+- **Export pages** (both Whole lines views): the button before the downloads says *All N pages* or *K ticked pages*
+  and opens a tick box per page (*(not read)* beside pages without a reading), **Select all**, **Select none**,
+  **Only this page**. .txt, Word, PDF, the picture (one .png per page) and the page images (PDF) take the ticked
+  pages in page order, or every page when none is ticked. The ticks are kept per book in the browser
+  (`export-pages-<book id>`), the same in both views. The old *Page …* / *Whole book …* buttons are gone.
+- **Letter checker:** the section, its heading, its table and job names, and every "letter reader" on the screens
+  (Review groups, Check these, suggestions, mix-up tips) say *letter checker*. Its first line: finds letters
+  probably in the wrong group (Check these) and suggests labels; it does not read books.
+- **Prepare:** Read Book tab *Upload & capture* → **Prepare**; *Cut the pages* → **Prepare for reading** (*Prepare
+  the remaining pages* when some are prepared); *Cut again* → **Prepare again**; status *OK* → **Prepared**; "N of M
+  pages prepared"; the job panel says *Preparing the book pages for reading* / *Preparing a page again*. Datasets
+  (Training Data) keep *Capture* and *Cut again*. The section addresses (`#/books/<id>/read`, `/readers`) are kept.
+- **Files:** `frontend/src/screens/{BookView,ReadBook,TextView,WholeLinesView,Readers,Capture,CheckView,Review,
+  GroupView,Suggestions,TruthView}.tsx`, `components/SampleGrid.tsx`, `api.ts`, `styles.css`; backend
+  `app/api.py` (`page_ids` on `/files/texts` and `/files/page-images`), `app/texts.py`, `app/wholelines.py`
+  (`page_ids` filters), `config.py` (`show_cut_letters`); tests (screen tests of those screens, a new ticked-pages
+  test, `tests/test_wholelines.py`, `tests/test_convert.py`); `docs/help/{new-book,workflow,parts,our-reader}.html`,
+  README.
+
+The plan as written:
+
 
 - **Text:** hide *Cut letters* (the tab and its Convert button). Data is kept; a setting "Show Cut letters"
   (off) brings it back for experiments.
@@ -112,7 +141,7 @@ The tab "Dictionary" disappears; its help page points to Reading setup.
 
 ### C20. Datasets and books become separate things (data change), 4–5 h
 
-- Migration `0016`: `book.kind` (default `dataset`). For every existing book with Read Book pages: a
+- Migration `0017` (`0016` is taken by speed S5's index on `sample.line_id`): `book.kind` (default `dataset`). For every existing book with Read Book pages: a
   `book`-kind row with the same name (suffix if taken); its `part = read` pages, their lines, `whole_line`,
   `line_truth`, `page_text`, readings and ungrouped samples move to the new row; the `read/` and
   `line-search/` folders move to the new book's folder; `book.read_dataset_id` links it to its dataset. Books
@@ -123,7 +152,7 @@ The tab "Dictionary" disappears; its help page points to Reading setup.
   Then I ask before running it on your library.
 - The setting `uploads` is added (used by C21).
 - API: `/api/datasets/...` and `/api/books/...`; the screens move to them in the same commit.
-- **Files:** `app/db.py`, `app/migrations/versions/0016_*.py`, `app/library.py`, `app/api.py`,
+- **Files:** `app/db.py`, `app/migrations/versions/0017_*.py`, `app/library.py`, `app/api.py`,
   `app/schemas.py`, `frontend/src/api.ts`, tests.
 
 **Stop 2:** you check the counts and the app on your library.
@@ -143,7 +172,8 @@ The tab "Dictionary" disappears; its help page points to Reading setup.
   **Exclude / Include** (an excluded page is skipped by Prepare, Read and export in a book, and by capture,
   training and export in a dataset, but kept), **▲ / ▼** to change the order. Order is stored
   (`page.number`); `page.excluded` is new.
-- Reading and export follow this order. Deleting or excluding a page asks first and says what is lost when it
+- Reading and export follow this order (the C19 export already takes pages in `page.number` order; an excluded
+  page must also leave the C19 tick list and the "every page" download). Deleting or excluding a page asks first and says what is lost when it
   has checked lines (Line truth), corrections, or (in a dataset) reviewed groups.
 - **Files:** `app/db.py` (`page.excluded`), `app/library.py`, `app/api.py`, `frontend/src/screens/ReadBook.tsx`
   → `BookPages.tsx`, tests.
@@ -205,4 +235,22 @@ About **16–20 hours** of building, after the speed plan's 5–7.
 
 ## 8. Changes from this plan
 
-None yet.
+**C19 (2026-10-16):**
+
+1. **Not frontend-only.** Downloading the ticked pages needed the backend to take several pages: `page_ids`
+   (comma-separated) on `/files/texts/{book}` and `/files/page-images/{book}`, filtered in `texts.book_page_texts`
+   and `wholelines.whole_line_texts`. One ticked page is downloaded as that page (its file name, no heading);
+   ids of another book are ignored. The old `page_id` still works (the hidden Cut letters view uses it).
+2. **"Show Cut letters" is a book setting** (`show_cut_letters` in `config.py`), not an app setting: the app has no
+   app-wide settings screen yet (the per-user `settings.json` comes with C20's `uploads`). Its tick box is in
+   Pages & capture → Settings (the card's title is now just *Settings*). If C20 adds app settings, it may move there.
+3. **Export page choice only in the Whole lines views**, the views that are shown. The hidden Cut letters view keeps
+   its old page / whole-book downloads.
+4. **Picture of several pages:** one .png per ticked page (the browser may ask once to allow several downloads),
+   not one tall picture (a canvas has a height limit). The **page images (PDF)** follow the ticks too.
+5. **"Letter checker" is used everywhere on the screens**, not only in its section (Review groups, Check these,
+   suggestions, mix-up tips, the reader names in Cut letters), so the two words never mix. Code names
+   (`readers.py`, `Readers.tsx`, `reader_id`, the `/readers` address) are unchanged.
+6. **Later chunks:** C20's migration is `0017` (speed S5 used `0016`). C21/C22: the *Prepare* tab is the one that
+   becomes the book's page manager; keep its *Prepare for reading* / *Prepare again* names. C22: an excluded page
+   leaves the C19 tick list and downloads.

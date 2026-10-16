@@ -59,6 +59,12 @@ export const patch = <T>(path: string, body: unknown) => request<T>("PATCH", pat
 export const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
 export const del = <T>(path: string) => request<T>("DELETE", path);
 
+/** One page (`&page_id=`), some pages (`&page_ids=1,2`), or nothing (every page). */
+function pagesQuery(pages?: number | number[]): string {
+  if (typeof pages === "number") return pages ? `&page_id=${pages}` : "";
+  return pages?.length ? `&page_ids=${pages.join(",")}` : "";
+}
+
 // ---- types of the backend's answers ---------------------------------------------------------
 
 export interface AppInfo {
@@ -359,7 +365,7 @@ export type Engine = "tesseract" | "books" | "reader";
 export const ENGINE_NAME: Record<Engine, string> = {
   tesseract: "Tesseract",
   books: "your labelled books",
-  reader: "your letter reader",
+  reader: "your letter checker",
 };
 
 /** A trained letter reader (C14). */
@@ -619,12 +625,13 @@ export const api = {
   useWordList: (id: number, bookId: number, use: boolean) =>
     patch<WordListInfo>(`/api/wordlists/${id}`, { book_id: bookId, use }),
   deleteWordList: (id: number) => del<void>(`/api/wordlists/${id}`),
+  /** The text of one page, of some pages (the ticked ones, C19; none: every page) or of the whole part. */
   textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: TextSource,
-    pageId?: number) =>
-    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
-  /** The page images (not the text) of one page or of every Read Book page, as one PDF. */
-  pageImagesUrl: (id: number, pageId?: number) =>
-    `/files/page-images/${id}?part=read${pageId ? `&page_id=${pageId}` : ""}&token=${encodeURIComponent(token())}`,
+    pages?: number | number[]) =>
+    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pagesQuery(pages)}&token=${encodeURIComponent(token())}`,
+  /** The page images (not the text) of one page, of some pages or of every Read Book page, as one PDF. */
+  pageImagesUrl: (id: number, pages?: number | number[]) =>
+    `/files/page-images/${id}?part=read${pagesQuery(pages)}&token=${encodeURIComponent(token())}`,
   pagePart: (pageId: number, part: Part, force = false) =>
     post<{ page: number; part: Part; samples: number }>(`/api/pages/${pageId}/part`, { part, force }),
 

@@ -14,6 +14,8 @@
 // The section opens with a choice of how the text is read: "Whole lines (Tesseract)" (WholeLinesView:
 // Tesseract reads each line image as it is, no letters cut; measured best), "Whole lines (our reader)" (the
 // same view with the line search's reading, its Retrain and its fold-fair Measure) or "Cut letters" (this view).
+// Cut letters is hidden since C19 (its data is kept): the book setting show_cut_letters brings it back for
+// experiments.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ActionResult, Book, Marker, PageInfo, PageText, ProofreadStats, Readers, TextLetter, TextSummary } from "../api";
 import ErrorBox from "../components/ErrorBox";
@@ -66,12 +68,12 @@ interface Props {
 
 const READER_NAMES: Record<string, string> = {
   tesseract: "Tesseract",
-  reader: "your letter reader",
+  reader: "your letter checker",
   groups: "your groups",
   language: "the language model",
 };
 
-/** The readers of a converted page, in words ("Tesseract, your letter reader and your groups"). */
+/** The readers of a converted page, in words ("Tesseract, your letter checker and your groups"). */
 function readerWords(readers: string): string {
   const names = readers.split("+").filter(Boolean).map((r) => READER_NAMES[r] ?? r);
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "nothing";
@@ -110,7 +112,9 @@ function storedMode(): Mode {
 
 /** Read Book → Text: whole lines (Tesseract alone) or cut letters (with your groups, reader, language model). */
 export default function TextView(props: Props) {
-  const [mode, setMode] = useState<Mode>(storedMode);
+  const showLetters = props.book.settings?.show_cut_letters === true;
+  const [storedChoice, setMode] = useState<Mode>(storedMode);
+  const mode: Mode = storedChoice === "letters" && !showLetters ? "lines" : storedChoice;
   const [layout, setLayout] = useState<Layout>(storedLayout);
   const [pageStyle, setPageStyle] = useState<PageStyle>(() => stored("text-page-style", ["image", "strips"], "strips"));
   const [aligned, setAligned] = useState<boolean>(() => stored("text-aligned", ["on", "off"], "on") === "on");
@@ -141,10 +145,12 @@ export default function TextView(props: Props) {
           title="Our reader (the line search) reads each line without Tesseract, from this book's reviewed letters">
           Whole lines (our reader)
         </button>
-        <button className={mode === "letters" ? "tab active" : "tab"} onClick={() => choose("letters")}
-          title="The page is cut into letters, read by Tesseract and checked with your groups, reader and language model; letters can be corrected">
-          Cut letters
-        </button>
+        {showLetters && (
+          <button className={mode === "letters" ? "tab active" : "tab"} onClick={() => choose("letters")}
+            title="The page is cut into letters, read by Tesseract and checked with your groups, letter checker and language model; letters can be corrected">
+            Cut letters
+          </button>
+        )}
         <span className="spacer" />
         <div className="row" role="group" aria-label="Layout">
           <button className={layout === "page" ? "tab active" : "tab"} onClick={() => chooseLayout("page")}
@@ -180,7 +186,7 @@ export default function TextView(props: Props) {
             ? "Each line image goes to Tesseract as it is: no letters are cut."
             : mode === "search"
               ? "Our reader slides along each line and reads the letters it learned from your reviewed groups: no Tesseract."
-              : "Each cut letter is read and checked with your groups, letter reader and language model; proofread here."}
+              : "Each cut letter is read and checked with your groups, letter checker and language model; proofread here."}
         </span>
       </div>
       {mode === "lines" || mode === "search" ? (
@@ -604,9 +610,9 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
             </button>
             <button className={readers === "both" ? "tab active" : "tab"} onClick={() => chooseReaders("both")}
               title={hasReader
-                ? "Tesseract, your letter reader and your labelled groups vote on every letter: disagreements are marked uncertain"
+                ? "Tesseract, your letter checker and your labelled groups vote on every letter: disagreements are marked uncertain"
                 : "Tesseract checked against your labelled groups: disagreements are marked uncertain"}>
-              {hasReader ? "Tesseract + your reader and groups" : "Tesseract + your groups"}
+              {hasReader ? "Tesseract + your checker and groups" : "Tesseract + your groups"}
             </button>
           </div>
         )}
@@ -621,7 +627,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
       </div>
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
       {!pages.length ? (
-        <p className="muted">No Read Book pages are cut yet: upload the book and cut its pages first (Upload &amp; capture).</p>
+        <p className="muted">No Read Book pages are prepared yet: choose the book and prepare its pages first (Prepare).</p>
       ) : (
         <>
           <div className="row text-downloads" aria-label="Download">

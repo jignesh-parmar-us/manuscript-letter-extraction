@@ -362,7 +362,7 @@ export function SuggestPanel({ book, ctx, onRead }: { book: Book; ctx: ReviewCon
         {splitNote && <span>{splitNote}</span>}
         {!running && (
           <span className="muted">
-            {[lastRun(readerRun, "Your letter reader"), lastRun(run, "Tesseract"), lastRun(booksRun, "Labelled books")]
+            {[lastRun(readerRun, "Your letter checker"), lastRun(run, "Tesseract"), lastRun(booksRun, "Labelled books")]
               .filter(Boolean)
               .join(" · ") ||
               (printed

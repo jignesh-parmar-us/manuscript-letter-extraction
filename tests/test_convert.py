@@ -213,6 +213,8 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(len(pdfium.PdfDocument(r.content)), 1)
         r = c.get(f"/files/page-images/{self.book}?part=training&token=t")
         self.assertEqual(len(pdfium.PdfDocument(r.content)), n)                      # a PDF page for each page
+        r = c.get(f"/files/page-images/{self.book}?part=training&page_ids={self.page},999999&token=t")
+        self.assertEqual(len(pdfium.PdfDocument(r.content)), 1)                      # only the ticked pages (C19)
         self.assertEqual(c.get(f"/files/page-images/{self.book}?part=read&token=t").status_code, 404)
         c.close()
 

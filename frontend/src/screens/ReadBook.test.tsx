@@ -38,7 +38,7 @@ describe("ReadBook", () => {
     expect(await screen.findByText(/Turning the PDF into page images/)).toBeInTheDocument();
   });
 
-  it("takes a folder, cuts the remaining pages and lists them", async () => {
+  it("takes a folder, prepares the remaining pages for reading and lists them", async () => {
     vi.mocked(api.readFolder).mockResolvedValue(book({ read_dir: "/scans" }));
     vi.mocked(api.pageProblems).mockResolvedValue([{ file: "p3.png", problem: "new" }]);
     vi.mocked(api.pages).mockResolvedValue([
@@ -48,7 +48,7 @@ describe("ReadBook", () => {
     vi.mocked(api.readCapture).mockResolvedValue(job("capture_read"));
     const onChanged = vi.fn();
     render(<ReadBook book={book({ read_dir: "/scans" })} info={null} onChanged={onChanged} />);
-    expect(await screen.findByText("2 of 3 pages cut")).toBeInTheDocument();
+    expect(await screen.findByText("2 of 3 pages prepared")).toBeInTheDocument();
     expect(api.pages).toHaveBeenCalledWith(4, "read");
     const input = screen.getByLabelText("Folder of page images");
     await userEvent.clear(input);
@@ -56,11 +56,13 @@ describe("ReadBook", () => {
     await userEvent.click(screen.getByRole("button", { name: "Use this folder" }));
     expect(api.readFolder).toHaveBeenCalledWith(4, "/other", false);
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    await userEvent.click(screen.getByRole("button", { name: "Cut the remaining pages (1)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Prepare the remaining pages (1)" }));
     expect(api.readCapture).toHaveBeenCalledWith(4);
-    expect(await screen.findByText(/Cutting the Read Book pages/)).toBeInTheDocument();
+    expect(await screen.findByText(/Preparing the book pages for reading/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this folder" })).toBeDisabled();   // not while cutting
     const list = screen.getByRole("table", { name: "Read Book pages" });
+    expect(within(list).getAllByText("Prepared")).toHaveLength(2);                  // C19: not "OK", not "cut"
+    expect(within(list).getAllByRole("button", { name: "Prepare again" })).toHaveLength(2);
     await userEvent.click(within(list).getAllByRole("button", { name: "Open" })[1]);
     expect(window.location.hash).toBe("#/books/4/readpages/10");
   });

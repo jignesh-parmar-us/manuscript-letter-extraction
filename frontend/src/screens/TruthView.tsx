@@ -147,7 +147,7 @@ export default function TruthView({ book, pageId }: Props) {
         </span>
       </div>
       {!pages.length && progress && (
-        <p className="muted">No Read Book pages are cut yet: upload the book and cut its pages first (Upload &amp; capture).</p>
+        <p className="muted">No Read Book pages are prepared yet: choose the book and prepare its pages first (Prepare).</p>
       )}
       {line && (
         <div className="card truth-card">

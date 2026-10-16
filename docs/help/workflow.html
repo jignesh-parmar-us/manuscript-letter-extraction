@@ -158,22 +158,23 @@
       <div class="arrow">↓</div>
       <div class="step">
         <span class="n">5</span>
-        <h3>Train the letter reader</h3>
-        <p><span class="where">Training Data → Readers →</span> <span class="ui">Train</span> (about a minute). It learns your
-          reviewed letters and reports how many it reads right on pages it did not learn from.</p>
+        <h3>Train the letter checker</h3>
+        <p><span class="where">Training Data → Letter checker →</span> <span class="ui">Train</span> (about a minute). It
+          learns your reviewed letters, finds letters that are probably in the wrong group and suggests labels; it does not
+          read books. It reports how many letters it reads right on pages it did not learn from.</p>
         <p class="more"><a href="new-book.html#ready">Details →</a></p>
       </div>
       <div class="arrow">↓</div>
       <div class="step">
         <span class="n">6</span>
-        <h3>Fix what the reader finds</h3>
-        <p><span class="where">Review groups →</span> <span class="ui">Check these</span>: letters the reader is sure are in
+        <h3>Fix what the checker finds</h3>
+        <p><span class="where">Review groups →</span> <span class="ui">Check these</span>: letters the checker is sure are in
           the wrong group. <span class="ui">Move to …</span>, or <span class="ui">It is right</span>. In each group the same
           letters are outlined as possible mix-ups (⚠ in the list; <span class="ui">Show → Possible mix-ups</span>).</p>
       </div>
       <div class="loop">
         <strong>↺ Go round again</strong> whenever you like: review more groups (4), fix the letters in Check these (6),
-        then <strong>Train</strong> again (5). Each training makes a new reader; the older ones are kept.
+        then <strong>Train</strong> again (5). Each training makes a new checker; the older ones are kept.
       </div>
     </div>
   </section>
@@ -186,60 +187,60 @@
     <div class="flow">
       <div class="step">
         <span class="n">7</span>
-        <h3>Upload and cut the whole book</h3>
-        <p><span class="where">Read Book → Upload &amp; capture.</span> The book's PDF (<span class="ui">Use this PDF</span>)
-          or a folder of page images, then <span class="ui">Cut the pages</span>. It runs in the background; stopping keeps
-          the pages already cut.</p>
+        <h3>Prepare the whole book for reading</h3>
+        <p><span class="where">Read Book → Prepare.</span> The book's PDF (<span class="ui">Use this PDF</span>)
+          or a folder of page images, then <span class="ui">Prepare for reading</span>. It runs in the background; stopping
+          keeps the pages already prepared.</p>
         <p class="more"><a href="new-book.html#read">Details →</a></p>
       </div>
       <div class="arrow">↓</div>
       <div class="step">
         <span class="n">8</span>
-        <h3>Convert the pages into text</h3>
-        <p><span class="where">Read Book → Text →</span> <span class="ui">Convert all pages</span>. Each page is shown
-          beside its text, with uncertain letters highlighted. <span class="ui">Tesseract + your groups</span> marks far
-          more of the real mistakes than <span class="ui">Tesseract only</span>. The language model
-          (<span class="where">Read Book →</span> <span class="ui">Dictionary</span>) corrects some uncertain letters
+        <h3>Read the pages into text</h3>
+        <p><span class="where">Read Book → Text →</span> <span class="ui">Whole lines (Tesseract)</span> or
+          <span class="ui">Whole lines (our reader)</span> → <span class="ui">Read all pages</span>. Each line is read
+          whole; where the two readers differ, the aksharas are highlighted. The language model
+          (<span class="where">Read Book →</span> <span class="ui">Dictionary</span>) corrects some aksharas
           from the text it knows (underlined); give it more text by importing a <strong>word list</strong>, for example the
           full text of the book.</p>
       </div>
       <div class="arrow">↓</div>
       <div class="step">
         <span class="n">9</span>
-        <h3>Proofread</h3>
-        <p>Click a wrong letter (or <span class="ui">Next uncertain ▶</span>), type the right one, <span class="ui">Correct</span>.
-          <span class="ui">Two letters…</span>, <span class="ui">Join with the next</span> and <span class="ui">Not a letter</span>
-          fix bad boxes. Click <span class="ui">✓</span> at the end of each line that is right.</p>
+        <h3>Correct the lines</h3>
+        <p><span class="ui">✎ Correct</span> a wrong line and <span class="ui">Save</span>; click <span class="ui">✓</span>
+          on each line that is right. A line marked ✓ is also a checked line (Line truth), which our reader learns from
+          and is measured on.</p>
       </div>
       <div class="arrow">↓</div>
       <div class="step">
         <span class="n">10</span>
         <h3>Download the text</h3>
-        <p>The page or the whole book as <strong>.txt</strong>, <strong>Word</strong>, <strong>PDF</strong> or a
-          <strong>picture</strong>, with uncertain letters as [?], [?ક] or the best guess.</p>
+        <p>The ticked pages, or every page when none is ticked, as <strong>.txt</strong>, <strong>Word</strong>,
+          <strong>PDF</strong>, a <strong>picture</strong> per page or the page images, with uncertain letters as [?],
+          [?ક] or the best guess.</p>
       </div>
       <div class="loop other">
-        <strong>↺ Back to Part 1:</strong> every letter you correct in step 9 joins its group in Training Data, so the next
-        <strong>Train</strong> (5) learns from it. A page that reads very badly can be moved to Training Data
+        <strong>↺ Back to Part 1:</strong> the lines you check in step 9 and the groups you review in Part 1 are what
+        our reader's <strong>Retrain</strong> learns from. A page that reads very badly can be moved to Training Data
         (<span class="where">Read Book → Book pages →</span> <span class="ui">Use for training</span>) and labelled there.
       </div>
     </div>
   </section>
 
-  <div class="box note"><strong>What the reader changes.</strong> The letter reader (step 5) gives the groups their
-    suggestions, finds the letters in Check these and, when you convert (step 8), votes with Tesseract and your groups
-    on every letter <em>it was taught</em>. It learns only from <strong>reviewed</strong> groups: a big group you have
-    not reviewed (for example 155 म letters) is a letter it does not know, and that letter is read by Tesseract and
-    your groups alone. So reviewing the big groups, then training again (5) and converting again (8), improves the
-    text the most.</div>
+  <div class="box note"><strong>What the letter checker changes.</strong> The letter checker (step 5) gives the groups
+    their suggestions and finds the letters in Check these. It learns only from <strong>reviewed</strong> groups: a big
+    group you have not reviewed (for example 155 म letters) is a letter it does not know. It does not read the book:
+    the text comes from Whole lines (step 8). (The older <em>Cut letters</em> view, where it also voted, is hidden; see
+    <a href="new-book.html#read">Reading the whole book</a>.)</div>
 
   <h2 class="plain">Which step do I need?</h2>
   <table>
     <tr><th>I want to…</th><th>Go to</th></tr>
     <tr><td>start a new book</td><td>Steps 1 to 4, then 5</td></tr>
     <tr><td>get the text of a book whose Training Data is done</td><td>Steps 7 to 10</td></tr>
-    <tr><td>make the reader better</td><td>Review more groups (4), fix Check these (6), Train again (5)</td></tr>
-    <tr><td>make the text better</td><td>Review groups (4), then Convert again (8); proofread (9)</td></tr>
+    <tr><td>make the letter checker better</td><td>Review more groups (4), fix Check these (6), Train again (5)</td></tr>
+    <tr><td>make the text better</td><td>Review groups (4) and check lines (9), Retrain our reader, then Read again (8)</td></tr>
     <tr><td>add another book of the same print or hand</td><td>Keep the labelled book: in the new one, step 3 uses
       <span class="ui">Suggest from labelled books</span> to label it from the old one</td></tr>
   </table>

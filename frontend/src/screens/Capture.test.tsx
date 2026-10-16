@@ -116,6 +116,17 @@ describe("Capture", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  it("turns on the hidden Cut letters view, keeping the other settings", async () => {
+    const onChanged = vi.fn();
+    vi.mocked(api.setSettings).mockResolvedValue(book);
+    render(<Capture book={book} info={null} onChanged={onChanged} />);
+    const show = screen.getByRole("checkbox", { name: /Show Cut letters/ });
+    expect(show).not.toBeChecked();                                               // C19: off by default
+    await userEvent.click(show);
+    expect(api.setSettings).toHaveBeenCalledWith(1, { group_distance: 0.55, show_cut_letters: true });
+    expect(onChanged).toHaveBeenCalled();
+  });
+
   it("shows new pages and adds them", async () => {
     vi.mocked(api.addPages).mockResolvedValue(job({ kind: "add_pages", total: 1 }));
     vi.mocked(api.job).mockResolvedValue(job({ kind: "add_pages", status: "done", total: 1, done: 1, result: { pages: 1, lines: 3, samples: 27 } }));

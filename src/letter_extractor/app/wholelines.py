@@ -245,12 +245,15 @@ def book_whole_lines(lib: Library, book_id: int, part: str = "read", engine: str
 
 
 def whole_line_texts(lib: Library, book_id: int, part: str = "read", page_id: Optional[int] = None,
-                     engine: str = "tesseract"):
-    """(page, [line texts]) per page with lines read whole, in page order, for downloads."""
+                     engine: str = "tesseract", page_ids: Optional[Sequence[int]] = None):
+    """(page, [line texts]) per page with lines read whole, in page order, for downloads: one page, the
+    pages `page_ids` of the part (the ticked pages, C19), or every page of the part."""
     out = []
     with lib.session() as s:
         q = select(Page).where(Page.book_id == book_id)
         q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part)
+        if page_ids:
+            q = q.where(Page.id.in_(list(page_ids)))
         pages = s.scalars(q.order_by(Page.number, Page.id)).all()
         for p in pages:
             s.expunge(p)

@@ -11,11 +11,15 @@
 // no Tesseract, its aksharas with their places; where Tesseract reads differently is highlighted. Its reader
 // is trained on the book's reviewed letters (Retrain when they changed), and Measure scores it fold-fair on
 // the checked lines. Corrections and ✓ are the line's: the same in both views.
+//
+// Downloads (C19): .txt, Word, PDF, a picture per page and the page images, of the ticked pages (Pages to
+// download: a tick box per page, Select all / none), or of every page when none is ticked. The ticks are kept
+// per book in the browser, the same in both views.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, Book, LineEngine, LineSearchState, Marker, PageInfo, TextSource, WholeAkshara, WholeLine, WholeLines } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import LetterPalette from "../components/LetterPalette";
-import { PageImagesPdf, PrintPages } from "../components/PageDownloads";
+import { PrintPages } from "../components/PageDownloads";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
@@ -54,6 +58,41 @@ function stripOf(ln: WholeLine): Strip | undefined {
 /** A page's lines as plain text (no markers), for the picture and the PDF. */
 export function wholePlainLines(t: WholeLines, script: Script, lm: boolean): string[] {
   return t.lines.map((ln) => lineText(ln, script, lm));
+}
+
+/** The pages ticked for download in a book (ids), kept in the browser. */
+function storedTicks(bookId: number): Set<number> {
+  try {
+    const v = JSON.parse(localStorage.getItem(`export-pages-${bookId}`) ?? "[]");
+    return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "number") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** A page's text drawn by the browser (it joins Gujarati letters correctly), saved as `<file>.png`. */
+function savePicture(plain: string[], file: string) {
+  const size = 30;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.font = `${size}px ${FONT}`;
+  canvas.width = Math.ceil(Math.max(200, ...plain.map((l) => ctx.measureText(l).width))) + 2 * size;
+  canvas.height = plain.length * size * 1.7 + size;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#111";
+  ctx.font = `${size}px ${FONT}`;
+  ctx.textBaseline = "top";
+  plain.forEach((l, i) => ctx.fillText(l, size, size / 2 + i * size * 1.7));
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${file.replace(/\.[^.]+$/, "")}.png`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, "image/png");
 }
 
 function storedLm(): boolean {
@@ -97,6 +136,8 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   const [letters, setLetters] = useState(false);
   const [busy, setBusy] = useState(false);
   const [printing, setPrinting] = useState<WholeLines[] | null>(null);
+  const [ticked, setTicked] = useState<Set<number>>(() => storedTicks(book.id)); // pages to download
+  const [ticking, setTicking] = useState(false); // the tick boxes shown
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -255,35 +296,34 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
     }, 0);
   }
 
-  function downloadPicture() {
-    if (!text || !page) return;
-    const plain = wholePlainLines(text, script, lm);
-    const size = 30;
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.font = `${size}px ${FONT}`;
-    canvas.width = Math.ceil(Math.max(200, ...plain.map((l) => ctx.measureText(l).width))) + 2 * size;
-    canvas.height = plain.length * size * 1.7 + size;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#111";
-    ctx.font = `${size}px ${FONT}`;
-    ctx.textBaseline = "top";
-    plain.forEach((l, i) => ctx.fillText(l, size, size / 2 + i * size * 1.7));
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${page.file.replace(/\.[^.]+$/, "")}.png`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }, "image/png");
-  }
-  async function printPdf(whole: boolean) {
+  // the pages to download: the ticked ones (in page order), or every page when none is ticked
+  const tickedPages = pages.filter((p) => ticked.has(p.id));
+  const exportPages = tickedPages.length ? tickedPages : pages;
+  const exportRead = exportPages.filter((p) => read.has(p.id)).map((p) => p.id);
+  const only = tickedPages.length ? tickedPages.map((p) => p.id) : undefined; // undefined: the whole part
+  function tick(ids: Set<number>) {
+    setTicked(ids);
     try {
-      const ids = whole ? pages.filter((p) => read.has(p.id)).map((p) => p.id) : pageId ? [pageId] : [];
-      setPrinting(await Promise.all(ids.map((id) => api.wholeLines(id, engine))));   // the reading of this tab
+      localStorage.setItem(`export-pages-${book.id}`, JSON.stringify([...ids]));
+    } catch {
+      // a private window: the ticks last until the page is closed
+    }
+  }
+
+  async function downloadPictures() {
+    try {
+      for (const id of exportRead) {   // one picture per page, in page order
+        const t = id === pageId && text ? text : await api.wholeLines(id, engine);
+        savePicture(wholePlainLines(t, script, lm), pages.find((p) => p.id === id)?.file ?? `page ${id}`);
+        if (exportRead.length > 1) await new Promise((r) => window.setTimeout(r, 300));
+      }
+    } catch (e) {
+      setError(e);
+    }
+  }
+  async function printPdf() {
+    try {
+      setPrinting(await Promise.all(exportRead.map((id) => api.wholeLines(id, engine))));   // the reading of this tab
     } catch (e) {
       setError(e);
     }
@@ -436,7 +476,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         {ours ? (
           <>
             <button disabled={running || !page} onClick={() => page && readOurs([page.id])}
-              title="Our reader reads this page's lines (no Tesseract needed; the page must be cut into lines and letters)">
+              title="Our reader reads this page's lines (no Tesseract needed; the page must be prepared for reading)">
               {isRead ? "Read this page again" : "Read this page"}
             </button>
             <button disabled={running || !pages.length} onClick={() => readOurs()}
@@ -511,7 +551,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         )}
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
       {!pages.length ? (
-        <p className="muted">No Read Book pages are cut yet: upload the book and cut its pages first (Upload &amp; capture).</p>
+        <p className="muted">No Read Book pages are prepared yet: choose the book and prepare its pages first (Prepare).</p>
       ) : (
         <>
           <div className="row text-downloads" aria-label="Download">
@@ -522,34 +562,57 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
               <option value="mark">uncertain as [?]</option>
               <option value="guess">uncertain as [?ક] (best guess)</option>
             </select>
-            <a className={`button small${text ? "" : " disabled"}`}
-              href={text && pageId ? api.textUrl(book.id, "txt", script, marker, source, pageId) : undefined}>
-              Page .txt
-            </a>
-            <a className={`button small${text ? "" : " disabled"}`}
-              href={text && pageId ? api.textUrl(book.id, "docx", script, marker, source, pageId) : undefined}>
-              Page Word
-            </a>
-            <button className="small" disabled={!text} onClick={() => printPdf(false)}>
-              Page PDF
+            <button className="small" aria-expanded={ticking} onClick={() => setTicking((v) => !v)}
+              title="Tick the pages to download; with none ticked, every page is downloaded">
+              {tickedPages.length ? `${tickedPages.length} ticked pages` : `All ${pages.length} pages`} ▾
             </button>
-            <button className="small" disabled={!text} onClick={downloadPicture}>
-              Page picture
-            </button>
-            <span className="small muted">Whole book ({nRead} pages):</span>
-            <a className={`button small${nRead ? "" : " disabled"}`}
-              href={nRead ? api.textUrl(book.id, "txt", script, marker, source) : undefined}>
+            <span className="small muted">({exportRead.length} read):</span>
+            <a className={`button small${exportRead.length ? "" : " disabled"}`}
+              href={exportRead.length ? api.textUrl(book.id, "txt", script, marker, source, only) : undefined}>
               .txt
             </a>
-            <a className={`button small${nRead ? "" : " disabled"}`}
-              href={nRead ? api.textUrl(book.id, "docx", script, marker, source) : undefined}>
+            <a className={`button small${exportRead.length ? "" : " disabled"}`}
+              href={exportRead.length ? api.textUrl(book.id, "docx", script, marker, source, only) : undefined}>
               Word
             </a>
-            <button className="small" disabled={!nRead} onClick={() => printPdf(true)}>
+            <button className="small" disabled={!exportRead.length} onClick={printPdf}>
               PDF
             </button>
-            <PageImagesPdf bookId={book.id} pageId={page?.id ?? null} nPages={pages.length} />
+            <button className="small" disabled={!exportRead.length} onClick={downloadPictures}
+              title="A picture (.png) of the text of each page">
+              {exportRead.length > 1 ? `Pictures (${exportRead.length})` : "Picture"}
+            </button>
+            <a className="button small" href={api.pageImagesUrl(book.id, only)}
+              title="The page images (scans, not text) as one PDF, a page each">
+              Page images (PDF)
+            </a>
           </div>
+          {ticking && (
+            <div className="card subtle export-pages" aria-label="Pages to download">
+              <div className="row small">
+                <span className="muted">Pages to download (none ticked: every page):</span>
+                <button className="link" onClick={() => tick(new Set(pages.map((p) => p.id)))}>Select all</button>
+                <button className="link" onClick={() => tick(new Set())}>Select none</button>
+                {page && <button className="link" onClick={() => tick(new Set([page.id]))}>Only this page</button>}
+                <span className="spacer" />
+                <button className="link" onClick={() => setTicking(false)}>Done</button>
+              </div>
+              <div className="export-page-list">
+                {pages.map((p, i) => (
+                  <label key={p.id} className={`row small${p.id === pageId ? " current" : ""}`}>
+                    <input type="checkbox" checked={ticked.has(p.id)} onChange={() => {
+                      const next = new Set(ticked);
+                      if (next.has(p.id)) next.delete(p.id);
+                      else next.add(p.id);
+                      tick(next);
+                    }} />
+                    {i + 1}. {p.file}
+                    {!read.has(p.id) && <span className="muted"> (not read)</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           {!text ? (
             <p className="muted">
               {isRead

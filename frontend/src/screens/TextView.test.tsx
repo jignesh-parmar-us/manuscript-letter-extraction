@@ -8,10 +8,11 @@ vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { ...real.api, pages: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), convert: vi.fn(),
     job: vi.fn(), cancelJob: vi.fn(), proofread: vi.fn(), proofreadStats: vi.fn(), labelSamples: vi.fn(),
-    checkLabel: vi.fn(), split: vi.fn(), join: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn() } };
+    checkLabel: vi.fn(), split: vi.fn(), join: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn(), bookWholeLines: vi.fn() } };
 });
 
-const book = { id: 4, job: null } as unknown as Book;
+// these tests: the cut-letter view, hidden unless the book's setting shows it (C19)
+const book = { id: 4, job: null, settings: { show_cut_letters: true } } as unknown as Book;
 const letter = (id: number, dev: string, guj: string, x: number, over = {}) => ({
   sample_id: id, box: [x, 10, 20, 30] as [number, number, number, number], text_dev: dev, text_guj: guj, conf: 0.99,
   source: "both" as const, uncertain: false, space: false, readings: [["tesseract", dev, 98], ["groups", dev, 0.2]] as [string, string, number][],
@@ -163,7 +164,7 @@ describe("TextView", () => {
     expect(api.join).toHaveBeenCalledWith(4, [1, 2]);
   });
 
-  it("names the letter reader when the page was read with it", async () => {
+  it("names the letter checker when the page was read with it", async () => {
     localStorage.setItem("text-readers", "both");
     const withReader = structuredClone(text);
     withReader.readers = "tesseract+reader+groups";
@@ -171,10 +172,10 @@ describe("TextView", () => {
     vi.mocked(api.pageText).mockResolvedValue(withReader);
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     await waitFor(() => expect(letterEl("ર")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Tesseract + your reader and groups" })).toHaveClass("active");
-    expect(screen.getByText(/read by Tesseract, your letter reader and your groups/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tesseract + your checker and groups" })).toHaveClass("active");
+    expect(screen.getByText(/read by Tesseract, your letter checker and your groups/)).toBeInTheDocument();
     await userEvent.click(letterEl("ર"));
-    expect(screen.getByText(/Tesseract: र \(92\) · your letter reader: व \(97%\) · your groups: व \(0.3\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Tesseract: र \(92\) · your letter checker: व \(97%\) · your groups: व \(0.3\)/)).toBeInTheDocument();
   });
 
   it("moves between letters and lines with the arrow keys", async () => {
@@ -193,5 +194,17 @@ describe("TextView", () => {
 
   it("writes plain lines for the picture and the PDF", () => {
     expect(plainLines(text, "gujarati")).toEqual(["નાર", "કા?"]);
+  });
+});
+
+describe("TextView without the Cut letters setting", () => {
+  it("hides Cut letters and opens Whole lines instead, even when it was the last choice", async () => {
+    vi.mocked(api.pages).mockResolvedValue([]);
+    vi.mocked(api.bookWholeLines).mockResolvedValue([]);
+    localStorage.setItem("text-mode", "letters");
+    render(<TextView book={{ id: 4, job: null, settings: {} } as unknown as Book} pageId={null} onChanged={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Cut letters" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Whole lines (Tesseract)" })).toHaveClass("active");
+    expect(screen.queryByRole("button", { name: /Convert/ })).toBeNull();
   });
 });

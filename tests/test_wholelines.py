@@ -328,6 +328,16 @@ class WholeLineTests(unittest.TestCase):
         txt = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&script=devanagari"
                     f"&page_id={self.page}&token=t").text
         self.assertIn("नारायण भग", txt)                                             # the correction is downloaded
+        ticked = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&script=devanagari"
+                       f"&page_ids={self.page}&token=t")                             # the ticked pages (C19)
+        self.assertEqual(ticked.text, txt)
+        two = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&script=devanagari"
+                    f"&page_ids={self.page},999999&token=t").text                  # 999999: not this book's
+        self.assertIn("नारायण भग", two)
+        self.assertTrue(two.startswith("=== "))                                      # several pages: with headings
+        self.assertEqual(c.get(f"/files/texts/{self.book}?readers=lines&part=training&page_ids=999999&token=t")
+                         .status_code, 404)                                          # no ticked page of the book
+        self.assertEqual(c.get(f"/files/texts/{self.book}?readers=lines&page_ids=1;2&token=t").status_code, 422)
         self.assertEqual(c.get(f"/api/books/{self.book}/line-search", headers=h).json(), {"reader": None, "measure": None,
                                                                                          "quick_measure": None})
         self.assertEqual(c.get(f"/api/pages/{self.page}/whole-lines?engine=search", headers=h).status_code, 404)
