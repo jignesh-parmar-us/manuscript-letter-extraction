@@ -8,6 +8,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import samplepages                                                  # noqa: E402
 import synthetic                                                    # noqa: E402
 from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
@@ -103,11 +104,16 @@ class FlatLinesTests(unittest.TestCase):
 
 @unittest.skipUnless((SAMPLES / "page1.jpg").is_file(), "sample pages not present")
 class SamplePageLinesTests(unittest.TestCase):
+    LEVEL = samplepages.LEVEL
+
     def test_eleven_lines_on_every_sample_page(self):
         cfg = Config()
         for name in ("page1.jpg", "page2.jpg", "cleaned/page1.jpg", "cleaned/page2.jpg"):
-            rgb, _ = io_utils.load_image(SAMPLES / name)
-            layout = detect_lines(prepare_page(rgb, cfg), cfg)
+            if name in ("page1.jpg", "page2.jpg"):
+                layout = samplepages.processed(name).layout              # cut once, shared
+            else:
+                rgb, _ = io_utils.load_image(SAMPLES / name)
+                layout = detect_lines(prepare_page(rgb, cfg), cfg)
             self.assertEqual(len(layout.lines), 11, name)
             self.assertTrue(105 <= layout.spacing <= 120, (name, layout.spacing))
             if "page1" in name:          # 8 red lines, then black (the 8th ends in black)

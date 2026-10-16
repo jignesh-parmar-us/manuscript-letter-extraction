@@ -256,6 +256,7 @@ class CaptureTests(LibraryTestCase):
 
 @unittest.skipUnless((SAMPLES / "page1.jpg").is_file(), "sample pages not present")
 class SampleBookTests(unittest.TestCase):
+    LEVEL = "full"                    # end to end: tools/test_parallel.py runs it in `full` only
     def test_sample_pages_as_a_book(self):
         tmp = Path(tempfile.mkdtemp())
         try:

@@ -8,7 +8,11 @@ in `frontend/`, SQLite library at `~/Documents/Manuscript Letters`.
 - Build the screen: `npm run build` (again after changes in `frontend/`)
 - App in the browser on a fixed port: `PYTHONPATH=src .venv/bin/python -m letter_extractor.app --browser --port 8675`
 - Command-line pipeline: `PYTHONPATH=src .venv/bin/python -m letter_extractor --input samples --output out --debug`
-- Backend tests: `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests`
+- Backend tests in 4 processes: `PYTHONPATH=src .venv/bin/python tools/test_parallel.py fast` (all but the
+  sample-page and end-to-end tests) or `... tools/test_parallel.py full` (all; takes the heavy-job lock).
+  One module: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_wholelines`. The old one-process run
+  `python -m unittest discover -s tests` still works (about 6 min).
+- Left-over test / harness processes, library copies and caches: `tools/cleanup.sh` (asks before it stops or deletes)
 - Screen tests and type check: `npm test`, `npm run typecheck`
 - The Mac is Intel. Give macOS commands for zsh (`set VAR=x` is Windows syntax).
 - **Font Maker** is a separate app in `font-maker/` (own code, screen, tests; reads the library read-only).
@@ -20,7 +24,7 @@ in `frontend/`, SQLite library at `~/Documents/Manuscript Letters`.
 - Before a commit, run the tests for the code you changed
   (e.g. `PYTHONPATH=src .venv/bin/python -m unittest tests.test_wholelines`), and `npm test`
   only if `frontend/` changed. Run the full suites at the end of a chunk or before a merge
-  (backend ≈ 12 min, screen ≈ 1.5 min). Add a test with every fix.
+  (backend `full` ≈ 2 min, `fast` ≈ 2 min, screen ≈ 1.5 min). Add a test with every fix.
 - **No heavy runs while implementing:** no Measure, no harness, no full backend suite. Run only the
   tests of the changed modules; prove "same numbers" changes with small equality tests. Heavy runs only
   when I ask, one at a time (`docs/SPEED_PLAN.md`).

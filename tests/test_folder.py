@@ -57,6 +57,22 @@ class FolderTests(unittest.TestCase):
                                   "page10.jpg": "OK", "notes.txt": "IGNORED"})
         self.assertEqual(_hashes(self.inp), before, "input folder must never change")
 
+    def test_pages_are_cut_the_same_in_worker_processes(self):
+        self._page("a.png")
+        self._page("b.png")
+        alone = process_folder(self.inp, self.tmp / "one", CFG)
+        pool = process_folder(self.inp, self.out, Config(workers=2))         # one thread each, stopped with us
+        self.assertEqual([(r.file, r.status, r.letters) for r in pool], [(r.file, r.status, r.letters) for r in alone])
+        self.assertEqual(_hashes(self.tmp / "one" / "letters" / "a"), _hashes(self.out / "letters" / "a"))
+
+    def test_the_number_of_workers_can_be_set_for_test_runs(self):
+        from unittest import mock
+        from letter_extractor.pipeline import default_workers
+        with mock.patch.dict("os.environ", {"LETTER_EXTRACTOR_WORKERS": "1"}):
+            self.assertEqual(default_workers(), 1)
+        with mock.patch.dict("os.environ", {"LETTER_EXTRACTOR_WORKERS": ""}):
+            self.assertGreaterEqual(default_workers(), 1)
+
     def test_report_has_page_size_and_block(self):
         self._page("p.png")
         process_folder(self.inp, self.out, CFG)

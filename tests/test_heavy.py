@@ -34,6 +34,10 @@ class HeavyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.lock = self.tmp / "heavy.lock"
+        env = mock.patch.dict(os.environ)                                   # run by tools/test_parallel.py full,
+        env.start()                                                         # this process is inside its lock
+        self.addCleanup(env.stop)
+        os.environ.pop(heavy.HELD, None)
 
     def tearDown(self):
         import shutil
@@ -95,7 +99,7 @@ class HeavyTests(unittest.TestCase):
                "    pids = [p.pid for p in ex._processes.values()]\n"
                "    ex.submit(time.sleep, 60)\n"
                "    print(' '.join(map(str, pids)), flush=True); time.sleep(60)\n")
-        p = subprocess.Popen([sys.executable, "-c", run], stdout=subprocess.PIPE, text=True)
+        p = subprocess.Popen([sys.executable, "-c", run], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         p.stdout.readline()
         pids = [int(x) for x in p.stdout.readline().split()]
         self.assertEqual(len(pids), 2)

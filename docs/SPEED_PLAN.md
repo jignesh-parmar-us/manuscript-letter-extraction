@@ -3,9 +3,9 @@
 Comes **before Phase 3** (built from `docs/implementation_plan_phase3_lean.md`): every Phase 3 chunk is checked with the
 tests and with Measure, so they must be fast first.
 
-**Status:** a plan, not built. Written 2026-10-15; the questions were answered the same day (section 5) and
+**Status:** S1 and S2 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S3. Written 2026-10-15; the questions were answered the same day (section 5) and
 the plan cut down to a lean scope the same day (section 6). S4 (faster reading and retraining) added the
-same day; its questions are open (section 5). Next: S1.
+same day; its questions are open (section 5).
 
 ## 1. Where the time goes today (checked 2026-10-15)
 
@@ -92,6 +92,28 @@ Python process behind; a copy of the library takes seconds.
 - CLAUDE.md gets the new commands and times.
 
 **Done when:** `full` passes in at most 2 minutes, `fast` in at most 1, the same 375 tests as before.
+
+**Built (2026-10-16)**, test `tests/test_parallel_runner.py`. What differs from the plan, and the numbers:
+
+- **One task per test class**, not per module: `test_book_parts` alone (77 s) was the longest path. The
+  classes are read from the files without importing them; their times are kept in `tests/.durations.json`
+  (not in git) and the slowest start first.
+- **Not `multiprocessing.Pool`**: its workers are daemons and may not start the page workers that capture uses;
+  a `ProcessPoolExecutor` (spawn) with `heavy.worker_init` (one thread, nice, stops with the run).
+- **Pages cut in the test process** (`LETTER_EXTRACTOR_WORKERS=1` in the runner's processes): starting a pool of
+  page workers costs about 3 s per worker on this Mac (importing NumPy, OpenCV, FastAPI), more than cutting a
+  synthetic page. A test cutting pages in 2 real worker processes (`test_folder`,
+  `test_pages_are_cut_the_same_in_worker_processes`) keeps that path tested.
+- **Shared sample pages:** `tests/samplepages.py` cuts page1 and page2 once per process; the sample-page
+  classes (lines, pieces, letters, grouping, prepare: `LEVEL = "samples"`) run in one task. The end-to-end
+  class `test_library.SampleBookTests` has `LEVEL = "full"`.
+- **Tests:** 382 after S1 (375 + 7), 386 with this chunk's 4; `fast` leaves out 7.
+- **Times (measured on a busy computer: Spotlight indexing, load 6-15):** `full` 122 s (382 tests, one run);
+  `fast` 112 s. **`fast` is not under 1 minute.** The plan assumed the sample-page tests were the slow part;
+  they are about 40 s of CPU out of about 320 s. The rest is spread over the app tests, most of which capture
+  a synthetic book or copy one (`appbook`), 5-15 s per class. Getting `fast` under a minute needs those
+  tests to share their captured books (e.g. `test_book_parts.ReadBookTests`, 44 s, captures in every
+  `setUp`): a later chunk, if wanted, not done here. `full` and `fast` to be timed again in S5 on a quiet computer.
 
 ### S3. The Measure cache: each letter, line and mask computed once (3–4 h)
 
@@ -272,7 +294,7 @@ measured in turn to find which one.
 
 | | Today | After S1–S4 |
 |---|---|---|
-| Backend tests | about 6 min, 1 core | about 1.5–2 min; `fast` under 1 min |
+| Backend tests | about 6 min, 1 core | about 2 min (S2: `full` 122 s; `fast` 112 s, not under 1 min) |
 | App Measure | 42 min | about 10 min the first time, about 5 min when nothing changed |
 | A library copy | 3.2 GB, minutes | about 40 s, almost no disk (S1) |
 | Running two heavy jobs by mistake | both slow, swapping | the second waits |
@@ -314,7 +336,7 @@ To cut the building time from 11–13 h to **about 5–7 h**, the first plan was
 | Chunk | My work | Heavy runs |
 |---|---|---|
 | S1 CPU fights, copies (built) | about 1 h | — |
-| S2 parallel tests | 1.5–2 h | — |
+| S2 parallel tests (built) | 1.5–2 h | — |
 | S3 Measure cache | 3–4 h | — |
 | S4 faster reading and retraining | 3–4 h | — |
 | S5 heavy session | 30 min to set up and report | about 2.5 h, unattended, when the user says |

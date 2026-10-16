@@ -12,8 +12,8 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import samplepages                                                  # noqa: E402
 import synthetic                                                    # noqa: E402
-from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.pipeline import process_folder, process_page  # noqa: E402
 
@@ -100,12 +100,11 @@ class OutputTests(unittest.TestCase):
 class SamplePageLettersTests(unittest.TestCase):
     """Baseline measured when C3b was tuned (docs/TUNING.md): 36-44 letters per line, dandas found
     on page 1 (red verses) and only a few on page 2 (prose)."""
+    LEVEL = samplepages.LEVEL
 
     def test_letters_per_line(self):
-        cfg = Config()
         for name, dandas in (("page1.jpg", (15, 40)), ("page2.jpg", (0, 6))):
-            rgb, _ = io_utils.load_image(SAMPLES / name)
-            d = process_page(rgb, cfg)
+            d = samplepages.processed(name)
             per_line = len(d.letters) / len(d.layout.lines)
             self.assertTrue(36 <= per_line <= 44, (name, per_line))
             n_danda = sum(L.kind == "danda" for L in d.letters)

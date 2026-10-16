@@ -8,8 +8,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import samplepages                                                  # noqa: E402
 import synthetic                                                    # noqa: E402
-from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.pipeline import process_page                  # noqa: E402
 
@@ -60,12 +60,11 @@ class KnownJoinsTests(unittest.TestCase):
 class SamplePagePiecesTests(unittest.TestCase):
     """Baseline on the real pages, measured when C3a was tuned: about 36-46 pieces per line
     (a line holds roughly 40-50 letters; vowel bars give extra pieces, touching headlines fewer)."""
+    LEVEL = samplepages.LEVEL
 
     def test_pieces_per_line(self):
-        cfg = Config()
         for name in ("page1.jpg", "page2.jpg"):
-            rgb, _ = io_utils.load_image(SAMPLES / name)
-            d = process_page(rgb, cfg)
+            d = samplepages.processed(name)
             layout, pieces = d.layout, d.pieces
             per_line = len(pieces) / len(layout.lines)
             self.assertTrue(33 <= per_line <= 48, (name, per_line))

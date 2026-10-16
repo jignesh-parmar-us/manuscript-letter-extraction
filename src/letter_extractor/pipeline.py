@@ -157,6 +157,10 @@ def _work(src: str, out_dir: str) -> PageResult:
 
 
 def default_workers() -> int:
+    """Up to 6 worker processes, one core left; LETTER_EXTRACTOR_WORKERS sets it (tools/test_parallel.py: 1, as its
+    test processes already run side by side)."""
+    if os.environ.get("LETTER_EXTRACTOR_WORKERS", "").isdigit():
+        return max(1, int(os.environ["LETTER_EXTRACTOR_WORKERS"]))
     return max(1, min((os.cpu_count() or 2) - 1, 6))
 
 

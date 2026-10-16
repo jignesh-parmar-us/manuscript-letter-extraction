@@ -13,12 +13,12 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import samplepages                                                  # noqa: E402
 import synthetic                                                    # noqa: E402
-from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.features import fingerprint, fingerprint_size  # noqa: E402
 from letter_extractor.grouping import UNSURE, group_samples         # noqa: E402
-from letter_extractor.pipeline import process_folder, process_page  # noqa: E402
+from letter_extractor.pipeline import process_folder                # noqa: E402
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 SHAPES = "ABCZEHKX"     # clearly different shapes; look-alikes such as B / D may share a group
@@ -129,13 +129,13 @@ class OutputTests(unittest.TestCase):
 @unittest.skipUnless((SAMPLES / "page1.jpg").is_file(), "sample pages not present")
 class SamplePagesGroupingTests(unittest.TestCase):
     """Baseline measured when C4 was tuned (docs/TUNING.md): about 54 groups and 28% unsure."""
+    LEVEL = samplepages.LEVEL
 
     def test_both_pages(self):
         cfg = Config()
         feats, kinds = [], []
         for name in ("page1.jpg", "page2.jpg"):
-            rgb, _ = io_utils.load_image(SAMPLES / name)
-            d = process_page(rgb, cfg)
+            d = samplepages.processed(name)
             feats += [fingerprint(L.mask, d.layout.spacing, cfg) for L in d.letters]
             kinds += [L.kind for L in d.letters]
         g = group_samples(np.stack(feats), kinds, cfg)

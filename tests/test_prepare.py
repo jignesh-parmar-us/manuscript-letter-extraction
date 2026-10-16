@@ -8,6 +8,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import samplepages                                                  # noqa: E402
 import synthetic                                                    # noqa: E402
 from letter_extractor import io_utils                               # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
@@ -121,8 +122,11 @@ class RuledLineTests(unittest.TestCase):
 @unittest.skipUnless((SAMPLES / "page1.jpg").is_file(), "sample pages not present")
 class SamplePageTests(unittest.TestCase):
     """Regression checks on the real pages: values were measured when C1 was tuned."""
+    LEVEL = samplepages.LEVEL
 
     def _prepare(self, name):
+        if name in ("page1.jpg", "page2.jpg"):
+            return samplepages.processed(name).page                     # cut once, shared
         rgb, _ = io_utils.load_image(SAMPLES / name)
         return prepare_page(rgb, Config())
 
