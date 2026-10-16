@@ -4,7 +4,7 @@ Comes **before Phase 3** (built from `docs/implementation_plan_phase3_lean.md`):
 tests and with Measure, so they must be fast first.
 
 **Status:** S1–S4 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S5, the heavy session,
-when the user chooses (questions 7–9 still open; the defaults chosen are in S4). Written 2026-10-15; the questions were answered the same day (section 5) and
+started 2026-10-16 (questions 7–9 answered: section 5). Written 2026-10-15; the questions were answered the same day (section 5) and
 the plan cut down to a lean scope the same day (section 6). S4 (faster reading and retraining) added the
 same day; its questions are open (section 5).
 
@@ -327,7 +327,7 @@ how it differs from the plan:
   of `samples/page1.jpg` (5,600–9,000 windows): **1.8–2.05x**. The blur and the two resizes per window are still
   one OpenCV call each (about a third of what is left).
 - **b. Lines in parallel (same results, tested):** `segment.LinePool`, 3 worker processes by default (book
-  setting `line_workers`; question 7 open: 3 or 4), one thread each, lower priority, stopped with their parent
+  setting `line_workers`; 2 since question 7 was answered), one thread each, lower priority, stopped with their parent
   (tested by killing the parent). Reading (`search_book`: one pool for the book; Measure: one per fold, holding
   that fold's reader and language model) and learning from the checked lines (`_learn_folds`: the windows in
   the workers, the base readers' probabilities and `align` in the main process). Results in line order.
@@ -379,11 +379,11 @@ measured in turn to find which one.
 5. The lean scope (section 6): **yes**.
 6. A chunk for faster reading and retraining (S4), before the heavy session; S4d/e measured in S5: **yes**.
 
-**Open (S4):**
+**Answered 2026-10-16 (S4):**
 
-7. Workers for reading in parallel: 3 (one core left for the app and the editor), or 4?
-8. Batch size to try in S5: 512 only, or 256 and 512?
-9. Base reader epochs to try in S5: 5 and 8?
+7. Workers for reading in parallel: **2** (`line_workers` default 2; S4 was built with 3).
+8. Batch size to try in S5: **512 only; 256 as well if 512 gets worse.**
+9. Base reader epochs to try in S5: **5 and 8.**
 
 ## 6. Lean scope (2026-10-15) and later
 
