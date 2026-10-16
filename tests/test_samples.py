@@ -201,7 +201,7 @@ class ApiTests(SampleTestCase):
         self.assertEqual(r.status_code, 404)
         img = np.full((50, 50, 3), 220, np.uint8)
         img[10:40, 20:28] = 20
-        r = c.post(f"/api/books/{self.book}/samples/upload", headers=h, json={"filename": "a.png", "data": _png(img)})
+        r = c.post(f"/api/datasets/{self.book}/samples/upload", headers=h, json={"filename": "a.png", "data": _png(img)})
         self.assertEqual(r.json()["sample"]["page_id"], None)
         c.close()
 

@@ -29,7 +29,7 @@ from ..ocr.aksharas import line_aksharas
 from ..ocr.align import align_line
 from ..ocr.tesseract import LineReading, TesseractError, find_tesseract, read_line
 from .centres import centres
-from .db import Book, LetterGroup, Line, OcrReading, OcrRun, Page, Sample, now
+from .db import DATASET, Book, LetterGroup, Line, OcrReading, OcrRun, Page, Sample, now
 from .library import Cancelled, Library, LibraryError
 
 LineReader = Callable[[np.ndarray], LineReading]
@@ -167,7 +167,7 @@ def reference_books(lib: Library, book_id: int) -> List[Dict]:
     cfg = lib.book_config(book)
     out = []
     with lib.session() as s:
-        for other in s.scalars(select(Book).where(Book.id != book_id).order_by(Book.name)):
+        for other in s.scalars(select(Book).where(Book.id != book_id, Book.kind == DATASET).order_by(Book.name)):
             n = s.scalar(select(func.count(LetterGroup.id)).where(LetterGroup.book_id == other.id,
                                                                   LetterGroup.label_dev != "")) or 0
             if not n:

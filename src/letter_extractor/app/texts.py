@@ -202,6 +202,13 @@ def _language_model(lib: Library, book: Book, cfg):
     return lm if len(lm) else None
 
 
+def _groups_for(s, book: Book):
+    """The labelled groups (and centres) that check a book's letters: its dataset's since C20 (none when it has
+    no dataset; a dataset's own)."""
+    src = Library.training_source(book)
+    return centres(s, src if src is not None else book.id, labelled_only=True)
+
+
 def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None,
                  targets=None, letter_reader="book", lm="book") -> Dict:
     """Convert one page and store its text. `reader` reads a line image (Tesseract by default on printed
@@ -221,7 +228,7 @@ def convert_page(lib: Library, page_id: int, reader: Optional[LineReader] = None
         by_line: Dict[int, List[Sample]] = {}
         for x in smps:
             by_line.setdefault(x.line_id, []).append(x)
-        groups, C = targets if targets is not None else centres(s, book.id, labelled_only=True)
+        groups, C = targets if targets is not None else _groups_for(s, book)
         tess: Dict[int, Tuple[str, float]] = {}
         readers = []
         if printed and reader is not None:
@@ -325,7 +332,7 @@ def convert_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] =
         q = select(Page.id).where(Page.book_id == book_id)
         q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
         ids = list(s.scalars(q.order_by(Page.number, Page.id)))
-        targets = centres(s, book_id, labelled_only=True)
+        targets = _groups_for(s, book)
     if not ids:
         raise LibraryError("No pages to convert: cut the Read Book pages first.")
     if reader is None and book.writing == "printed":

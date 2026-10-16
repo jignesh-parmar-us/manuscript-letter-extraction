@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, Book, PageDetail } from "../api";
+import { api, Book, PageDetail } from "../api";
 import { openOnPage } from "../components/returnSpot";
 import PageViewer, { groupColour } from "./PageViewer";
 import { group, sample } from "./reviewTestUtils";
@@ -10,7 +10,7 @@ vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { pages: vi.fn(), page: vi.fn(), groups: vi.fn(), crop: vi.fn(), join: vi.fn(), split: vi.fn(),
     upload: vi.fn(), deleteSamples: vi.fn(), undo: vi.fn(), redo: vi.fn(), move: vi.fn(), newGroup: vi.fn(), label: vi.fn(),
-    checkLabel: vi.fn(), labelSamples: vi.fn(), pagePart: vi.fn() } };
+    checkLabel: vi.fn(), labelSamples: vi.fn() } };
 });
 
 const book = { id: 1 } as Book;
@@ -234,10 +234,8 @@ describe("PageViewer", () => {
     await waitFor(() => expect(api.split).toHaveBeenCalledWith(1, 3, 220));
   });
 
-  it("on a Read Book page: fixes cuts only, and the page can be used for training", async () => {
-    vi.mocked(api.pagePart).mockResolvedValue({ page: 3, part: "training", samples: 3 });
-    const onChanged = vi.fn();
-    render(<PageViewer book={book} pageId={3} part="read" onChanged={onChanged} />);
+  it("on a Read Book page: fixes cuts only", async () => {
+    render(<PageViewer book={book} pageId={3} part="read" onChanged={() => {}} />);
     fireEvent.click(await screen.findByTestId("box-2"));
     expect(api.pages).toHaveBeenCalledWith(1, "read");
     expect(screen.getByText(/Read Book letters are not grouped/)).toBeInTheDocument();
@@ -245,23 +243,13 @@ describe("PageViewer", () => {
     expect(screen.queryByLabelText("Label")).toBeNull();
     expect(screen.queryByText("Upload letter image…")).toBeNull();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();       // cuts can be fixed
-    await userEvent.click(screen.getByRole("button", { name: "Use for training" }));
-    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Use for training" }));
-    expect(api.pagePart).toHaveBeenCalledWith(3, "training");
-    expect(window.location.hash).toBe("#/books/1/pages/3");
-    expect(onChanged).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Use for training" })).toBeNull();     // C20: a book only reads
   });
 
-  it("asks again before a training page with reviewed letters is used for reading", async () => {
-    vi.mocked(api.pagePart)
-      .mockRejectedValueOnce(new ApiError(409, "This page has letters that were reviewed.", "needs_confirmation"))
-      .mockResolvedValueOnce({ page: 3, part: "read", samples: 3 });
+  it("a dataset's page is not offered for reading", async () => {
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Use for reading" }));
-    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Use for reading" }));
-    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Use for reading" }));
-    await waitFor(() => expect(api.pagePart).toHaveBeenLastCalledWith(3, "read", true));
-    expect(window.location.hash).toBe("#/books/1/readpages/3");
+    await screen.findByTestId("box-2");
+    expect(screen.queryByRole("button", { name: "Use for reading" })).toBeNull();      // C20: a dataset only trains
   });
 
   it("uploads a letter image as base64", async () => {

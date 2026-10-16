@@ -7,11 +7,11 @@ import ReadBook from "./ReadBook";
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), readPdf: vi.fn(), readFolder: vi.fn(),
-    readCapture: vi.fn(), cancelJob: vi.fn(), job: vi.fn(), pickFolder: vi.fn() } };
+    readCapture: vi.fn(), cancelJob: vi.fn(), job: vi.fn(), pickFolder: vi.fn(), setSettings: vi.fn() } };
 });
 
 const book = (over: Partial<Book> = {}): Book => ({
-  id: 4, name: "B", input_dir: "/train", writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
+  id: 4, name: "B", kind: "book", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/train", writing: "printed", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
   pages: 23, samples: 100, groups: 10, labelled: 5, unsure: 3, created_at: null, updated_at: null, captured_at: null,
   settings: {}, undo: 0, redo: 0, job: null, ...over,
 });
@@ -65,5 +65,16 @@ describe("ReadBook", () => {
     expect(within(list).getAllByRole("button", { name: "Prepare again" })).toHaveLength(2);
     await userEvent.click(within(list).getAllByRole("button", { name: "Open" })[1]);
     expect(window.location.hash).toBe("#/books/4/readpages/10");
+  });
+
+  it("turns on the hidden Cut letters view, keeping the other settings", async () => {
+    const onChanged = vi.fn();
+    vi.mocked(api.setSettings).mockResolvedValue(book());
+    render(<ReadBook book={book({ settings: { group_distance: 0.55 } })} info={null} onChanged={onChanged} />);
+    const show = screen.getByRole("checkbox", { name: /Show Cut letters/ });
+    expect(show).not.toBeChecked();                                               // C19: off by default
+    await userEvent.click(show);                                                  // C20: a book's setting
+    expect(api.setSettings).toHaveBeenCalledWith(4, { group_distance: 0.55, show_cut_letters: true });
+    expect(onChanged).toHaveBeenCalled();
   });
 });

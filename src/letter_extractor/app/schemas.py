@@ -14,6 +14,7 @@ class BookCreate(BaseModel):
     input_dir: str = ""                           # Training Data page images; may be chosen later
     settings: Optional[Dict[str, Any]] = None     # overrides of the default Config
     writing: Writing = "handwritten"
+    dataset_id: Optional[int] = None              # a new book: the dataset it learns from (C20)
 
 
 class BookUpdate(BaseModel):

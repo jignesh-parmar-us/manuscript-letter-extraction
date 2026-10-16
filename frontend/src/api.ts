@@ -72,6 +72,7 @@ export interface AppInfo {
   library: string;
   mode: "window" | "browser";
   can_pick_folder: boolean;
+  uploads?: string; // where new uploads go (C20; used from C21)
 }
 
 /** How a book is written. Printed books can be read by Tesseract to suggest labels (Phase 2);
@@ -82,9 +83,19 @@ export const WRITING_LABEL: Record<Writing, string> = { handwritten: "Handwritte
 
 export type Part = "training" | "read"; // the two parts of a book (C16a): Training Data, Read Book
 
+/** What a library row is (Phase 3, C20): a dataset (Training Data: cut, grouped, reviewed, labelled) or a book
+ *  (Read Book: read). A book learns from its dataset (`dataset_id`). */
+export type Kind = "dataset" | "book";
+
+export const KIND_LABEL: Record<Kind, string> = { dataset: "Dataset", book: "Book" };
+
 export interface BookSummary {
   id: number;
   name: string;
+  kind: Kind;
+  dataset_id: number | null; // a book: the dataset it learns from (C20)
+  dataset_name: string;
+  used_by: { id: number; name: string }[]; // a dataset: the books that learn from it
   input_dir: string;
   writing: Writing;
   read_dir: string; // Read Book: a folder of images, or...
@@ -555,22 +566,26 @@ export const api = {
   openHelp: (page: string) => post<{ opened: string }>("/api/app/open-help", { page }),
 
   books: () => get<BookSummary[]>("/api/books"),
+  datasets: () => get<BookSummary[]>("/api/datasets"),
+  /** A dataset or a book (C20: the routes of what both have answer under /api/books for either). */
   book: (id: number) => get<Book>(`/api/books/${id}`),
-  createBook: (name: string, writing: Writing) => post<Book>("/api/books", { name, writing }),
-  setInputFolder: (id: number, path: string) => post<Book>(`/api/books/${id}/folder`, { path }),
+  createDataset: (name: string, writing: Writing) => post<Book>("/api/datasets", { name, writing }),
+  createBook: (name: string, writing: Writing, datasetId: number | null = null) =>
+    post<Book>("/api/books", { name, writing, dataset_id: datasetId }),
+  setInputFolder: (id: number, path: string) => post<Book>(`/api/datasets/${id}/folder`, { path }),
   renameBook: (id: number, name: string) => patch<Book>(`/api/books/${id}`, { name }),
   setWriting: (id: number, writing: Writing) => patch<Book>(`/api/books/${id}`, { writing }),
-  suggest: (id: number) => post<Job>(`/api/books/${id}/suggest`, { engine: "tesseract" }),
-  fixCuts: (id: number) => post<Job>(`/api/books/${id}/fix-cuts`),
-  fixBars: (id: number) => post<Job>(`/api/books/${id}/fix-bars`),
-  generateLetters: (id: number) => post<Job>(`/api/books/${id}/generate-letters`),
-  topUp: (id: number) => post<Job>(`/api/books/${id}/top-up`),
+  suggest: (id: number) => post<Job>(`/api/datasets/${id}/suggest`, { engine: "tesseract" }),
+  fixCuts: (id: number) => post<Job>(`/api/datasets/${id}/fix-cuts`),
+  fixBars: (id: number) => post<Job>(`/api/datasets/${id}/fix-bars`),
+  generateLetters: (id: number) => post<Job>(`/api/datasets/${id}/generate-letters`),
+  topUp: (id: number) => post<Job>(`/api/datasets/${id}/top-up`),
   tesseract: (bookId: number) => get<TesseractStatus>(`/api/tesseract?book_id=${bookId}`),
   accuracy: (bookId: number, engine?: Engine) =>
-    get<SuggestionAccuracy>(`/api/books/${bookId}/suggestion-accuracy${engine ? `?engine=${engine}` : ""}`),
-  referenceBooks: (bookId: number) => get<ReferenceBook[]>(`/api/books/${bookId}/reference-books`),
+    get<SuggestionAccuracy>(`/api/datasets/${bookId}/suggestion-accuracy${engine ? `?engine=${engine}` : ""}`),
+  referenceBooks: (bookId: number) => get<ReferenceBook[]>(`/api/datasets/${bookId}/reference-books`),
   suggestBooks: (id: number, books: number[] | null) =>
-    post<Job>(`/api/books/${id}/suggest`, { engine: "books", books }),
+    post<Job>(`/api/datasets/${id}/suggest`, { engine: "books", books }),
   deleteBook: (id: number) => del<void>(`/api/books/${id}`),
   setSettings: (id: number, settings: Record<string, unknown> | null) =>
     patch<Book>(`/api/books/${id}/settings`, { settings }),
@@ -580,14 +595,14 @@ export const api = {
   readPdf: (id: number, path: string, force = false) => post<Job>(`/api/books/${id}/read/pdf`, { path, force }),
   readCapture: (id: number) => post<Job>(`/api/books/${id}/read/capture`),
   train: (id: number, opts: { books?: number[]; min_samples: number; include_unreviewed: boolean; include_words: boolean; name?: string }) =>
-    post<Job>(`/api/books/${id}/train`, opts),
+    post<Job>(`/api/datasets/${id}/train`, opts),
   readers: () => get<ReaderInfo[]>("/api/readers"),
   reader: (readerId: number) => get<ReaderInfo>(`/api/readers/${readerId}`),
   deleteReader: (readerId: number) => del<void>(`/api/readers/${readerId}`),
-  useReader: (id: number, readerId: number | null) => post<Job>(`/api/books/${id}/reader`, { reader_id: readerId }),
-  checkThese: (id: number) => get<CheckItem[]>(`/api/books/${id}/check`),
+  useReader: (id: number, readerId: number | null) => post<Job>(`/api/datasets/${id}/reader`, { reader_id: readerId }),
+  checkThese: (id: number) => get<CheckItem[]>(`/api/datasets/${id}/check`),
   confirmSamples: (id: number, sampleIds: number[], ok = true) =>
-    post<{ confirmed: number }>(`/api/books/${id}/check/confirm`, { sample_ids: sampleIds, ok }),
+    post<{ confirmed: number }>(`/api/datasets/${id}/check/confirm`, { sample_ids: sampleIds, ok }),
   convert: (id: number, pageIds?: number[], mode: "letters" | "lines" = "letters") =>
     post<Job>(`/api/books/${id}/convert`, { page_ids: pageIds ?? null, part: "read", mode }),
   lineSearch: (id: number, pageIds?: number[], retrain = false) =>
@@ -632,53 +647,51 @@ export const api = {
   /** The page images (not the text) of one page, of some pages or of every Read Book page, as one PDF. */
   pageImagesUrl: (id: number, pages?: number | number[]) =>
     `/files/page-images/${id}?part=read${pagesQuery(pages)}&token=${encodeURIComponent(token())}`,
-  pagePart: (pageId: number, part: Part, force = false) =>
-    post<{ page: number; part: Part; samples: number }>(`/api/pages/${pageId}/part`, { part, force }),
 
-  capture: (id: number, force = false) => post<Job>(`/api/books/${id}/capture`, { force }),
-  addPages: (id: number) => post<Job>(`/api/books/${id}/add-pages`),
+  capture: (id: number, force = false) => post<Job>(`/api/datasets/${id}/capture`, { force }),
+  addPages: (id: number) => post<Job>(`/api/datasets/${id}/add-pages`),
   recutPage: (id: number, pageId: number, force = false) =>
     post<Job>(`/api/books/${id}/pages/${pageId}/recut`, { force }),
   job: (jobId: string) => get<Job>(`/api/jobs/${jobId}`),
   cancelJob: (jobId: string) => post<Job>(`/api/jobs/${jobId}/cancel`),
 
   // review (C5e)
-  groups: (bookId: number) => get<Group[]>(`/api/books/${bookId}/groups`),
+  groups: (bookId: number) => get<Group[]>(`/api/datasets/${bookId}/groups`),
   group: (groupId: number) => get<Group>(`/api/groups/${groupId}`),
   groupSamples: (groupId: number, offset = 0, limit = 200) =>
     get<SamplePage>(`/api/groups/${groupId}/samples?offset=${offset}&limit=${limit}`),
   unsure: (bookId: number, offset = 0, limit = 200) =>
-    get<SamplePage>(`/api/books/${bookId}/unsure?offset=${offset}&limit=${limit}`),
+    get<SamplePage>(`/api/datasets/${bookId}/unsure?offset=${offset}&limit=${limit}`),
   deleted: (bookId: number, offset = 0, limit = 200) =>
-    get<SamplePage>(`/api/books/${bookId}/unsure?deleted=true&suggest=false&offset=${offset}&limit=${limit}`),
+    get<SamplePage>(`/api/datasets/${bookId}/unsure?deleted=true&suggest=false&offset=${offset}&limit=${limit}`),
   move: (bookId: number, sampleIds: number[], groupId: number | null) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/move`, { sample_ids: sampleIds, group_id: groupId }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/move`, { sample_ids: sampleIds, group_id: groupId }),
   newGroup: (bookId: number, sampleIds: number[]) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/new-group`, { sample_ids: sampleIds }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/new-group`, { sample_ids: sampleIds }),
   merge: (bookId: number, targetId: number, sourceIds: number[]) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/merge`, { target_id: targetId, source_ids: sourceIds }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/merge`, { target_id: targetId, source_ids: sourceIds }),
   dissolve: (bookId: number, groupId: number) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/dissolve`, { group_id: groupId }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/dissolve`, { group_id: groupId }),
   label: (bookId: number, groupId: number, text: string) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/label`, { group_id: groupId, text }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/label`, { group_id: groupId, text }),
   variants: (bookId: number, groupId: number) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/variants`, { group_id: groupId }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/variants`, { group_id: groupId }),
   status: (bookId: number, groupId: number, change: { reviewed?: boolean; locked?: boolean }) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/status`, { group_id: groupId, ...change }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/status`, { group_id: groupId, ...change }),
   deleteSamples: (bookId: number, sampleIds: number[]) =>
     post<ActionResult>(`/api/books/${bookId}/actions/delete`, { sample_ids: sampleIds }),
   restoreSamples: (bookId: number, sampleIds: number[]) =>
     post<ActionResult>(`/api/books/${bookId}/actions/restore`, { sample_ids: sampleIds }),
   // label suggestions (C12)
   acceptSuggestions: (bookId: number, items: { group_id: number; label_dev: string }[]) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/accept-suggestions`, { items }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/accept-suggestions`, { items }),
   rejectSuggestion: (bookId: number, groupId: number, labelDev: string) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/reject-suggestion`, { group_id: groupId, label_dev: labelDev }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/reject-suggestion`, { group_id: groupId, label_dev: labelDev }),
   labelSamples: (bookId: number, sampleIds: number[], text: string) =>
     post<ActionResult>(`/api/books/${bookId}/actions/label-samples`, { sample_ids: sampleIds, text }),
-  splitMixed: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/actions/split-mixed`),
+  splitMixed: (bookId: number) => post<ActionResult>(`/api/datasets/${bookId}/actions/split-mixed`),
   removeReadings: (bookId: number, sampleIds: number[]) =>
-    post<ActionResult>(`/api/books/${bookId}/actions/remove-readings`, { sample_ids: sampleIds }),
+    post<ActionResult>(`/api/datasets/${bookId}/actions/remove-readings`, { sample_ids: sampleIds }),
   readAs: (groupId: number, text: string) =>
     get<{ ids: number[] }>(`/api/groups/${groupId}/read-as?text=${encodeURIComponent(text)}`),
   undo: (bookId: number) => post<ActionResult>(`/api/books/${bookId}/undo`),
@@ -693,11 +706,11 @@ export const api = {
   split: (bookId: number, sampleId: number, x: number) =>
     post<NewSampleResult>(`/api/books/${bookId}/samples/split`, { sample_id: sampleId, x }),
   upload: (bookId: number, filename: string, data: string) =>
-    post<NewSampleResult>(`/api/books/${bookId}/samples/upload`, { filename, data }),
+    post<NewSampleResult>(`/api/datasets/${bookId}/samples/upload`, { filename, data }),
 
   // export (C5g)
   exportBook: (bookId: number, folder: string | null, image: string | null) =>
-    post<Job>(`/api/books/${bookId}/export`, { folder, image }),
+    post<Job>(`/api/datasets/${bookId}/export`, { folder, image }),
   openFolder: (path: string) => post<{ opened: string }>("/api/app/open-folder", { path }),
 
   checkLabel: (text: string, bookId?: number) =>

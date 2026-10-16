@@ -80,6 +80,15 @@ export default function ReadBook({ book, info, onChanged }: Props) {
     const j = await replacing((force) => api.recutPage(book.id, pageId, force));
     if (j) setJob(j);
   }
+  async function showCutLetters(on: boolean) {
+    setError(null);
+    try {
+      await api.setSettings(book.id, { ...book.settings, show_cut_letters: on });
+      onChanged();
+    } catch (e) {
+      setError(e);
+    }
+  }
   async function capture() {
     setError(null);
     try {
@@ -97,8 +106,8 @@ export default function ReadBook({ book, info, onChanged }: Props) {
         <h2>Read Book</h2>
         <p className="small muted">
           The whole book to read into text. Preparing for reading finds the lines of every page (and cuts their letters,
-          which our reader needs); nothing is grouped or reviewed here. Then read the pages in Text. A page that reads
-          badly can be used for training from the Book pages section.
+          which our reader needs); nothing is grouped or reviewed here. Then read the pages in Text. The book learns
+          from the reviewed letters of its dataset.
         </p>
         <p className="small">
           Pages:{" "}
@@ -166,6 +175,15 @@ export default function ReadBook({ book, info, onChanged }: Props) {
           )}
         </>
       )}
+
+      <details className="card subtle">
+        <summary>Settings</summary>
+        <label className="row small" title="The older way of reading, hidden since it reads worse than whole lines; its data is kept">
+          <input type="checkbox" checked={book.settings?.show_cut_letters === true}
+            onChange={(e) => showCutLetters(e.target.checked)} />
+          Show <em>Cut letters</em> in Text (for experiments)
+        </label>
+      </details>
 
       {pages.length > 0 && (
         <table className="list" aria-label="Read Book pages">

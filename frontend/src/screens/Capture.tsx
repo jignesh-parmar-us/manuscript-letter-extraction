@@ -216,8 +216,7 @@ function PageFolder(props: { book: Book; info: AppInfo | null; onChanged: () => 
     <form onSubmit={save}>
       {!book.input_dir && (
         <p className="small muted">
-          Choose the folder with the Training Data page images, to cut them into letters. A book read only by Tesseract
-          (Read Book) needs none.
+          Choose the folder with the dataset's page images, to cut them into letters.
         </p>
       )}
       <FolderField label="Folder with the page images" value={folder} onChange={setFolder} info={props.info} />
@@ -349,14 +348,6 @@ function Settings({ book, onSaved, onError }: { book: Book; onSaved: () => void;
       onError(err);
     }
   }
-  async function showCutLetters(on: boolean) {
-    try {
-      await api.setSettings(book.id, { ...book.settings, show_cut_letters: on });
-      onSaved();
-    } catch (err) {
-      onError(err);
-    }
-  }
   return (
     <details className="card subtle">
       <summary>Settings</summary>
@@ -372,11 +363,6 @@ function Settings({ book, onSaved, onError }: { book: Book; onSaved: () => void;
         </label>
         <button onClick={reset}>Back to the defaults</button>
       </div>
-      <label className="row small" title="The older way of reading, hidden since it reads worse than whole lines; its data is kept">
-        <input type="checkbox" checked={book.settings.show_cut_letters === true}
-          onChange={(e) => showCutLetters(e.target.checked)} />
-        Show <em>Cut letters</em> in Read Book → Text (for experiments)
-      </label>
       <pre className="settings">{JSON.stringify(book.settings, null, 2)}</pre>
     </details>
   );

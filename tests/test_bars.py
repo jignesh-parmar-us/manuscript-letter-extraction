@@ -260,7 +260,7 @@ class BookTests(unittest.TestCase):
         with self.assertRaises(LibraryError):
             fix_bars(self.lib, self.book)
         c = TestClient(create_app(self.lib, "t"))
-        self.assertEqual(c.post(f"/api/books/{self.book}/fix-bars", headers={"X-Token": "t"}).status_code, 400)
+        self.assertEqual(c.post(f"/api/datasets/{self.book}/fix-bars", headers={"X-Token": "t"}).status_code, 400)
         c.close()
 
     def test_a_book_without_stray_bars_is_left_alone(self):

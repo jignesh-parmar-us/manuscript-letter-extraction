@@ -104,8 +104,14 @@ def delete_word_list(lib: Library, list_id: int) -> None:
 
 
 # ---- what a book's model learns from ----------------------------------------------------------------------
+def _labels_of(s, book: Book, skip_files: Sequence[str] = ()) -> List[str]:
+    """The labelled letters the book's model learns: those of its dataset since C20 (a dataset's own)."""
+    src = Library.training_source(book)
+    return [] if src is None else _label_lines(s, src, skip_files)
+
+
 def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
-    """The labelled letters of the book's Training Data pages in reading order, in stretches."""
+    """The labelled letters of a row's Training Data pages in reading order, in stretches."""
     q = (select(Sample.line_id, LetterGroup.label_dev)
          .join(Page, Sample.page_id == Page.id)
          .outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
@@ -143,7 +149,9 @@ def _lists_of(s, book_id: int) -> List[WordList]:
 def _signature(s, book: Book) -> tuple:
     edited = s.scalar(select(func.max(PageText.edited_at)).join(Page, PageText.page_id == Page.id)
                       .where(Page.book_id == book.id))
-    return (book.updated_at, edited, tuple((w.id, w.aksharas) for w in _lists_of(s, book.id)))
+    src = Library.training_source(book)
+    labels_at = s.scalar(select(Book.updated_at).where(Book.id == src)) if src not in (None, book.id) else None
+    return (book.updated_at, labels_at, edited, tuple((w.id, w.aksharas) for w in _lists_of(s, book.id)))
 
 
 def book_model(lib: Library, book_id: int) -> LanguageModel:
@@ -157,7 +165,7 @@ def book_model(lib: Library, book_id: int) -> LanguageModel:
         if key in _cache and _cache[key][0] == sig:
             return _cache[key][1]
         lm = LanguageModel()
-        lm.add_all(_label_lines(s, book_id))
+        lm.add_all(_labels_of(s, book))
         lm.add_all(_proofread_lines(s, book_id))
         files = [lib.root / "dictionaries" / w.file for w in _lists_of(s, book_id)]
     for f in files:
@@ -170,9 +178,10 @@ def book_model(lib: Library, book_id: int) -> LanguageModel:
 def book_model_without(lib: Library, book_id: int, skip_files: Sequence[str]) -> LanguageModel:
     """The book's language model without the labels and proofread lines of the pages `skip_files` (both
     parts), for measuring on those pages; the word lists are kept. Not cached."""
+    book = lib.get_book(book_id)
     with lib.session() as s:
         lm = LanguageModel()
-        lm.add_all(_label_lines(s, book_id, skip_files))
+        lm.add_all(_labels_of(s, book, skip_files))
         lm.add_all(_proofread_lines(s, book_id, skip_files))
         files = [lib.root / "dictionaries" / w.file for w in _lists_of(s, book_id)]
     for f in files:
@@ -186,7 +195,7 @@ def book_language(lib: Library, book_id: int) -> Dict:
     book = lib.get_book(book_id)
     cfg = lib.book_config(book)
     with lib.session() as s:
-        labels = _label_lines(s, book_id)
+        labels = _labels_of(s, book)
         proofread = _proofread_lines(s, book_id)
     return {"enabled": cfg.language_model,
             "labels": {"stretches": len(labels), "aksharas": sum(len(tokens(x)) for x in labels)},

@@ -18,13 +18,27 @@ from letter_extractor.app.texts import convert_page, page_text, proofread_stats,
 from sqlalchemy import select                                       # noqa: E402
 
 
+def read_page(lib, page_id):
+    """Make a Training Data page of the test book a Read Book page (its letters out of their groups), as "Use for
+    reading" did before C20 refused moving pages between the parts."""
+    from letter_extractor.app.centres import recompute
+    with lib.session() as s:
+        s.get(Page, page_id).part = "read"
+        smps = s.scalars(select(Sample).where(Sample.page_id == page_id)).all()
+        touched = {x.group_id for x in smps if x.group_id is not None}
+        for x in smps:
+            x.part, x.group_id, x.distance = "read", None, None
+        s.flush()
+        recompute(s, touched)
+
+
 class ProofreadTests(unittest.TestCase):
     def setUp(self):
         self.tmp, self.lib, self.book, _ = appbook.fresh_copy()
         self.lib.set_book_writing(self.book, "printed")
         with self.lib.session() as s:
             self.page = s.scalar(select(Page.id).where(Page.book_id == self.book).order_by(Page.id))
-        self.lib.set_page_part(self.page, "read", force=True)                       # a Read Book page, never grouped
+        read_page(self.lib, self.page)                                               # a Read Book page, never grouped
         with self.lib.session() as s:
             self.all = list(s.scalars(select(Sample.id).where(Sample.page_id == self.page, Sample.deleted.is_(False))))
         self.convert({i: ("क", 97.0) for i in self.all})
@@ -98,14 +112,10 @@ class ProofreadTests(unittest.TestCase):
         with self.assertRaises(LibraryError):
             set_proofread(self.lib, self.page, 0)
 
-    def test_moving_the_page_to_training_keeps_the_corrections(self):
-        sid = self.all[0]
-        actions.label_samples(self.lib, self.book, [sid], "ख")
-        self.lib.set_page_part(self.page, "training")
-        with self.lib.session() as s:
-            smp = s.get(Sample, sid)
-            self.assertIsNotNone(smp.group_id)
-            self.assertEqual(smp.part, "training")
+    def test_a_read_page_is_not_moved_to_training(self):
+        actions.label_samples(self.lib, self.book, [self.all[0]], "ख")
+        with self.assertRaisesRegex(LibraryError, "separate"):                       # C20: datasets and books
+            self.lib.set_page_part(self.page, "training")
 
     def test_api(self):
         c = TestClient(create_app(self.lib, "t"))

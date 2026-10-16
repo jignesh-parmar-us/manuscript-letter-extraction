@@ -40,7 +40,7 @@ class ApiTestCase(unittest.TestCase):
         return job
 
     def groups(self):
-        return self.get(f"/api/books/{self.book}/groups").json()
+        return self.get(f"/api/datasets/{self.book}/groups").json()
 
 
 class AuthAndFilesTests(ApiTestCase):
@@ -72,47 +72,47 @@ class AuthAndFilesTests(ApiTestCase):
 
 class BookTests(ApiTestCase):
     def test_books_crud(self):
-        books = self.get("/api/books").json()
+        books = self.get("/api/datasets").json()
         self.assertEqual([b["name"] for b in books], ["Synthetic"])
-        r = self.post("/api/books", {"name": "ગુજરાતી પોથી", "input_dir": str(self.pages)})
+        r = self.post("/api/datasets", {"name": "ગુજરાતી પોથી", "input_dir": str(self.pages)})
         self.assertEqual(r.status_code, 201)
         new = r.json()
         self.assertEqual(new["settings"]["group_distance"], 0.55)
-        self.assertEqual(self.post("/api/books", {"name": "x", "input_dir": "/no/such/dir"}).status_code, 400)
-        self.assertEqual(self.post("/api/books", {"name": "Synthetic", "input_dir": str(self.pages)}).status_code, 400)
+        self.assertEqual(self.post("/api/datasets", {"name": "x", "input_dir": "/no/such/dir"}).status_code, 400)
+        self.assertEqual(self.post("/api/datasets", {"name": "Synthetic", "input_dir": str(self.pages)}).status_code, 400)
         r = self.client.patch(f"/api/books/{new['id']}", headers=H, json={"name": "Renamed"})
         self.assertEqual(r.json()["name"], "Renamed")
         self.assertEqual(self.client.delete(f"/api/books/{new['id']}", headers=H).status_code, 204)
         self.assertEqual(self.get(f"/api/books/{new['id']}").status_code, 404)
 
     def test_book_without_a_folder(self):
-        r = self.post("/api/books", {"name": "Read only", "writing": "printed"})
+        r = self.post("/api/datasets", {"name": "Read only", "writing": "printed"})
         self.assertEqual(r.status_code, 201)
         bid = r.json()["id"]
         self.assertEqual(r.json()["input_dir"], "")
         self.assertEqual(self.get(f"/api/books/{bid}/page-problems").json(), [])
-        self.assertEqual(self.post(f"/api/books/{bid}/capture").status_code, 400)
-        self.assertEqual(self.post(f"/api/books/{bid}/folder", {"path": "/no/such/dir"}).status_code, 400)
-        r = self.post(f"/api/books/{bid}/folder", {"path": str(self.pages)})
+        self.assertEqual(self.post(f"/api/datasets/{bid}/capture").status_code, 400)
+        self.assertEqual(self.post(f"/api/datasets/{bid}/folder", {"path": "/no/such/dir"}).status_code, 400)
+        r = self.post(f"/api/datasets/{bid}/folder", {"path": str(self.pages)})
         self.assertEqual(r.json()["input_dir"], str(self.pages.resolve()))
         self.assertEqual({p["problem"] for p in self.get(f"/api/books/{bid}/page-problems").json()}, {"new"})
 
     def test_writing(self):
         self.assertEqual(self.get(f"/api/books/{self.book}").json()["writing"], "handwritten")
-        r = self.post("/api/books", {"name": "Print", "input_dir": str(self.pages), "writing": "printed"})
+        r = self.post("/api/datasets", {"name": "Print", "input_dir": str(self.pages), "writing": "printed"})
         self.assertEqual(r.json()["writing"], "printed")
-        self.assertEqual(self.post("/api/books", {"name": "Bad", "input_dir": str(self.pages),
+        self.assertEqual(self.post("/api/datasets", {"name": "Bad", "input_dir": str(self.pages),
                                                   "writing": "typed"}).status_code, 422)
         r = self.client.patch(f"/api/books/{self.book}", headers=H, json={"writing": "printed"})
         self.assertEqual((r.json()["writing"], r.json()["name"]), ("printed", "Synthetic"))
-        self.assertEqual(self.get("/api/books").json()[0]["writing"], "printed")
+        self.assertEqual(self.get("/api/datasets").json()[0]["writing"], "printed")
 
     def test_book_with_own_settings(self):
-        r = self.post("/api/books", {"name": "Own", "input_dir": str(self.pages),
+        r = self.post("/api/datasets", {"name": "Own", "input_dir": str(self.pages),
                                      "settings": {"digits": "western", "red": {"min_break_px": 3}}})
         s = r.json()["settings"]
         self.assertEqual((s["digits"], s["red"]["min_break_px"]), ("western", 3))
-        self.assertEqual(self.post("/api/books", {"name": "Bad", "input_dir": str(self.pages),
+        self.assertEqual(self.post("/api/datasets", {"name": "Bad", "input_dir": str(self.pages),
                                                   "settings": {"nope": 1}}).status_code, 400)
 
     def test_page_problems(self):
@@ -124,22 +124,22 @@ class BookTests(ApiTestCase):
 
 class JobTests(ApiTestCase):
     def test_capture_with_progress_then_confirmation(self):
-        job = self.post(f"/api/books/{self.book}/capture").json()
+        job = self.post(f"/api/datasets/{self.book}/capture").json()
         self.assertEqual(job["total"], 2, "the page count is known from the start")
         job = self.wait(job)
         self.assertEqual(job["status"], "done", job.get("error"))
         self.assertEqual((job["done"], job["total"], len(job["pages"])), (2, 2, 2))
         self.assertGreater(job["result"]["samples"], 0)
         gid = self.groups()[0]["id"]
-        self.post(f"/api/books/{self.book}/actions/label", {"group_id": gid, "text": "क"})
-        r = self.post(f"/api/books/{self.book}/capture")
+        self.post(f"/api/datasets/{self.book}/actions/label", {"group_id": gid, "text": "क"})
+        r = self.post(f"/api/datasets/{self.book}/capture")
         self.assertEqual((r.status_code, r.json()["code"]), (409, "needs_confirmation"))
-        job = self.wait(self.post(f"/api/books/{self.book}/capture", {"force": True}).json())
+        job = self.wait(self.post(f"/api/datasets/{self.book}/capture", {"force": True}).json())
         self.assertEqual(job["status"], "done")
 
     def test_one_job_per_book_and_cancel(self):
-        job = self.post(f"/api/books/{self.book}/capture").json()
-        self.assertEqual(self.post(f"/api/books/{self.book}/capture").status_code, 400)
+        job = self.post(f"/api/datasets/{self.book}/capture").json()
+        self.assertEqual(self.post(f"/api/datasets/{self.book}/capture").status_code, 400)
         self.post(f"/api/jobs/{job['id']}/cancel")
         job = self.wait(job)
         self.assertIn(job["status"], ("cancelled", "done"))       # a fast run may finish first
@@ -147,9 +147,9 @@ class JobTests(ApiTestCase):
 
     def test_add_pages_and_recut(self):
         appbook.add_page(self.pages, "p3.png")
-        job = self.wait(self.post(f"/api/books/{self.book}/add-pages").json())
+        job = self.wait(self.post(f"/api/datasets/{self.book}/add-pages").json())
         self.assertEqual(job["result"]["files"], ["p3.png"])
-        unsure = self.get(f"/api/books/{self.book}/unsure").json()
+        unsure = self.get(f"/api/datasets/{self.book}/unsure").json()
         self.assertGreater(unsure["total"], 0)
         self.assertTrue(any(x["suggestion"] for x in unsure["samples"]))
         page = self.get(f"/api/books/{self.book}/pages").json()[0]
@@ -165,21 +165,21 @@ class ReviewTests(ApiTestCase):
         self.assertEqual(len(s1["samples"]), 2)
         self.assertGreaterEqual(s1["total"], 2)
         ids = [x["id"] for x in s1["samples"]]
-        r = self.post(f"/api/books/{self.book}/actions/move", {"sample_ids": ids, "group_id": None}).json()
+        r = self.post(f"/api/datasets/{self.book}/actions/move", {"sample_ids": ids, "group_id": None}).json()
         self.assertEqual((r["undo"], r["redo"]), (1, 0))
-        unsure_ids = {x["id"] for x in self.get(f"/api/books/{self.book}/unsure?limit=500").json()["samples"]}
+        unsure_ids = {x["id"] for x in self.get(f"/api/datasets/{self.book}/unsure?limit=500").json()["samples"]}
         self.assertTrue(set(ids) <= unsure_ids)
-        r = self.post(f"/api/books/{self.book}/actions/new-group", {"sample_ids": ids}).json()
+        r = self.post(f"/api/datasets/{self.book}/actions/new-group", {"sample_ids": ids}).json()
         new_id = r["group_id"]
-        self.post(f"/api/books/{self.book}/actions/merge", {"target_id": g1["id"], "source_ids": [new_id]})
+        self.post(f"/api/datasets/{self.book}/actions/merge", {"target_id": g1["id"], "source_ids": [new_id]})
         self.assertEqual(self.get(f"/api/groups/{new_id}").status_code, 404)
-        r = self.post(f"/api/books/{self.book}/actions/label", {"group_id": g1["id"], "text": "કિ"}).json()
+        r = self.post(f"/api/datasets/{self.book}/actions/label", {"group_id": g1["id"], "text": "કિ"}).json()
         self.assertEqual((r["label_dev"], r["label_guj"]), ("कि", "કિ"))
-        bad = self.post(f"/api/books/{self.book}/actions/label", {"group_id": g2["id"], "text": "कि"})
+        bad = self.post(f"/api/datasets/{self.book}/actions/label", {"group_id": g2["id"], "text": "कि"})
         self.assertEqual(bad.status_code, 400)
         self.assertIn("already the label of group", bad.json()["detail"])
-        self.post(f"/api/books/{self.book}/actions/status", {"group_id": g2["id"], "reviewed": True, "locked": True})
-        locked = self.post(f"/api/books/{self.book}/actions/dissolve", {"group_id": g2["id"]})
+        self.post(f"/api/datasets/{self.book}/actions/status", {"group_id": g2["id"], "reviewed": True, "locked": True})
+        locked = self.post(f"/api/datasets/{self.book}/actions/dissolve", {"group_id": g2["id"]})
         self.assertEqual(locked.status_code, 400)
         hist = self.get(f"/api/books/{self.book}/history").json()
         self.assertEqual([h["kind"] for h in hist], ["status", "label", "merge", "new_group", "move"])
@@ -196,14 +196,14 @@ class ReviewTests(ApiTestCase):
         g = self.groups()[0]
         sid = self.get(f"/api/groups/{g['id']}/samples?limit=1").json()["samples"][0]["id"]
         self.post(f"/api/books/{self.book}/actions/delete", {"sample_ids": [sid]})
-        deleted = self.get(f"/api/books/{self.book}/unsure?deleted=true").json()
+        deleted = self.get(f"/api/datasets/{self.book}/unsure?deleted=true").json()
         self.assertEqual([x["id"] for x in deleted["samples"]], [sid])
         self.post(f"/api/books/{self.book}/actions/restore", {"sample_ids": [sid]})
         self.assertFalse(self.get(f"/api/samples/{sid}").json()["deleted"])
 
     def test_bad_requests(self):
-        self.assertEqual(self.post(f"/api/books/{self.book}/actions/move", {"sample_ids": []}).status_code, 422)
-        self.assertEqual(self.post(f"/api/books/{self.book}/actions/move",
+        self.assertEqual(self.post(f"/api/datasets/{self.book}/actions/move", {"sample_ids": []}).status_code, 422)
+        self.assertEqual(self.post(f"/api/datasets/{self.book}/actions/move",
                                    {"sample_ids": [999999], "group_id": None}).status_code, 400)
         self.assertEqual(self.get("/api/groups/999999").status_code, 404)
         self.assertEqual(self.get("/api/books/999/groups").status_code, 404)
@@ -215,7 +215,7 @@ class ReviewTests(ApiTestCase):
         self.assertFalse(bad["ok"])
         self.assertEqual(ok["used_by"], [])
         g = self.groups()[0]
-        self.post(f"/api/books/{self.book}/actions/label", {"group_id": g["id"], "text": "क्ष"})
+        self.post(f"/api/datasets/{self.book}/actions/label", {"group_id": g["id"], "text": "क्ष"})
         used = self.get("/api/label", params={"text": "क्ष", "book_id": self.book}).json()["used_by"]
         self.assertEqual([(u["id"], u["samples"]) for u in used], [(g["id"], g["samples"])])
         word = self.get("/api/label", params={"text": "નમઃ"}).json()
@@ -252,7 +252,7 @@ class SuggestionTests(ApiTestCase):
         runs = self.get(f"/api/books/{self.book}").json()["ocr_runs"]
         self.assertEqual([r["engine"] for r in runs], ["tesseract"])
         self.assertIn("samples_matched", runs[0]["result"])
-        for smp in self.get(f"/api/books/{self.book}/unsure").json()["samples"]:
+        for smp in self.get(f"/api/datasets/{self.book}/unsure").json()["samples"]:
             self.assertIn("reading", smp)
 
     def test_tesseract_status(self):
@@ -266,13 +266,13 @@ class SuggestionTests(ApiTestCase):
         status = self.get("/api/tesseract").json()
         if not status["ok"]:
             self.skipTest("Tesseract with script/Devanagari is not installed")
-        r = self.post(f"/api/books/{self.book}/suggest", {"engine": "tesseract"})
+        r = self.post(f"/api/datasets/{self.book}/suggest", {"engine": "tesseract"})
         self.assertEqual(r.status_code, 202)
         job = self.wait(r.json())
         self.assertEqual(job["status"], "done", job["error"])
         self.assertEqual(job["kind"], "suggest")
         self.assertGreater(job["result"]["lines"], 0)
-        self.assertEqual(self.post(f"/api/books/{self.book}/suggest", {"engine": "classifier"}).status_code, 422)
+        self.assertEqual(self.post(f"/api/datasets/{self.book}/suggest", {"engine": "classifier"}).status_code, 422)
 
 
     def test_review_routes(self):
@@ -284,24 +284,24 @@ class SuggestionTests(ApiTestCase):
         self.assertEqual(samples[0]["reading"]["label_dev"], "क")
         ids = self.get(f"/api/groups/{big[0]['id']}/read-as", params={"text": "क"}).json()["ids"]
         self.assertEqual(len(ids), big[0]["samples"])
-        r = self.post(f"/api/books/{self.book}/actions/reject-suggestion", {"group_id": big[0]["id"], "label_dev": "क"})
+        r = self.post(f"/api/datasets/{self.book}/actions/reject-suggestion", {"group_id": big[0]["id"], "label_dev": "क"})
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(self.get(f"/api/groups/{big[0]['id']}").json()["suggestion"])
-        r = self.post(f"/api/books/{self.book}/actions/accept-suggestions",
+        r = self.post(f"/api/datasets/{self.book}/actions/accept-suggestions",
                       {"items": [{"group_id": big[1]["id"], "label_dev": "क"}]})
         self.assertEqual((r.status_code, r.json()["groups"], r.json()["undo"] > 0), (200, 1, True))
-        r = self.post(f"/api/books/{self.book}/actions/accept-suggestions",
+        r = self.post(f"/api/datasets/{self.book}/actions/accept-suggestions",
                       {"items": [{"group_id": big[2]["id"], "label_dev": "क"}]})
         self.assertEqual(r.status_code, 400)                               # क is taken: one label, one group
         r = self.post(f"/api/books/{self.book}/actions/label-samples", {"sample_ids": ids[:1], "text": "क"})
         self.assertEqual(r.json()["group_id"], big[1]["id"])
-        acc = self.get(f"/api/books/{self.book}/suggestion-accuracy").json()
+        acc = self.get(f"/api/datasets/{self.book}/suggestion-accuracy").json()
         self.assertEqual((acc["labelled"], acc["right"]), (1, 1))
 
     def test_fix_cuts_route(self):
-        self.assertEqual(self.post(f"/api/books/{self.book}/fix-cuts").status_code, 400)       # handwritten
+        self.assertEqual(self.post(f"/api/datasets/{self.book}/fix-cuts").status_code, 400)       # handwritten
         self.client.patch(f"/api/books/{self.book}", headers=H, json={"writing": "printed"})
-        job = self.wait(self.post(f"/api/books/{self.book}/fix-cuts").json())
+        job = self.wait(self.post(f"/api/datasets/{self.book}/fix-cuts").json())
         self.assertEqual(job["kind"], "fix_cuts")
         self.assertEqual(job["status"], "failed")                                             # not read yet
         self.assertIn("Tesseract first", job["error"])

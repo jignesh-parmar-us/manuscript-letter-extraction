@@ -32,7 +32,7 @@ export default function Readers({ book, onChanged }: Props) {
 
   const load = useCallback(() => {
     api.readers().then(setReaders, setError);
-    api.books().then((bs) => setBooks(bs.filter((b) => b.writing === book.writing)), setError);
+    api.datasets().then((bs) => setBooks(bs.filter((b) => b.writing === book.writing)), setError);
   }, [book.writing]);
   useEffect(load, [load]);
   const onEnd = useCallback(() => {
@@ -91,7 +91,7 @@ export default function Readers({ book, onChanged }: Props) {
           whenever you have reviewed or corrected more: every training makes a new checker, and older ones are kept.
         </p>
         <fieldset className="plain">
-          <legend className="small muted">Learn from (books with the same writing)</legend>
+          <legend className="small muted">Learn from (datasets with the same writing)</legend>
           {books.map((b) => (
             <label key={b.id} className="row small">
               <input

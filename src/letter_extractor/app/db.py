@@ -45,11 +45,18 @@ class Base(DeclarativeBase):
     pass
 
 
+DATASET, BOOK = "dataset", "book"     # Book.kind (Phase 3, C20)
+
+
 class Book(Base):
-    """A manuscript: its input folder, the settings it was cut with, and everything found in it."""
+    """A dataset or a book (Phase 3, C20: `kind`), one table for both. A **dataset** holds Training Data pages,
+    whose letters are cut, grouped, reviewed and labelled; a **book** holds Read Book pages, which are read.
+    `read_dataset_id`: the dataset a book learns from (until C23 chooses several). A name is unique per kind."""
     __tablename__ = "book"
+    __table_args__ = (UniqueConstraint("kind", "name", name="uq_book_kind_name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(10), default=DATASET, server_default=DATASET)
     folder: Mapped[str] = mapped_column(String(200), unique=True)    # books/<folder> in the library
     input_dir: Mapped[str] = mapped_column(Text)
     settings: Mapped[str] = mapped_column(Text, default="{}")         # Config as JSON
@@ -58,11 +65,14 @@ class Book(Base):
     read_dir: Mapped[str] = mapped_column(Text, default="")
     read_pdf: Mapped[str] = mapped_column(String(500), default="")
     reader_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reader.id", ondelete="SET NULL"), nullable=True)  # C14
+    read_dataset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("book.id", ondelete="SET NULL"),
+                                                           nullable=True)                                # C20
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now, onupdate=now)
     captured_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     pages: Mapped[List["Page"]] = relationship(back_populates="book", cascade="all, delete-orphan",
+                                               foreign_keys="Page.book_id",
                                                order_by="Page.id")
     groups: Mapped[List["LetterGroup"]] = relationship(back_populates="book", cascade="all, delete-orphan",
                                                        order_by="LetterGroup.id")

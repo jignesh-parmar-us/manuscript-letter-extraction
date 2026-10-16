@@ -1,10 +1,10 @@
-// One book: the top bar holds a menu of its sections, grouped into the book's two parts (C16a):
-// Training Data (Pages & capture, Review groups, Pages, Letter checker, Export dataset) and Read Book (Prepare,
-// Book pages, Text, Dictionary, Line truth);
-// and its name and the numbers of both parts on one line. Each section is its own screen file.
-// The address is #/books/<id>/<section>.
+// One dataset or book (C20: separate rows; before, one book held both parts, C16a): the top bar holds a menu of
+// its sections and its name and numbers on one line. A dataset has the Training Data sections (Pages & capture,
+// Review groups, Pages, Letter checker, Export dataset), a book the Read Book ones (Prepare, Book pages, Text,
+// Dictionary, Line truth) and a link to the dataset it learns from. Each section is its own screen file.
+// The address is #/books/<id>/<section>, for both kinds; a section of the other kind opens the first of its own.
 import { useCallback, useEffect, useState } from "react";
-import { api, AppInfo, Book, WRITING_LABEL } from "../api";
+import { api, AppInfo, Book, Kind, WRITING_LABEL } from "../api";
 import AppBar from "../components/AppBar";
 import ErrorBox from "../components/ErrorBox";
 import { go } from "../route";
@@ -30,7 +30,10 @@ export const TABS: { id: string; label: string; part: "Training Data" | "Read Bo
   { id: "dictionary", label: "Dictionary", part: "Read Book" },
   { id: "truth", label: "Line truth", part: "Read Book" },
 ];
-const PARTS = ["Training Data", "Read Book"] as const;
+const PART_OF: Record<Kind, "Training Data" | "Read Book"> = { dataset: "Training Data", book: "Read Book" };
+
+/** The sections of a dataset or of a book. */
+export const tabsOf = (kind: Kind) => TABS.filter((t) => t.part === PART_OF[kind]);
 
 interface Props {
   bookId: number;
@@ -49,6 +52,13 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
   }, [bookId]);
   useEffect(reload, [reload]);
 
+  const kind: Kind = book?.kind ?? "dataset";
+  const own = tabsOf(kind);
+  const wrongTab = book !== null && !own.some((t) => t.id === tab);
+  useEffect(() => {
+    if (wrongTab) go(`/books/${bookId}/${own[0].id}`);
+  }, [wrongTab, bookId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const section = (
     <select
       className="section-menu"
@@ -56,19 +66,17 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
       value={tab}
       onChange={(e) => go(`/books/${bookId}/${e.target.value}`)}
     >
-      {PARTS.map((part) => (
-        <optgroup key={part} label={part}>
-          {TABS.filter((t) => t.part === part).map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </optgroup>
-      ))}
+      <optgroup label={kind === "book" ? "Book" : "Dataset"}>
+        {(book ? own : TABS).map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+          </option>
+        ))}
+      </optgroup>
     </select>
   );
 
-  if (!book) {
+  if (!book || wrongTab) {
     return (
       <>
         <AppBar info={info} left={section} middle={<span className="muted small">Loading…</span>} />
@@ -89,11 +97,26 @@ export default function BookView({ bookId, tab, sub, item, info }: Props) {
             <strong>{book.name}</strong>
             <span className="muted small">
               {" "}
-              · {WRITING_LABEL[book.writing]} ·{" "}
-              <span title={`${book.samples} letters · ${book.groups} groups · ${book.labelled} labelled · ${book.unsure} unsure`}>
-                Training: {book.pages} pages · {book.reviewed} reviewed letters · {book.unsure} unsure
-              </span>{" "}
-              | Book: {book.read_pages} pages
+              · {kind === "book" ? "Book" : "Dataset"} · {WRITING_LABEL[book.writing]} ·{" "}
+              {kind === "book" ? (
+                <>
+                  {book.read_pages} pages · learns from{" "}
+                  {book.dataset_id ? (
+                    <button className="link small" onClick={() => go(`/books/${book.dataset_id}`)}>
+                      {book.dataset_name}
+                    </button>
+                  ) : (
+                    "no dataset yet"
+                  )}
+                </>
+              ) : (
+                <>
+                  <span title={`${book.samples} letters · ${book.groups} groups · ${book.labelled} labelled · ${book.unsure} unsure`}>
+                    {book.pages} pages · {book.reviewed} reviewed letters · {book.unsure} unsure
+                  </span>
+                  {(book.used_by ?? []).length > 0 && <> · used by {book.used_by.map((u) => u.name).join(", ")}</>}
+                </>
+              )}
             </span>
           </span>
         }

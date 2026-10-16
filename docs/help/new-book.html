@@ -109,8 +109,8 @@
   <p>About 10 minutes of waiting for 20 to 25 pages, and a few clicks. Expect about a quarter of the letters to be
     labelled right after capture, and more after step 4 if you have other labelled books.</p>
   <ol class="steps">
-    <li><strong>Create the book</strong>
-      <span class="ui">Books</span> → <span class="ui">New book</span>: a name and Writing
+    <li><strong>Create the dataset</strong>
+      <span class="ui">Books</span> → <span class="ui">New</span> → <span class="ui">Dataset</span>: a name and Writing
       <span class="ui">Printed</span>. Then <span class="ui">Pages &amp; capture</span> →
       <span class="ui">Folder with the page images</span> → <span class="ui">Use this folder</span> (only read,
       never changed; <span class="ui">Change…</span> points the book at a moved folder).</li>
@@ -144,8 +144,8 @@
   <p>Tesseract reads handwriting poorly (about a third of the letters wrong), so the labels come from you and
     from your other handwritten books.</p>
   <ol class="steps">
-    <li><strong>Create the book</strong>
-      <span class="ui">Books</span> → <span class="ui">New book</span>, Writing <span class="ui">Handwritten</span>,
+    <li><strong>Create the dataset</strong>
+      <span class="ui">Books</span> → <span class="ui">New</span> → <span class="ui">Dataset</span>, Writing <span class="ui">Handwritten</span>,
       then choose the page images folder in <span class="ui">Pages &amp; capture</span>. The cutting stays <span class="ui">By the shapes of the ink</span>.</li>
     <li><strong>Capture</strong>
       <span class="ui">Capture letters</span>.</li>
@@ -238,13 +238,17 @@
     handwritten): new books of the same kind learn from it.</div>
 
   <h2 id="read">7. Reading the whole book (Read Book)</h2>
-  <p>Every book has two parts in the section menu: <span class="ui">Training Data</span> (everything above) and
-    <span class="ui">Read Book</span>, the whole book to turn into text.</p>
+  <p>Everything above happens in a <strong>dataset</strong>: sample pages whose letters are cut, grouped, reviewed and
+    labelled. What is read into text is a <strong>book</strong>, a separate thing on the Books screen (since
+    October 2026; before, one book held both parts). A book <em>learns from</em> a dataset: our reader learns that
+    dataset's reviewed letters, and the language model its labels. Make one with <span class="ui">Books</span> →
+    <span class="ui">New</span> → <span class="ui">Book</span>: a name, Writing, and <span class="ui">Learns from</span>
+    (a dataset of the same writing, or none yet). The book's header links its dataset; a dataset lists the books
+    that use it.</p>
   <div class="box tip"><strong>Tip:</strong> a printed book read only by Tesseract
-    (<span class="ui">Text → Whole lines</span>) needs no Training Data: create it with just a name, skip
-    <span class="ui">Pages &amp; capture</span>, and start here.</div>
+    (<span class="ui">Text → Whole lines</span>) needs no dataset: choose <em>no dataset yet</em> and start here.</div>
   <ol class="steps">
-    <li><strong>Read Book → Prepare.</strong> Type the path of the book's <strong>PDF</strong> and click
+    <li><strong>Book → Prepare.</strong> Type the path of the book's <strong>PDF</strong> and click
       <span class="ui">Use this PDF</span> (its pages become images in the book folder), or choose a
       <strong>folder of page images</strong>.</li>
     <li><strong>Prepare for reading.</strong> The lines of every page are found (and their letters cut: our reader
@@ -254,8 +258,10 @@
     <li><span class="ui">Book pages</span> shows each page with its letters, to fix cuts (draw a box, join, split,
       delete). Read Book letters are never grouped automatically; only the letters you correct in the Text view (step
       6) go into groups.</li>
-    <li><strong>A page that reads badly:</strong> <span class="ui">Use for training</span> moves it to Training
-      Data, where its letters go to Unsure to be labelled.</li>
+    <li><strong>A page that reads badly</strong> can no longer be moved into the dataset (<em>Use for
+      training</em> is gone since datasets and books are separate); copying a book's pages into a dataset is planned
+      for later. For now, add the page image to the dataset's folder and use <span class="ui">Add new pages</span>
+      there.</li>
   </ol>
   <ol class="steps" start="5">
     <li><strong>Text:</strong> choose <span class="ui">Whole lines (Tesseract)</span> or <span class="ui">Whole lines (our reader)</span>
@@ -284,7 +290,7 @@
       <span class="ui">Select none</span> and <span class="ui">Only this page</span>. The ticks are kept for the book in
       this browser. <strong>Cut letters</strong> (the older way: the page cut into letters, read by Tesseract and checked
       with your groups and letter checker; it reads worse than whole lines) is hidden; its data is kept. To bring it back
-      for experiments, tick <em>Show Cut letters</em> in Pages &amp; capture → Settings. There:
+      for experiments, tick <em>Show Cut letters</em> in the book's Prepare → Settings. There:
       <span class="ui">Convert all pages</span> (or one page); <span class="ui">Tesseract only</span> shows what
       Tesseract read, <span class="ui">Tesseract + your groups</span> adds your groups' check. Uncertain letters are
       highlighted on both, and clicking one shows it on the page and what each reader read.</li>

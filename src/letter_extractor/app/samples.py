@@ -76,7 +76,9 @@ def _tight(mask: np.ndarray, x: int, y: int) -> Optional[Tuple[Box, np.ndarray]]
 def _sample_mask(lib: Library, book: Book, smp: Sample) -> np.ndarray:
     if not smp.mask:
         raise ActionError(f"Sample {smp.id} has no ink mask (it was captured before masks were kept).")
-    with Image.open(lib.book_dir(book) / smp.mask) as im:
+    # its own row's folder: a book reads with its dataset's letters (C20)
+    folder = lib.book_dir(book) if smp.book_id in (None, book.id) else lib.folder_of(smp.book_id)
+    with Image.open(folder / smp.mask) as im:
         return np.asarray(im.convert("L")) > 127
 
 

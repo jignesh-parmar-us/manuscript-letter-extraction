@@ -4,9 +4,10 @@ The plan to **build**. It is the full Phase 3 plan (`docs/implementation_plan_ph
 the reference) cut down to what is needed to separate datasets from books. Everything left out is listed in
 section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two plans can be read side by side.
 
-**Status:** C19 built (2026-10-16), waiting for Stop 1 (your check of the screens). Written 2026-10-15 from the
-full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan** (`docs/SPEED_PLAN.md`, S1–S4).
-Next: C20.
+**Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); its dry run on a copy of your library
+and the split of your library are not run yet (heavy runs, only when you ask), then Stop 2. Written 2026-10-15
+from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
+(`docs/SPEED_PLAN.md`, S1–S4). Next: the C20 dry run, then C21.
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -139,7 +140,62 @@ The plan as written:
 
 **Stop 1:** you check the screens.
 
-### C20. Datasets and books become separate things (data change), 4–5 h
+### C20. Datasets and books become separate things (data change), 4–5 h — built 2026-10-16
+
+As built (what differs from the points below, and why, is in section 8):
+
+- **Migration `0017`** (schema only): `book.kind` (`dataset` | `book`, every existing row a dataset),
+  `book.read_dataset_id` (foreign key to `book.id`, set null when the dataset is deleted), and a name unique per
+  kind (`uq_book_kind_name`) instead of in the whole library. On your library (snapshot of 2026-10-16) it takes
+  about 9 s and changes no count.
+- **The split is a command, not the migration** (your answer, 2026-10-16): `python -m letter_extractor.app.split
+  --library DIR` shows per row what it would do (and problems that stop it); `--run` backs the library up beside it
+  (`<library> backup <date time>`: the database through SQLite's backup, the rest as APFS clones on a Mac), splits
+  in one transaction and compares the counts (pages and letters per part, lines, groups, reviewed and labelled
+  groups, letters in reviewed groups, line truth, checked lines, whole lines, reviewed whole lines, page texts,
+  readings, undo steps, word lists). A failure rolls the database back and moves the folders back. Until it has
+  run, **the app does not open the library** and prints the two commands (`main.unsplit_message`).
+- **What the split does** (`split.py`): a row with Read Book pages and Training Data keeps its id, name, Training
+  Data, groups, labels, letter checker, exports and their undo steps as the **dataset**; a new **book** row with the
+  same name gets the `read` pages (their lines, whole lines, line truth, page texts go with the pages), the Read
+  Book letters, the **undo steps that touch only Read Book letters** (your library: 12, cut fixes in Book pages), the
+  Read Book folder / PDF, the settings, the letter checker (for the hidden Cut letters), `read_dataset_id`, and
+  the word lists the dataset had (the book is added to them). Folders moved to the book's folder (a rename, same
+  disk): `read/`, `line-search/`, `text/read/`, `cache/read-*`. A row with Read Book pages and **no** Training Data
+  becomes a book in place (your answer: no empty dataset; your book 7). It refuses, before changing anything, pages
+  moved between the parts (their files are in the other part's folders), Read Book letters in a group, and undo
+  steps that touch letters of both parts. Your library has none of these (checked on the snapshot).
+- **A book learns from its dataset** (until C23 chooses several): `Library.training_source(book)` is the book's
+  `read_dataset_id` (a dataset's own id). The line search (`_training_set`, `_signature`, `usual_spacing`, Measure),
+  the language model's labels (`dictionary._labels_of`) and the hidden Cut letters' groups (`texts._groups_for`)
+  use it; checked lines, proofread lines, word lists, readings and the reader's files stay the book's. A sample's
+  files are found in its own row's folder (`Library.folder_of`, `MaskPack(folder_of=…)`, `samples._sample_mask`).
+  Measure still leaves out the dataset's pages with the tested pages' file names, so its numbers do not change
+  (`tests/test_split.py`: the book's training rows, labels, signature, checked lines, language model and spacing
+  are equal to the unsplit row's).
+- **Kept apart:** a dataset gets no Read Book pages (Read Book folder, PDF, Prepare refused) and a book no
+  Training Data (folder, capture, add pages refused); moving a page between the parts (*Use for training /
+  reading*, `set_page_part`) is refused and its button removed. A book has no Training Data folder; only a book
+  names a dataset.
+- **API:** `GET/POST /api/datasets` and `GET/POST /api/books` (a book: `dataset_id`); 29 routes of what only a
+  dataset has moved to `/api/datasets/{id}/…` (404 for a book); reading routes stay `/api/books/{id}/…`; 16 routes of
+  what both have answer under both prefixes. Rows carry `kind`, `dataset_id`, `dataset_name`, `used_by`.
+  `reference-books` lists datasets only. No redirects (decision 7).
+- **Setting `uploads`** in the per-user `settings.json` (`main.uploads_dir`, default `<library>/uploads`), shown in
+  `GET /api/app`, set with `POST /api/app/uploads`; nothing uses it before C21.
+- **Screens:** the Books screen lists **Books** (pages, learns from) and **Datasets** (numbers, used by) and
+  creates either (**New** → Dataset / Book, a book's *Learns from*: datasets of the same writing). A row shows only
+  its kind's sections (another section's address opens its first: *Pages & capture* or *Prepare*); the header says
+  Dataset / Book and links the dataset. The *Show Cut letters* tick box moved from Pages & capture to the book's
+  Prepare → Settings. The letter checker learns from datasets. Help pages and README updated.
+- **Files:** `app/db.py`, `app/migrations/versions/0017_datasets_and_books.py`, `app/split.py` (new),
+  `app/library.py`, `app/linesearch.py`, `app/linestore.py`, `app/samples.py`, `app/dictionary.py`, `app/texts.py`,
+  `app/suggest.py`, `app/api.py`, `app/schemas.py`, `app/main.py`; `frontend/src/api.ts`,
+  `screens/{Books,BookView,ReadBook,PageViewer,Capture,Readers,CheckView,TextView,WholeLinesView,Dictionary}.tsx`,
+  `styles.css`; tests (`tests/test_split.py` new, `test_book_parts.py` rewritten for a dataset and a book,
+  `test_proofread.py`, `test_wholelines.py`, route paths in eight test files; screen tests); help, README.
+
+The plan as written:
 
 - Migration `0017` (`0016` is taken by speed S5's index on `sample.line_id`): `book.kind` (default `dataset`). For every existing book with Read Book pages: a
   `book`-kind row with the same name (suffix if taken); its `part = read` pages, their lines, `whole_line`,
@@ -158,6 +214,9 @@ The plan as written:
 **Stop 2:** you check the counts and the app on your library.
 
 ### C21. Two lists, two creators, 2–3 h
+
+*After C20:* the Books screen already lists both kinds and creates either (without uploads); C21 splits it into the
+two screens and adds the uploads. `GET/POST /api/datasets` and `/api/books` exist; the setting `uploads` too.
 
 - **Datasets** screen: list, create (name, writing type, **upload images or a PDF** with a file picker, or
   **pick a folder** whose images are copied into the uploads folder).
@@ -180,6 +239,11 @@ The plan as written:
 
 ### C23. Reading setup and a reading model per book, 4–5 h
 
+*After C20:* replace `Library.training_source` (one linked dataset, `book.read_dataset_id`) by the chosen datasets
+in every place that calls it (`linesearch`, `dictionary._labels_of`, `texts._groups_for`); the reader's files are in
+the book's folder (`line-search/`, moved there by the split) and its mask pack already reads other rows' letters
+(`MaskPack(folder_of=…)`).
+
 - New table `reading_model` (name, dataset ids, word list ids, folder, trained-on hash, trained at) and
   `book.reading_model_id`; each book gets its own row. Files in `<library>/models/<folder>/` (the line-search
   reader moves here from the book folder).
@@ -193,6 +257,10 @@ The plan as written:
   tests. `app/readers.py` (letter checker) unchanged.
 
 ### C24. Fold-fair measuring without "same book", 2–3 h
+
+*After C20:* Measure of a split book already leaves out its dataset's pages with the tested pages' **file names**
+(the same pages, as before the split), so its numbers should not change; C24 changes the match to `sha256` (robust to
+renamed files) and to several datasets. The gate measurement is still needed.
 
 - A book's page and a dataset's page are the *same page* when their `sha256` is equal. For each fold, Measure
   leaves out the letters, labels and corrections of the datasets' pages that match the tested pages. Pages in
@@ -254,3 +322,28 @@ About **16–20 hours** of building, after the speed plan's 5–7.
 6. **Later chunks:** C20's migration is `0017` (speed S5 used `0016`). C21/C22: the *Prepare* tab is the one that
    becomes the book's page manager; keep its *Prepare for reading* / *Prepare again* names. C22: an excluded page
    leaves the C19 tick list and downloads.
+
+**C20 (2026-10-16):**
+
+1. **The split is a separate command, not part of migration `0017`** (your choice): the migration only adds the
+   columns, so starting the app with the new code cannot split your library by accident; the app refuses to open an
+   unsplit library and prints the commands. The plan's "backup, dry run on a copy, then I ask" is the command's
+   `--run` (with its backup) on a copy first.
+2. **Names are unique per kind** (your choice), so the book keeps the dataset's name (no suffix).
+3. **A Read Book without Training Data becomes a book in place** (your choice): no empty dataset (book 7).
+4. **Undo steps move with their letters:** the plan did not say; those touching only Read Book letters go to the
+   book (12 on your library), the rest stay. Steps touching both parts stop the split (none on your library).
+5. **The word lists** of a split row are kept by the dataset and given to the book too (the Dictionary is a book
+   tab).
+6. **Not frontend/API only: a book must learn from its dataset now,** or our reader, Measure and the language model
+   would have nothing to learn from between C20 and C23. `Library.training_source` is that bridge (one dataset); C23
+   replaces it. The plan's C20 file list did not have `linesearch.py`, `dictionary.py`, `texts.py`, `samples.py`,
+   `linestore.py`.
+7. **Moving pages between the parts is gone** (*Use for training / reading*): it would put both parts in one row
+   again. Copying a book's pages into a dataset is in section 6 (later). Its tests were replaced by refusal tests.
+8. **Routes:** only what is a dataset's alone moved to `/api/datasets/{id}`; reading routes stay at
+   `/api/books/{id}` without a kind check (a dataset has no Read Book pages, and the library refuses to give it
+   any), and what both have answers under both prefixes. The screens call those with `/api/books/{id}`.
+9. **Show Cut letters moved** from Pages & capture (now a dataset's) to the book's Prepare → Settings, where the
+   setting acts.
+10. **Later chunks:** C21, C23 and C24 have a note "After C20" with what is already there.

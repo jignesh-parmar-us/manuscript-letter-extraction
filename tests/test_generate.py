@@ -79,7 +79,7 @@ class GenerateTests(unittest.TestCase):
         h = {"X-Token": "t"}
 
         def shown():
-            return next(x for x in c.get(f"/api/books/{self.book}/groups", headers=h).json() if x["id"] == g.id)
+            return next(x for x in c.get(f"/api/datasets/{self.book}/groups", headers=h).json() if x["id"] == g.id)
 
         def trained():
             return {it[0] for it in R._letters(self.lib, [self.book], include_unreviewed=True, include_words=False)}
@@ -170,7 +170,7 @@ class GenerateTests(unittest.TestCase):
         c = TestClient(create_app(self.lib, "t"))
         h = {"X-Token": "t"}
         c.patch(f"/api/books/{self.book}", headers=h, json={"writing": "handwritten"})
-        self.assertEqual(c.post(f"/api/books/{self.book}/generate-letters", headers=h).status_code, 400)
+        self.assertEqual(c.post(f"/api/datasets/{self.book}/generate-letters", headers=h).status_code, 400)
         c.close()
 
 

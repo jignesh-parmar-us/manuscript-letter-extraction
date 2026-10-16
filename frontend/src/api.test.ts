@@ -22,7 +22,7 @@ describe("api", () => {
 
   it("turns an error answer into ApiError with the backend's message", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => reply(409, { detail: "has labels", code: "needs_confirmation" }));
-    const error = (await request("POST", "/api/books/1/capture", {}).catch((e) => e)) as ApiError;
+    const error = (await request("POST", "/api/datasets/1/capture", {}).catch((e) => e)) as ApiError;
     expect(error).toBeInstanceOf(ApiError);
     expect(error.message).toBe("has labels");
     expect(error.needsConfirmation).toBe(true);

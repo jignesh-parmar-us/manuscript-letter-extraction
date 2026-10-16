@@ -1055,9 +1055,6 @@ button.reading-move:hover {
 .read-source input {
   flex: 1;
 }
-.page-nav .page-part {
-  margin-left: auto;
-}
 
 /* ---- Read Book → Text (C16b) ---- */
 .text-tools {

@@ -60,7 +60,7 @@ export default function CheckView({ ctx, readerId }: { ctx: ReviewContext; reade
       </p>
       <ErrorBox error={error} onClose={() => setError(null)} />
       {!readerId ? (
-        <p className="muted">This book has no letter checker yet: train one in Training Data → Letter checker.</p>
+        <p className="muted">This dataset has no letter checker yet: train one in Letter checker.</p>
       ) : items === null ? (
         <p className="muted">Loading…</p>
       ) : shown.length === 0 ? (

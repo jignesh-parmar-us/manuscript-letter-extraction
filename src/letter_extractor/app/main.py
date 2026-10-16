@@ -56,6 +56,25 @@ def save_settings(values: dict, path: Optional[Path] = None) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def uploads_dir(library: Path, settings: Optional[Path] = None) -> Path:
+    """Where new datasets' and books' uploaded pages go (C20, used from C21): the app setting `uploads`, else
+    `<library>/uploads`. Changing it does not move files that are there already (lean plan, decision 5)."""
+    chosen = load_settings(settings).get("uploads")
+    return Path(chosen).expanduser() if chosen else Path(library) / "uploads"
+
+
+def unsplit_message(lib) -> Optional[str]:
+    """Why the app does not open a library from before Phase 3 (C20), and what to run; None if it is split."""
+    rows = lib.unsplit_books()
+    if not rows:
+        return None
+    names = ", ".join(f"'{r['name']}' ({r['read_pages']} Read Book pages)" for r in rows)
+    return (f"The library {lib.root} is from before datasets and books were separated: {names} still hold both "
+            "parts. Nothing was changed. See what the split does, then run it (it backs the library up first):\n"
+            f"  python -m letter_extractor.app.split --library \"{lib.root}\"\n"
+            f"  python -m letter_extractor.app.split --library \"{lib.root}\" --run")
+
+
 def library_dir(arg: Optional[str] = None, settings: Optional[Path] = None) -> Path:
     """--library, else the remembered folder, else the default."""
     from .library import default_library_dir
@@ -161,6 +180,11 @@ def main(argv=None) -> int:
 
     context = AppContext(mode="window" if webview else "browser")
     app, lib = build(lib_path, token, context)
+    refused = unsplit_message(lib)
+    if refused:
+        print(refused, file=sys.stderr)
+        lib.close()
+        return 3
     server, thread = _serve(app, port, args.host)
     print(f"Library: {lib_path}\nApp: {url}", flush=True)
     other = network_url(args.host, port)

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import appbook                                                      # noqa: E402
 from fastapi.testclient import TestClient                           # noqa: E402
 from letter_extractor.app.api import create_app                    # noqa: E402
-from letter_extractor.app.db import Line, Page                      # noqa: E402
+from letter_extractor.app.db import Book, Line, Page                # noqa: E402
 from letter_extractor.app.wholelines import book_whole_lines, page_whole_lines, read_book_lines   # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.ocr.language import LanguageModel             # noqa: E402
@@ -279,10 +279,10 @@ class WholeLineTests(unittest.TestCase):
         ci = got["classes"].index("घ")
         self.assertGreaterEqual(int((got["y"] == ci).sum()), 4)                  # its picture and varied copies
         with self.lib.session() as s:
-            sig = linesearch._signature(s, self.book)
+            sig = linesearch._signature(s, s.get(Book, self.book))
             s.scalar(select(Sample).where(Sample.source == "generated")).deleted = True
         with self.lib.session() as s:
-            self.assertNotEqual(linesearch._signature(s, self.book), sig)        # the notice sees it change
+            self.assertNotEqual(linesearch._signature(s, s.get(Book, self.book)), sig)        # the notice sees it change
 
     def test_corrections_add_examples_and_new_labels(self):
         import numpy as np

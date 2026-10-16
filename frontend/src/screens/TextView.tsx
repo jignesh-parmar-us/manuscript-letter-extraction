@@ -142,7 +142,7 @@ export default function TextView(props: Props) {
           Whole lines (Tesseract)
         </button>
         <button className={mode === "search" ? "tab active" : "tab"} onClick={() => choose("search")}
-          title="Our reader (the line search) reads each line without Tesseract, from this book's reviewed letters">
+          title="Our reader (the line search) reads each line without Tesseract, from the reviewed letters of the book's dataset">
           Whole lines (our reader)
         </button>
         {showLetters && (

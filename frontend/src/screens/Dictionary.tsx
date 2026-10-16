@@ -72,7 +72,7 @@ export default function Dictionary({ book, onChanged }: Props) {
           <table className="list compact" aria-label="Learns from">
             <tbody>
               <tr>
-                <td>Your labels (Training Data letters in reading order)</td>
+                <td>Your labels (the letters of the book's dataset, in reading order)</td>
                 <td className="num">{n(info.labels.aksharas)} letters</td>
               </tr>
               <tr>

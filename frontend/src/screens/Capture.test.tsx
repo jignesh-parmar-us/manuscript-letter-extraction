@@ -12,7 +12,7 @@ vi.mock("../api", async (orig) => {
 });
 
 const book: Book = {
-  id: 1, name: "B", input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
+  id: 1, name: "B", kind: "dataset", dataset_id: null, dataset_name: "", used_by: [], input_dir: "/pages", writing: "handwritten", read_dir: "", read_pdf: "", read_pages: 0, reviewed: 0, reader_id: null,
   pages: 0, samples: 0, groups: 0, labelled: 0, unsure: 0,
   created_at: null, updated_at: null, captured_at: null, settings: { group_distance: 0.55 }, undo: 0, redo: 0, job: null,
 };
@@ -113,17 +113,6 @@ describe("Capture", () => {
     expect(screen.getByRole("radio", { name: /By the shapes of the ink/ })).toBeChecked();
     await userEvent.click(screen.getByRole("radio", { name: /By Tesseract's reading/ }));
     expect(api.setSettings).toHaveBeenCalledWith(1, { group_distance: 0.55, cut_method: "tesseract" });
-    expect(onChanged).toHaveBeenCalled();
-  });
-
-  it("turns on the hidden Cut letters view, keeping the other settings", async () => {
-    const onChanged = vi.fn();
-    vi.mocked(api.setSettings).mockResolvedValue(book);
-    render(<Capture book={book} info={null} onChanged={onChanged} />);
-    const show = screen.getByRole("checkbox", { name: /Show Cut letters/ });
-    expect(show).not.toBeChecked();                                               // C19: off by default
-    await userEvent.click(show);
-    expect(api.setSettings).toHaveBeenCalledWith(1, { group_distance: 0.55, show_cut_letters: true });
     expect(onChanged).toHaveBeenCalled();
   });
 

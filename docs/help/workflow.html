@@ -97,8 +97,9 @@
 <body>
 <main>
   <h1>The steps in order</h1>
-  <p class="lead">Every book has two parts. In <strong>Training Data</strong> you teach the app the letters of the book
-    from a few sample pages. In <strong>Read Book</strong> the whole book is turned into text. Do them in this order.
+  <p class="lead">Two things, made on the Books screen. In a <strong>dataset</strong> (Training Data) you teach the app
+    the letters from a few sample pages. A <strong>book</strong> (Read Book) is turned into text, and learns from a
+    dataset. Do them in this order.
     Each box links to its details in <a href="new-book.html">Adding a new book</a>; what each part is (reader, language model, Dictionary…) is in
     <a href="parts.html">The parts explained</a>; the technical details of every step
     (algorithms, scores, image processing) are in <a href="tech.html">How it works</a>.</p>
@@ -109,10 +110,10 @@
     <div class="flow">
       <div class="step">
         <span class="n">1</span>
-        <h3>Create the book</h3>
-        <p><span class="ui">Books → New book</span>: a name and <span class="ui">Printed</span> or
+        <h3>Create the dataset</h3>
+        <p><span class="ui">Books → New → Dataset</span>: a name and <span class="ui">Printed</span> or
           <span class="ui">Handwritten</span>; then the folder with the sample page images in
-          <span class="ui">Pages &amp; capture</span>. A book read only by Tesseract skips this part.</p>
+          <span class="ui">Pages &amp; capture</span>. A book read only by Tesseract needs no dataset.</p>
         <p class="more"><a href="new-book.html#before">Before you start →</a></p>
       </div>
       <div class="arrow">↓</div>
@@ -187,8 +188,9 @@
     <div class="flow">
       <div class="step">
         <span class="n">7</span>
-        <h3>Prepare the whole book for reading</h3>
-        <p><span class="where">Read Book → Prepare.</span> The book's PDF (<span class="ui">Use this PDF</span>)
+        <h3>Create the book and prepare it for reading</h3>
+        <p><span class="ui">Books → New → Book</span>: a name, the writing and the dataset it <span class="ui">Learns
+          from</span>. Then <span class="where">Prepare:</span> the book's PDF (<span class="ui">Use this PDF</span>)
           or a folder of page images, then <span class="ui">Prepare for reading</span>. It runs in the background; stopping
           keeps the pages already prepared.</p>
         <p class="more"><a href="new-book.html#read">Details →</a></p>
@@ -222,8 +224,7 @@
       </div>
       <div class="loop other">
         <strong>↺ Back to Part 1:</strong> the lines you check in step 9 and the groups you review in Part 1 are what
-        our reader's <strong>Retrain</strong> learns from. A page that reads very badly can be moved to Training Data
-        (<span class="where">Read Book → Book pages →</span> <span class="ui">Use for training</span>) and labelled there.
+        our reader's <strong>Retrain</strong> learns from (the groups of the book's dataset).
       </div>
     </div>
   </section>

@@ -55,21 +55,38 @@ def _folder(lib: Library, book: Book):
     return lib.book_dir(book) / "line-search"
 
 
-def _signature(s, book_id: int) -> str:
-    """What the reader learns from (each reviewed Training Data letter: its label and place; each checked
-    line of the Read Book pages and its text), as a hash."""
+def _source(lib: Library, book: Book) -> int:
+    """The row whose reviewed Training Data letters the book's reader learns: its dataset since C20 (the row
+    itself for a dataset, as before)."""
+    src = lib.training_source(book)
+    if src is None:
+        raise LibraryError(f"'{book.name}' learns from no dataset yet: our reader needs the reviewed letters of a "
+                           "dataset (the Reading setup, C23, will choose them).")
+    return src
+
+
+def _masks(lib: Library, book: Book) -> MaskPack:
+    """The book's mask pack (in its folder); its dataset's letters are read from the dataset's folder."""
+    return MaskPack(lib.book_dir(book), lib.folder_of)
+
+
+def _signature(s, book: Book) -> str:
+    """What the reader learns from (each reviewed Training Data letter of its dataset: its label and place;
+    each checked line of the book's Read Book pages and its text), as a hash."""
     from .db import LineTruth
     checked = s.execute(select(LineTruth.line_id, LineTruth.text_dev).join(Line, LineTruth.line_id == Line.id)
                         .join(Page, Line.page_id == Page.id)
-                        .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "")
+                        .where(Page.book_id == book.id, Page.part == "read", LineTruth.text_dev != "")
                         .order_by(LineTruth.line_id)).all()
-    rows = s.execute(select(Sample.id, LetterGroup.label_dev, LetterGroup.status, Sample.x, Sample.w)
-                     .join(LetterGroup, Sample.group_id == LetterGroup.id).outerjoin(Page, Sample.page_id == Page.id)
-                     .where(Sample.book_id == book_id, Sample.deleted.is_(False), LetterGroup.label_dev != "",
-                            LetterGroup.status != "auto",
-                            or_(and_(Page.part == "training", Sample.line_id.is_not(None)),
-                                and_(Sample.line_id.is_(None), Sample.mask != "")))   # also letters on no line
-                     .order_by(Sample.id)).all()
+    src = Library.training_source(book)
+    rows = [] if src is None else s.execute(
+        select(Sample.id, LetterGroup.label_dev, LetterGroup.status, Sample.x, Sample.w)
+        .join(LetterGroup, Sample.group_id == LetterGroup.id).outerjoin(Page, Sample.page_id == Page.id)
+        .where(Sample.book_id == src, Sample.deleted.is_(False), LetterGroup.label_dev != "",
+               LetterGroup.status != "auto",
+               or_(and_(Page.part == "training", Sample.line_id.is_not(None)),
+                   and_(Sample.line_id.is_(None), Sample.mask != "")))   # also letters on no line
+        .order_by(Sample.id)).all()
     return hashlib.sha1(json.dumps([[list(r) for r in rows], [list(r) for r in checked]],
                                    ensure_ascii=False).encode()).hexdigest()
 
@@ -77,12 +94,13 @@ def _signature(s, book_id: int) -> str:
 def line_reader_info(lib: Library, book_id: int) -> Optional[Dict]:
     """What the book's line-search reader was trained on, or None if it has none; `changed`: the reviewed
     letters or the checked lines changed since (retrain to use them)."""
-    meta = _folder(lib, lib.get_book(book_id)) / "meta.json"
+    book = lib.get_book(book_id)
+    meta = _folder(lib, book) / "meta.json"
     if not meta.is_file():
         return None
     info = json.loads(meta.read_text(encoding="utf-8"))
     with lib.session() as s:
-        changed = info.get("signature") != _signature(s, book_id)
+        changed = info.get("signature") != _signature(s, book)
     return {**{k: info[k] for k in ("letters", "labels", "trained_at", "seconds")}, "lines": info.get("lines", 0),
             "changed": changed}
 
@@ -115,7 +133,7 @@ def train_line_reader(lib: Library, book_id: int, progress: Optional[Callable[[s
     t0 = time.time()
     book = lib.get_book(book_id)
     with lib.session() as s:
-        signature = _signature(s, book_id)
+        signature = _signature(s, book)
     reader, meta = _train(lib, book_id, (), progress, cancel, seed)
     folder = _folder(lib, book)
     folder.mkdir(parents=True, exist_ok=True)
@@ -131,7 +149,7 @@ def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=
     width), trained on the reviewed letters of the Training Data pages and on the checked lines of the
     Read Book pages (learning from corrections), those of the pages `skip_files` left out."""
     book = lib.get_book(book_id)
-    cfg, masks = lib.book_config(book), MaskPack(lib.book_dir(book))
+    cfg, masks = lib.book_config(book), _masks(lib, book)
     data = _training_set(lib, book_id, skip_files, progress, cancel, seed, masks=masks)
     if progress:
         progress(f"training on {len(data['X'])} windows")
@@ -157,10 +175,13 @@ def _checked_lines(lib: Library, book_id: int, skip_files: Sequence[str] = ()) -
 
 
 def usual_spacing(lib: Library, book_id: int) -> float:
-    """The training pages' usual line spacing (px): the scale the reader's widths (typical width, each label's
-    width) are in; 0 when the book has no Training Data pages with lines."""
+    """The training pages' usual line spacing (px), of the book's dataset: the scale the reader's widths (typical
+    width, each label's width) are in; 0 when there are no Training Data pages with lines."""
+    src = lib.training_source(lib.get_book(book_id))
+    if src is None:
+        return 0.0
     with lib.session() as s:
-        sp = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == book_id,
+        sp = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == src,
                                                                     Page.part == "training")) if v]
     return float(np.median(sp)) if sp else 0.0
 
@@ -356,19 +377,20 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
     pass `store` and `masks` to share them between the folds of a Measure); the labels and the review status
     always come from the database."""
     book = lib.get_book(book_id)
+    src = _source(lib, book)                          # the letters: of the book's dataset (C20)
     own_store, own_masks = store is None, masks is None
     store = FeatureStore(lib.book_dir(book)) if store is None else store
-    masks = MaskPack(lib.book_dir(book)) if masks is None else masks
+    masks = _masks(lib, book) if masks is None else masks
     skip = set(skip_files)
     letters, every = [], []
     with lib.session() as s:
         q = (select(Sample, LetterGroup.label_dev, Page.line_spacing, Page.file)
              .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
-             .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
+             .where(Sample.book_id == src, Sample.deleted.is_(False), Page.part == "training",
                     Sample.line_id.is_not(None), LetterGroup.label_dev != ""))
         rows = s.execute(q).all()
         status = dict(s.execute(select(LetterGroup.id, LetterGroup.status)
-                                .where(LetterGroup.book_id == book_id)).all())
+                                .where(LetterGroup.book_id == src)).all())
         by_line = defaultdict(list)
         for smp, lab, spacing, file in rows:
             if status.get(smp.group_id) == "auto" or len(split_aksharas(lab)) != 1:
@@ -399,12 +421,12 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
                              nxt=(nxt.x, nxt.w) if nxt is not None else None)
                 letters.append(L)
         if unlined:
-            spacings = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == book_id,
+            spacings = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == src,
                                                                              Page.part == "training")) if v]
             usual = float(np.median(spacings)) if spacings else 0.0
             alone = s.execute(select(Sample, LetterGroup.label_dev)
                               .join(LetterGroup, Sample.group_id == LetterGroup.id)
-                              .where(Sample.book_id == book_id, Sample.deleted.is_(False), Sample.line_id.is_(None),
+                              .where(Sample.book_id == src, Sample.deleted.is_(False), Sample.line_id.is_(None),
                                      Sample.mask != "", LetterGroup.label_dev != "",
                                      LetterGroup.status != "auto")).all()
             for smp, lab in alone:
@@ -416,8 +438,8 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
                 letters.append(dict(sid=smp.id, label=lab, x=smp.x, w=smp.w, sp=sp, c=None, nxt=None,
                                     key=_letter_key(seed, sp, masks.digest(smp.id), smp)))
     if len(letters) < 20 or len({L["label"] for L in letters}) < 2:
-        raise LibraryError("The line search learns the letters from this book's reviewed Training Data: review "
-                           "and label more groups first (at least 20 letters).")
+        raise LibraryError("The line search learns the letters from the reviewed Training Data of the book's "
+                           "dataset: review and label more groups there first (at least 20 letters).")
     if progress:
         progress(f"{len(letters)} reviewed letters; their windows")
     freq = Counter(L["label"] for L in letters)
@@ -670,7 +692,7 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     n_folds = max(1, min(folds, len(pages)))
     tested = list(range(max(1, n_folds // 2) if quick else n_folds))
     files = {k: [p[2] for p in pages[k::n_folds]] for k in tested}
-    store, masks = FeatureStore(lib.book_dir(book)), MaskPack(lib.book_dir(book))
+    store, masks = FeatureStore(lib.book_dir(book)), _masks(lib, book)
 
     def stop(k):
         if cancel and cancel():

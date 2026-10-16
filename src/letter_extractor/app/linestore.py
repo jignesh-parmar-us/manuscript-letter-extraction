@@ -16,7 +16,7 @@ import json
 import os
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 from PIL import Image
@@ -35,10 +35,13 @@ def _replace(tmp: Path, path: Path) -> None:
 
 
 class MaskPack:
-    """Letter masks by sample, from `masks.npz`, each read again from its PNG when the file changed."""
+    """Letter masks by sample, from `masks.npz`, each read again from its PNG when the file changed.
+    `folder_of(book id)`: the folder of a sample's own row, when the pack also holds letters of another row (a
+    book's pack holds its dataset's letters too, C20); without it every mask is in `book_dir`."""
 
-    def __init__(self, book_dir: Path):
+    def __init__(self, book_dir: Path, folder_of: Optional[Callable[[int], Path]] = None):
         self.book_dir = Path(book_dir)
+        self.folder_of = folder_of
         self.path = store_folder(book_dir) / "masks.npz"
         self.masks: Dict[int, np.ndarray] = {}
         self.stamp: Dict[int, tuple] = {}         # sample id -> (mask path, size, mtime_ns)
@@ -62,7 +65,7 @@ class MaskPack:
         if not smp.mask:
             from .samples import _sample_mask
             return _sample_mask(None, None, smp)               # raises: no mask
-        f = self.book_dir / smp.mask
+        f = (self.folder_of(smp.book_id) if self.folder_of else self.book_dir) / smp.mask
         st = f.stat()
         stamp = (smp.mask, st.st_size, st.st_mtime_ns)
         if self.stamp.get(smp.id) != stamp:

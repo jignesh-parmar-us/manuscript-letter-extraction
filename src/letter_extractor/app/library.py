@@ -34,7 +34,7 @@ from .. import io_utils
 from ..config import Config, load_config
 from ..grouping import UNSURE
 from ..pipeline import ProgressFn, process_folder
-from .db import Action, Book, LetterGroup, Line, Page, Sample, now
+from .db import BOOK, DATASET, Action, Book, LetterGroup, Line, Page, Sample, now
 
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
@@ -58,6 +58,18 @@ class Cancelled(LibraryError):
 # How a book is written. It decides which readers suggest labels (Phase 2): Tesseract reads printed
 # books; handwritten books learn from the books already labelled.
 WRITING = ("handwritten", "printed")
+
+
+# What a library row is (Phase 3, C20): a dataset (Training Data: cut, grouped, reviewed, labelled) or a book
+# (Read Book: read). The word the screens and messages use for each.
+KINDS = (DATASET, BOOK)
+KIND_WORD = {DATASET: "dataset", BOOK: "book"}
+
+
+def _check_kind(kind: str) -> str:
+    if kind not in KINDS:
+        raise LibraryError(f"Kind must be one of: {', '.join(KINDS)}.")
+    return kind
 
 
 def _check_writing(writing: str) -> str:
@@ -118,6 +130,7 @@ class Library:
         self.engine = create_engine(f"sqlite:///{self.root / 'library.db'}")
         migrate(self.engine)
         self._sessions = sessionmaker(self.engine, expire_on_commit=False)
+        self._folders: Dict[int, str] = {}                # book id -> its folder (never changes)
 
     def close(self) -> None:
         self.engine.dispose()
@@ -132,6 +145,41 @@ class Library:
     # ---- books -------------------------------------------------------------------------
     def book_dir(self, book: Book) -> Path:
         return self.root / "books" / book.folder
+
+    def folder_of(self, book_id: int) -> Path:
+        """The folder of a row by its id (cached: a row's folder never changes). A sample's files are in the
+        folder of its own row, which since C20 may not be the row being read or trained (a book learns from
+        its dataset's letters)."""
+        if book_id not in self._folders:
+            self._folders[book_id] = self.get_book(book_id).folder
+        return self.root / "books" / self._folders[book_id]
+
+    # ---- datasets and books (C20) -------------------------------------------------------------
+    @staticmethod
+    def training_source(book: Book) -> Optional[int]:
+        """The row whose reviewed Training Data letters (and labels) a row's reading learns from: a book's
+        linked dataset (None: it has none yet), a dataset's own. Until C23, where a book chooses datasets."""
+        return book.read_dataset_id if book.kind == BOOK else book.id
+
+    @staticmethod
+    def need_kind(book: Book, kind: str, what: str) -> None:
+        """Refuse `what` on a row of the other kind, so a row never holds both Training Data and Read Book."""
+        if book.kind != kind:
+            other = "a book's pages are read; Training Data is in a dataset" if book.kind == BOOK else \
+                "a dataset's pages are cut, grouped and labelled; reading is done in a book"
+            raise LibraryError(f"'{book.name}' is a {KIND_WORD[book.kind]}: {what} needs a {KIND_WORD[kind]} "
+                               f"({other}).")
+
+    def unsplit_books(self) -> List[Dict]:
+        """Datasets that still hold Read Book pages (or a Read Book folder or PDF): libraries from before C20,
+        until `split.split_library` separates them. The app does not open such a library."""
+        with self.session() as s:
+            rows = s.execute(select(Book.id, Book.name, func.count(Page.id))
+                             .outerjoin(Page, (Page.book_id == Book.id) & (Page.part == "read"))
+                             .where(Book.kind == DATASET).group_by(Book.id)).all()
+            extra = {b.id for b in s.scalars(select(Book).where(Book.kind == DATASET,
+                                                                (Book.read_dir != "") | (Book.read_pdf != "")))}
+        return [{"id": i, "name": n, "read_pages": c} for i, n, c in rows if c or i in extra]
 
     # ---- the two parts of a book (C16a) ----------------------------------------------------
     def read_folder(self, book: Book) -> Optional[Path]:
@@ -171,20 +219,31 @@ class Library:
         return str(input_dir.resolve())
 
     def create_book(self, name: str, input_dir: Optional[Path] = None, cfg: Optional[Config] = None,
-                    writing: str = "handwritten") -> Book:
-        """A new book. The folder of Training Data page images may come later (`set_input_folder`): a book
-        read only by Tesseract needs none."""
+                    writing: str = "handwritten", kind: str = DATASET, dataset_id: Optional[int] = None) -> Book:
+        """A new dataset (the default) or book (C20). A dataset's folder of Training Data page images may
+        come later (`set_input_folder`); a book has none (its pages come with Prepare). `dataset_id`: the
+        dataset a new book learns from."""
         name = name.strip()
         _check_writing(writing)
+        _check_kind(kind)
+        word = KIND_WORD[kind]
         if not name:
-            raise LibraryError("A book needs a name.")
+            raise LibraryError(f"A {word} needs a name.")
+        if kind == BOOK and input_dir:
+            raise LibraryError("A book has no Training Data folder: its pages are read. Make a dataset for that.")
+        if kind == DATASET and dataset_id is not None:
+            raise LibraryError("Only a book learns from a dataset.")
         folder = self._check_input_dir(input_dir) if input_dir else ""
         settings = json.dumps(dataclasses.asdict(cfg or Config()))
         with self.session() as s:
-            if s.scalar(select(Book.id).where(Book.name == name)) is not None:
-                raise LibraryError(f"A book named '{name}' already exists.")
+            if s.scalar(select(Book.id).where(Book.name == name, Book.kind == kind)) is not None:
+                raise LibraryError(f"A {word} named '{name}' already exists.")
+            if dataset_id is not None:
+                d = s.get(Book, dataset_id)
+                if d is None or d.kind != DATASET:
+                    raise NotFound(f"No dataset with id {dataset_id}.")
             book = Book(name=name, folder=uuid.uuid4().hex, input_dir=folder, settings=settings,
-                        writing=writing)
+                        writing=writing, kind=kind, read_dataset_id=dataset_id)
             s.add(book)
             s.flush()
             book.folder = f"{book.id:04d}-{_slug(name)}"
@@ -199,6 +258,7 @@ class Library:
             b = s.get(Book, book_id)
             if b is None:
                 raise NotFound(f"No book with id {book_id}.")
+            self.need_kind(b, DATASET, "a folder of Training Data pages")
             b.input_dir, b.updated_at = folder, now()
 
     def get_book(self, book_id: int) -> Book:
@@ -208,16 +268,25 @@ class Library:
                 raise NotFound(f"No book with id {book_id}.")
             return book
 
-    def list_books(self) -> List[Dict]:
-        """One summary per book, most recently changed first."""
+    def list_books(self, kind: Optional[str] = None) -> List[Dict]:
+        """One summary per row (or per row of `kind`), most recently changed first. A dataset lists the books
+        that learn from it (`used_by`); a book names its dataset (`dataset_id`, `dataset_name`)."""
         with self.session() as s:
-            books = s.scalars(select(Book).order_by(Book.updated_at.desc())).all()
+            q = select(Book).order_by(Book.updated_at.desc())
+            books = s.scalars(q.where(Book.kind == _check_kind(kind)) if kind else q).all()
+            names = dict(s.execute(select(Book.id, Book.name)).all())
+            users: Dict[int, List[Dict]] = {}
+            for i, n, d in s.execute(select(Book.id, Book.name, Book.read_dataset_id)
+                                     .where(Book.read_dataset_id.is_not(None))).all():
+                users.setdefault(d, []).append({"id": i, "name": n})
             out = []
             for b in books:
                 def count(q):
                     return s.scalar(q) or 0
                 out.append({
-                    "id": b.id, "name": b.name, "input_dir": b.input_dir, "writing": b.writing,
+                    "id": b.id, "name": b.name, "kind": b.kind, "input_dir": b.input_dir, "writing": b.writing,
+                    "dataset_id": b.read_dataset_id, "dataset_name": names.get(b.read_dataset_id, ""),
+                    "used_by": users.get(b.id, []),
                     "read_dir": b.read_dir, "read_pdf": b.read_pdf, "reader_id": b.reader_id,
                     "pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "training")),
                     "read_pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "read")),
@@ -239,13 +308,14 @@ class Library:
     def rename_book(self, book_id: int, name: str) -> None:
         name = name.strip()
         if not name:
-            raise LibraryError("A book needs a name.")
+            raise LibraryError("A name is needed.")
         with self.session() as s:
-            if s.scalar(select(Book.id).where(Book.name == name, Book.id != book_id)) is not None:
-                raise LibraryError(f"A book named '{name}' already exists.")
             book = s.get(Book, book_id)
             if book is None:
                 raise NotFound(f"No book with id {book_id}.")
+            if s.scalar(select(Book.id).where(Book.name == name, Book.kind == book.kind,
+                                              Book.id != book_id)) is not None:
+                raise LibraryError(f"A {KIND_WORD[book.kind]} named '{name}' already exists.")
             book.name = name
 
     def set_book_writing(self, book_id: int, writing: str) -> None:
@@ -430,6 +500,7 @@ class Library:
         """Cut and group all pages of the book's input folder and store the result. Replaces the
         book's earlier results; refused when the book holds manual work, unless `force`."""
         book = self.get_book(book_id)
+        self.need_kind(book, DATASET, "capturing Training Data")
         if not force and self.has_manual_work(book_id):
             raise BookHasReviewError(f"'{book.name}' has groups, labels or other changes made by hand; "
                                      "capturing again would discard them.")
@@ -476,6 +547,7 @@ class Library:
         are stored as unsure; the review screens show a suggested group for each. Nothing that
         is already in the book changes."""
         book = self.get_book(book_id)
+        self.need_kind(book, DATASET, "adding Training Data pages")
         with self.session() as s:
             known = set(s.scalars(select(Page.file).where(Page.book_id == book_id, Page.folder == "training")))
         images, _ = io_utils.scan_folder(self.part_folder(book, "training"))
@@ -558,6 +630,7 @@ class Library:
         capture keeps the pages already done and the next one continues. Read Book letters are never
         grouped, and Training Data is not touched."""
         book = self.get_book(book_id)
+        self.need_kind(book, BOOK, "preparing pages for reading")
         folder = self.part_folder(book, "read")
         if not folder.is_dir():
             raise LibraryError(f"The Read Book folder is missing: {folder}")
@@ -591,6 +664,7 @@ class Library:
         only read). Replaces earlier Read Book pages; refused when there are some, unless `force`."""
         from ..ocr.pdf import pdf_pages
         book = self.get_book(book_id)
+        self.need_kind(book, BOOK, "a PDF to read")
         pdf = Path(pdf).expanduser()
         if not pdf.is_file():
             raise LibraryError(f"No such PDF file: {pdf}")
@@ -622,6 +696,7 @@ class Library:
         if self.root.resolve() in [folder.resolve(), *folder.resolve().parents]:
             raise LibraryError("The Read Book folder must not be inside the library folder.")
         book = self.get_book(book_id)
+        self.need_kind(book, BOOK, "a folder of pages to read")
         if book.read_dir and Path(book.read_dir).resolve() == folder.resolve() and not book.read_pdf:
             return
         self._clear_read(book_id, force)
@@ -647,11 +722,9 @@ class Library:
             shutil.rmtree(root / sub, ignore_errors=True)
 
     def set_page_part(self, page_id: int, part: str, force: bool = False) -> Dict:
-        """Move a page to the other part. To Training Data: its letters become unsure there, with a
-        suggested group each (as "Add new pages"); letters corrected while proofreading (C17) keep their
-        groups. To Read Book: its letters leave their groups; refused
-        when the page holds manual work, unless `force`. The page's files stay where they are."""
-        from .centres import recompute
+        """Moving a page between Training Data and Read Book (C16a) is refused since C20: the two parts are
+        two rows, a dataset (it only trains) and a book (it only reads). Copying a book's page into a
+        dataset is for later (docs/implementation_plan_phase3_lean.md, section 6)."""
         if part not in ("training", "read"):
             raise LibraryError("A page is used for training or for reading.")
         with self.session() as s:
@@ -660,29 +733,9 @@ class Library:
                 raise NotFound(f"No page with id {page_id}.")
             if page.part == part:
                 return {"page": page_id, "part": part, "samples": 0}
-        if part == "read" and self.page_has_manual_work(page_id) and not force:
-            raise BookHasReviewError("This page has letters that were reviewed or changed by hand; using it "
-                                     "for reading takes them out of their groups.")
-        with self.session() as s:
-            page = s.get(Page, page_id)
-            smps = s.scalars(select(Sample).where(Sample.page_id == page_id)).all()
-            touched = {x.group_id for x in smps if x.group_id is not None}
-            for x in smps:
-                x.part = part
-                if part == "read" or x.group_id is None:
-                    x.group_id, x.distance = None, None
-            page.part = part
-            s.flush()
-            recompute(s, touched)
-            for gid in touched:                           # groups left empty and never reviewed go
-                g = s.get(LetterGroup, gid)
-                if g is not None and g.status == "auto" and not g.locked and \
-                        not s.scalar(select(func.count(Sample.id)).where(Sample.group_id == gid,
-                                                                       Sample.deleted.is_(False))):
-                    s.delete(g)
-            book = s.get(Book, page.book_id)
-            book.updated_at = now()
-            return {"page": page_id, "part": part, "samples": len(smps)}
+        raise LibraryError("Datasets and books are separate since Phase 3: a book's page cannot be used for "
+                           "training here, nor a dataset's page for reading. Copying pages between them comes "
+                           "later.")
 
     def check_pages(self, book_id: int, part: str = "training") -> List[Dict]:
         """Pages of a part whose file is missing or changed since capture, and new image files."""

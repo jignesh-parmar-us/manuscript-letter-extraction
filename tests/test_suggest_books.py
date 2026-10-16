@@ -141,20 +141,20 @@ class ApiTests(BooksTestCase):
     def test_routes(self):
         client = TestClient(create_app(self.lib, "t"))
         h = {"X-Token": "t"}
-        refs = client.get(f"/api/books/{self.b}/reference-books", headers=h).json()
+        refs = client.get(f"/api/datasets/{self.b}/reference-books", headers=h).json()
         self.assertEqual(refs[0]["id"], self.a)
-        job = client.post(f"/api/books/{self.b}/suggest", headers=h, json={"engine": "books"}).json()
+        job = client.post(f"/api/datasets/{self.b}/suggest", headers=h, json={"engine": "books"}).json()
         t0 = time.time()
         while job["status"] == "running" and time.time() - t0 < 60:
             time.sleep(0.2)
             job = client.get(f"/api/jobs/{job['id']}", headers=h).json()
         self.assertEqual(job["status"], "done", job["error"])
-        groups = client.get(f"/api/books/{self.b}/groups", headers=h).json()
+        groups = client.get(f"/api/datasets/{self.b}/groups", headers=h).json()
         self.assertTrue(any(g["suggestion"] and g["suggestion"]["engine"] == "books" for g in groups))
         self.assertIn("other_suggestion", groups[0])
-        acc = client.get(f"/api/books/{self.b}/suggestion-accuracy?engine=books", headers=h).json()
+        acc = client.get(f"/api/datasets/{self.b}/suggestion-accuracy?engine=books", headers=h).json()
         self.assertEqual(acc["engine"], "books")
-        r = client.post(f"/api/books/{self.a}/suggest", headers=h, json={"engine": "books"})
+        r = client.post(f"/api/datasets/{self.a}/suggest", headers=h, json={"engine": "books"})
         self.assertEqual(r.status_code, 400)                              # nothing labelled elsewhere
         client.close()
 

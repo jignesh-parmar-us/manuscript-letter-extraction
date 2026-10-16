@@ -158,7 +158,7 @@ class ExportApiTests(unittest.TestCase):
         appbook.cleanup(self.tmp, self.lib)
 
     def test_export_job_and_open_folder(self):
-        job = self.c.post(f"/api/books/{self.book}/export", headers=self.h, json={"image": "fixed64"}).json()
+        job = self.c.post(f"/api/datasets/{self.book}/export", headers=self.h, json={"image": "fixed64"}).json()
         t0 = time.time()
         while job["status"] == "running":
             self.assertLess(time.time() - t0, 120)
@@ -172,12 +172,12 @@ class ExportApiTests(unittest.TestCase):
         self.assertEqual(self.c.post("/api/app/open-folder", headers=self.h, json={"path": "/no/such"}).status_code, 404)
 
     def test_refused_requests(self):
-        bad = self.c.post(f"/api/books/{self.book}/export", headers=self.h, json={"image": "sepia"})
+        bad = self.c.post(f"/api/datasets/{self.book}/export", headers=self.h, json={"image": "sepia"})
         self.assertEqual(bad.status_code, 400)
         busy = self.tmp / "busy"
         busy.mkdir()
         (busy / "f").write_text("x")
-        r = self.c.post(f"/api/books/{self.book}/export", headers=self.h, json={"folder": str(busy)})
+        r = self.c.post(f"/api/datasets/{self.book}/export", headers=self.h, json={"folder": str(busy)})
         self.assertEqual(r.status_code, 400)
 
 

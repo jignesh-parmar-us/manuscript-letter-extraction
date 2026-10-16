@@ -535,7 +535,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             Retrain
           </button>
           <button disabled={running} onClick={() => measure()}
-            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also Training Data pages (four groups). The letters' features are kept between runs, so a Measure after few changes is faster than the first.">
+            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also pages of the book's dataset (four groups). The letters' features are kept between runs, so a Measure after few changes is faster than the first.">
             Measure
           </button>
           <button disabled={running} onClick={() => measure(true)}

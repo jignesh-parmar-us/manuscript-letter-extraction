@@ -1,6 +1,7 @@
-// Books screen: every book of the library, and a form to create a new one.
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { api, AppInfo, BookSummary, localTime, Writing } from "../api";
+// Books screen (C20): the library's books (what is read) and datasets (what is cut, grouped and labelled; books
+// learn from them), and a form to create either. C21 gives each its own screen and uploads.
+import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
+import { api, AppInfo, BookSummary, Kind, localTime, Writing, WRITING_LABEL } from "../api";
 import WritingChoice from "../components/WritingChoice";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
@@ -14,11 +15,13 @@ interface Props {
 
 export default function Books({ info, onLibraryChanged }: Props) {
   const [books, setBooks] = useState<BookSummary[] | null>(null);
+  const [datasets, setDatasets] = useState<BookSummary[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [dialog, confirm] = useConfirm();
   const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
 
   const load = useCallback(() => {
+    api.datasets().then(setDatasets, setError);
     api.books().then(setBooks, setError);
   }, []);
   useEffect(load, [load]);
@@ -35,39 +38,71 @@ export default function Books({ info, onLibraryChanged }: Props) {
     }
   }
 
-  async function remove(book: BookSummary) {
+  async function remove(row: BookSummary) {
+    const users = row.used_by ?? [];
     const ok = await confirm(
-      `Delete "${book.name}" with all its groups and labels? The input pages are not touched.`,
+      row.kind === "book"
+        ? `Delete the book "${row.name}" with its pages' text, line truth and our reader? Its dataset and the page images are not touched.`
+        : `Delete the dataset "${row.name}" with all its groups and labels? The input pages are not touched.` +
+            (users.length ? ` ${users.map((u) => `"${u.name}"`).join(", ")} learn from it and will learn from nothing.` : ""),
       "Delete",
     );
     if (!ok) return;
     try {
-      await api.deleteBook(book.id);
+      await api.deleteBook(row.id);
       load();
     } catch (e) {
       setError(e);
     }
   }
 
+  const nameCell = (b: BookSummary, below: ReactNode) =>
+    renaming?.id === b.id ? (
+      <form className="row" onSubmit={saveName}>
+        <input aria-label="New name" value={renaming.name} onChange={(e) => setRenaming({ id: b.id, name: e.target.value })}
+          autoFocus />
+        <button className="primary" type="submit" disabled={!renaming.name.trim()}>
+          Save
+        </button>
+        <button type="button" onClick={() => setRenaming(null)}>
+          Cancel
+        </button>
+      </form>
+    ) : (
+      <>
+        <button className="link strong" onClick={() => go(`/books/${b.id}`)}>
+          {b.name}
+        </button>
+        <div className="muted small">{below}</div>
+      </>
+    );
+  const actions = (b: BookSummary) => (
+    <td className="actions">
+      <button onClick={() => go(`/books/${b.id}`)}>Open</button>
+      <button onClick={() => setRenaming({ id: b.id, name: b.name })}>Rename</button>
+      <button className="danger" onClick={() => remove(b)}>
+        Delete
+      </button>
+    </td>
+  );
+
   return (
     <section>
       {dialog}
-      <h1>Books</h1>
       <ErrorBox error={error} onClose={() => setError(null)} />
+      <h1>Books</h1>
+      <p className="muted small">What is read into text. A book learns from a dataset.</p>
       {books === null ? (
         <p className="muted">Loading…</p>
       ) : books.length === 0 ? (
-        <p className="muted">No books yet. Create the first one below.</p>
+        <p className="muted">No books yet.</p>
       ) : (
-        <table className="list">
+        <table className="list" aria-label="Books">
           <thead>
             <tr>
               <th>Book</th>
               <th className="num">Pages</th>
-              <th className="num">Letters</th>
-              <th className="num">Groups</th>
-              <th className="num">Labelled</th>
-              <th className="num">Unsure</th>
+              <th>Learns from</th>
               <th>Last change</th>
               <th />
             </tr>
@@ -75,33 +110,50 @@ export default function Books({ info, onLibraryChanged }: Props) {
           <tbody>
             {books.map((b) => (
               <tr key={b.id}>
+                <td>{nameCell(b, WRITING_LABEL[b.writing])}</td>
+                <td className="num">{b.read_pages}</td>
                 <td>
-                  {renaming?.id === b.id ? (
-                    <form className="row" onSubmit={saveName}>
-                      <input
-                        aria-label="New name"
-                        value={renaming.name}
-                        onChange={(e) => setRenaming({ id: b.id, name: e.target.value })}
-                        autoFocus
-                      />
-                      <button className="primary" type="submit" disabled={!renaming.name.trim()}>
-                        Save
-                      </button>
-                      <button type="button" onClick={() => setRenaming(null)}>
-                        Cancel
-                      </button>
-                    </form>
-                  ) : (
-                    <button className="link strong" onClick={() => go(`/books/${b.id}`)}>
-                      {b.name}
+                  {b.dataset_id ? (
+                    <button className="link" onClick={() => go(`/books/${b.dataset_id}`)}>
+                      {b.dataset_name}
                     </button>
+                  ) : (
+                    <span className="muted small">no dataset</span>
                   )}
-                  <div className="muted small">{b.input_dir}</div>
                 </td>
-                <td className="num" title="Training Data pages; below: Read Book pages">
-                  {b.pages}
-                  {b.read_pages > 0 && <div className="muted small">{b.read_pages} to read</div>}
-                </td>
+                <td className="small">{localTime(b.updated_at)}</td>
+                {actions(b)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <h1>Datasets</h1>
+      <p className="muted small">Pages whose letters are cut, grouped, reviewed and labelled: what books learn from.</p>
+      {datasets === null ? (
+        <p className="muted">Loading…</p>
+      ) : datasets.length === 0 ? (
+        <p className="muted">No datasets yet. Create the first one below.</p>
+      ) : (
+        <table className="list" aria-label="Datasets">
+          <thead>
+            <tr>
+              <th>Dataset</th>
+              <th className="num">Pages</th>
+              <th className="num">Letters</th>
+              <th className="num">Groups</th>
+              <th className="num">Labelled</th>
+              <th className="num">Unsure</th>
+              <th>Used by</th>
+              <th>Last change</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {datasets.map((b) => (
+              <tr key={b.id}>
+                <td>{nameCell(b, b.input_dir)}</td>
+                <td className="num">{b.pages}</td>
                 <td className="num">{b.samples}</td>
                 <td className="num">{b.groups}</td>
                 <td className="num">
@@ -109,36 +161,35 @@ export default function Books({ info, onLibraryChanged }: Props) {
                   {b.groups > 0 && <span className="muted"> ({Math.round((100 * b.labelled) / b.groups)}%)</span>}
                 </td>
                 <td className="num">{b.unsure}</td>
+                <td className="small">{(b.used_by ?? []).map((u) => u.name).join(", ") || <span className="muted">—</span>}</td>
                 <td className="small">{localTime(b.updated_at)}</td>
-                <td className="actions">
-                  <button onClick={() => go(`/books/${b.id}`)}>Open</button>
-                  <button onClick={() => setRenaming({ id: b.id, name: b.name })}>Rename</button>
-                  <button className="danger" onClick={() => remove(b)}>
-                    Delete
-                  </button>
-                </td>
+                {actions(b)}
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <NewBook info={info} onCreated={(id) => go(`/books/${id}`)} onError={setError} />
+      <NewRow datasets={datasets ?? []} onCreated={(id) => go(`/books/${id}`)} onError={setError} />
       <LibraryFolder info={info} onChanged={onLibraryChanged} onError={setError} />
     </section>
   );
 }
 
-function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void; onError: (e: unknown) => void }) {
+function NewRow(props: { datasets: BookSummary[]; onCreated: (id: number) => void; onError: (e: unknown) => void }) {
+  const [kind, setKind] = useState<Kind>("dataset");
   const [name, setName] = useState("");
   const [writing, setWriting] = useState<Writing>("handwritten");
+  const [dataset, setDataset] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const fitting = props.datasets.filter((d) => d.writing === writing);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      const book = await api.createBook(name.trim(), writing);
-      props.onCreated(book.id);
+      const made = kind === "book" ? await api.createBook(name.trim(), writing, dataset)
+        : await api.createDataset(name.trim(), writing);
+      props.onCreated(made.id);
     } catch (err) {
       props.onError(err);
     } finally {
@@ -148,17 +199,43 @@ function NewBook(props: { info: AppInfo | null; onCreated: (id: number) => void;
 
   return (
     <form className="card" onSubmit={submit}>
-      <h2>New book</h2>
+      <h2>New</h2>
+      <div className="row" role="radiogroup" aria-label="What to make">
+        <label className="row">
+          <input type="radio" name="kind" checked={kind === "dataset"} onChange={() => setKind("dataset")} />
+          Dataset <span className="muted small">(sample pages to cut, group and label)</span>
+        </label>
+        <label className="row">
+          <input type="radio" name="kind" checked={kind === "book"} onChange={() => setKind("book")} />
+          Book <span className="muted small">(pages to read into text)</span>
+        </label>
+      </div>
       <label className="field">
         <span>Name</span>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="For example: Vachanamrut, part 1" required />
       </label>
       <WritingChoice value={writing} onChange={setWriting} />
+      {kind === "book" && (
+        <label className="field">
+          <span>Learns from</span>
+          <select aria-label="Learns from" value={dataset ?? ""}
+            onChange={(e) => setDataset(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">no dataset yet</option>
+            {fitting.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} ({d.reviewed} reviewed letters)
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p className="muted small">
-        The page images come next: in Pages &amp; capture for Training Data, in Read Book for the pages to read.
+        {kind === "book"
+          ? "The pages to read come next, in Prepare."
+          : "The page images come next, in Pages & capture."}
       </p>
       <button className="primary" type="submit" disabled={busy || !name.trim()}>
-        Create book
+        {kind === "book" ? "Create book" : "Create dataset"}
       </button>
     </form>
   );

@@ -5,9 +5,15 @@ C5d). Every request must carry the session token, created when the app starts: i
 header, or as `?token=` for images (an <img> tag cannot send headers). Other web pages open in the
 same browser therefore cannot use the API.
 
-Routes (all JSON unless noted):
-  books      GET/POST /api/books (the folder of page images optional), GET/PATCH/DELETE /api/books/{id},
-             POST /api/books/{id}/folder (the Training Data page images), GET /api/books/{id}/page-problems
+Routes (all JSON unless noted). Since C20 a row is a dataset or a book: what only a dataset has (capture, groups,
+review actions, the letter checker, export) is under /api/datasets/{id}/... (404 for a book); reading is under
+/api/books/{id}/...; what both have (the row, pages, page-problems, recut, undo / redo / history, label-samples,
+delete / restore, crop / join / split, settings) answers under both prefixes. Below, {D} is /api/datasets/{id}
+and {B} /api/books/{id}; the older lines say /api/books/{id} for both.
+  rows (C20) GET/POST /api/datasets, GET/POST /api/books (a book: `dataset_id`, the dataset it learns from),
+             GET/PATCH/DELETE {B} or {D}; a row carries `kind`, `dataset_id`, `dataset_name`, `used_by`;
+             POST /api/app/uploads (the uploads folder, used from C21)
+  books      POST {D}/folder (the Training Data page images), GET /api/books/{id}/page-problems
   jobs       POST /api/books/{id}/capture | /add-pages | /pages/{page_id}/recut | /suggest (C11) | /fix-cuts (C12b),
              GET /api/jobs/{job}, POST /api/jobs/{job}/cancel
   ocr (C11)  GET /api/tesseract (installed? version, languages); groups carry `suggestion` and `readings`,
@@ -53,7 +59,7 @@ from ..config import Config, load_config
 from ..mapping import describe, mapping_for
 from . import actions, samples as manual
 from .centres import suggestions
-from .db import GENERATED, Book, LetterGroup, Line, Page, Sample
+from .db import BOOK, DATASET, GENERATED, Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
@@ -118,7 +124,7 @@ def _group_json(s, g: LetterGroup, token: str, ocr: Optional[Dict] = None, mem: 
 
 def create_app(library: Library, token: str, context=None) -> FastAPI:
     """`context` (main.AppContext) tells the screens how the app runs; tests may leave it out."""
-    from .main import AppContext, save_settings
+    from .main import AppContext, save_settings, uploads_dir
     context = context or AppContext()
     app = FastAPI(title="Manuscript Letter Extraction", version=__version__)
     jobs = Jobs(library)
@@ -130,6 +136,26 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Missing or wrong session token.")
 
     auth = [Depends(check_token)]
+
+    # ---- datasets and books (C20) ----------------------------------------------------------------------
+    # Routes of what only a dataset has (capture, groups, review actions, letter checker, export) are under
+    # /api/datasets/{id}; those of reading under /api/books/{id} (a dataset has no Read Book pages: they answer
+    # with nothing). What both have (the row, its pages, undo, cut fixes, settings) answers under both.
+    def _dataset_only(book_id: int) -> None:
+        with library.session() as s:
+            b = s.get(Book, book_id)
+            if b is None or b.kind != DATASET:
+                raise HTTPException(404, f"No dataset with id {book_id}.")
+
+    ds = auth + [Depends(_dataset_only)]
+
+    def both(method: str, path: str, **kw):
+        """Register a route of a row under both /api/books and /api/datasets (`path` starts at /{book_id})."""
+        def deco(f):
+            route = getattr(app, method)
+            route("/api/datasets" + path, **kw)(f)
+            return route("/api/books" + path, **kw)(f)
+        return deco
 
     @app.exception_handler(BookHasReviewError)
     async def _needs_confirmation(request: Request, e: BookHasReviewError):
@@ -158,24 +184,35 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     # ---- books -----------------------------------------------------------------------------------
     @app.get("/api/books", dependencies=auth)
     def list_books() -> List[Dict]:
-        return [_book_json(b) for b in library.list_books()]
+        return [_book_json(b) for b in library.list_books(BOOK)]
 
-    @app.post("/api/books", dependencies=auth, status_code=201)
-    def create_book(body: BookCreate) -> Dict:
+    @app.get("/api/datasets", dependencies=auth)
+    def list_datasets() -> List[Dict]:
+        return [_book_json(b) for b in library.list_books(DATASET)]
+
+    def _create(body: BookCreate, kind: str) -> Dict:
         try:
             cfg = load_config(None, **body.settings) if body.settings else None
         except (ValueError, TypeError) as e:
             raise HTTPException(400, f"Settings: {e}")
         book = library.create_book(body.name, Path(body.input_dir) if body.input_dir.strip() else None, cfg,
-                                   body.writing)
+                                   body.writing, kind=kind, dataset_id=body.dataset_id)
         return get_book(book.id)
 
-    @app.post("/api/books/{book_id}/folder", dependencies=auth)
+    @app.post("/api/books", dependencies=auth, status_code=201)
+    def create_book(body: BookCreate) -> Dict:
+        return _create(body, BOOK)
+
+    @app.post("/api/datasets", dependencies=auth, status_code=201)
+    def create_dataset(body: BookCreate) -> Dict:
+        return _create(body, DATASET)
+
+    @app.post("/api/datasets/{book_id}/folder", dependencies=ds)
     def input_folder(book_id: int, body: FolderPath) -> Dict:
         library.set_input_folder(book_id, Path(body.path))
         return get_book(book_id)
 
-    @app.get("/api/books/{book_id}", dependencies=auth)
+    @both("get", "/{book_id}", dependencies=auth)
     def get_book(book_id: int) -> Dict:
         summary = next((b for b in library.list_books() if b["id"] == book_id), None)
         if summary is None:
@@ -189,7 +226,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         return {**_book_json(summary), "settings": json.loads(book.settings), "undo": undo_redo["undo"],
                 "redo": undo_redo["redo"], "job": running.as_dict() if running else None, "ocr_runs": runs}
 
-    @app.patch("/api/books/{book_id}", dependencies=auth)
+    @both("patch", "/{book_id}", dependencies=auth)
     def update_book(book_id: int, body: BookUpdate) -> Dict:
         if body.name is not None:
             library.rename_book(book_id, body.name)
@@ -197,13 +234,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             library.set_book_writing(book_id, body.writing)
         return get_book(book_id)
 
-    @app.delete("/api/books/{book_id}", dependencies=auth, status_code=204)
+    @both("delete", "/{book_id}", dependencies=auth, status_code=204)
     def delete_book(book_id: int) -> None:
         if jobs.running_for(book_id):
             raise HTTPException(409, "A capture is running for this book.")
         library.delete_book(book_id)
 
-    @app.get("/api/books/{book_id}/page-problems", dependencies=auth)
+    @both("get", "/{book_id}/page-problems", dependencies=auth)
     def page_problems(book_id: int, part: str = Query("training", pattern="^(training|read)$")) -> List[Dict]:
         return library.check_pages(book_id, part)
 
@@ -485,7 +522,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                        check=len(report.get("check", [])), seconds=report.get("seconds"))
         return out
 
-    @app.post("/api/books/{book_id}/train", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/train", dependencies=ds, status_code=202)
     def train(book_id: int, body: TrainRequest = TrainRequest()) -> Dict:
         return jobs.train(book_id, body.books, body.min_samples, body.include_unreviewed, body.include_words,
                           body.name).as_dict()
@@ -510,17 +547,17 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         from .readers import delete_reader as remove
         remove(library, reader_id)
 
-    @app.post("/api/books/{book_id}/reader", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/reader", dependencies=ds, status_code=202)
     def use_reader(book_id: int, body: ReaderChoice) -> Dict:
         return jobs.use_reader(book_id, body.reader_id).as_dict()
 
-    @app.post("/api/books/{book_id}/check/confirm", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/check/confirm", dependencies=ds)
     def check_confirm(book_id: int, body: ConfirmSamples) -> Dict:
         """Letters that are no mix-up (or are again, `ok` false): they leave Check these and the highlights."""
         from .readers import confirm_samples
         return {"confirmed": confirm_samples(library, book_id, body.sample_ids, body.ok)}
 
-    @app.get("/api/books/{book_id}/check", dependencies=auth)
+    @app.get("/api/datasets/{book_id}/check", dependencies=ds)
     def check_these(book_id: int) -> List[Dict]:
         """The active reader's letters that are probably in the wrong group."""
         from .readers import check_list
@@ -540,15 +577,15 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         return library.set_page_part(page_id, body.part, force=body.force)
 
     # ---- jobs --------------------------------------------------------------------------------------
-    @app.post("/api/books/{book_id}/capture", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/capture", dependencies=ds, status_code=202)
     def capture(book_id: int, body: Force = Force()) -> Dict:
         return jobs.capture(book_id, force=body.force).as_dict()
 
-    @app.post("/api/books/{book_id}/add-pages", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/add-pages", dependencies=ds, status_code=202)
     def add_pages(book_id: int) -> Dict:
         return jobs.add_pages(book_id).as_dict()
 
-    @app.post("/api/books/{book_id}/pages/{page_id}/recut", dependencies=auth, status_code=202)
+    @both("post", "/{book_id}/pages/{page_id}/recut", dependencies=auth, status_code=202)
     def recut(book_id: int, page_id: int, body: Force = Force()) -> Dict:
         return jobs.recut_page(book_id, page_id, force=body.force).as_dict()
 
@@ -556,23 +593,23 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         from .main import load_settings
         return str(load_settings(context.settings_file).get("tesseract_path", ""))   # app setting, not per book
 
-    @app.post("/api/books/{book_id}/suggest", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/suggest", dependencies=ds, status_code=202)
     def suggest(book_id: int, body: SuggestRequest = SuggestRequest()) -> Dict:
         return jobs.suggest(book_id, body.engine, tesseract_setting(), body.books).as_dict()
 
-    @app.get("/api/books/{book_id}/reference-books", dependencies=auth)
+    @app.get("/api/datasets/{book_id}/reference-books", dependencies=ds)
     def ref_books(book_id: int) -> List[Dict]:
         """The other books with labelled groups, for suggestions from labelled books (C13)."""
         return reference_books(library, book_id)
 
-    @app.post("/api/books/{book_id}/fix-cuts", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/fix-cuts", dependencies=ds, status_code=202)
     def fix_cuts(book_id: int) -> Dict:
         book = library.get_book(book_id)
         if book.writing != "printed":
             raise HTTPException(400, "Fixing cuts with Tesseract is for printed books.")
         return jobs.fix_cuts(book_id).as_dict()
 
-    @app.post("/api/books/{book_id}/fix-bars", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/fix-bars", dependencies=ds, status_code=202)
     def fix_bars(book_id: int) -> Dict:
         book = library.get_book(book_id)
         if book.writing != "printed":
@@ -592,7 +629,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         return {"ok": True, "path": engine.path, "version": engine.version, "langs": engine.langs,
                 "langs_needed": langs}
 
-    @app.post("/api/books/{book_id}/export", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/export", dependencies=ds, status_code=202)
     def export(book_id: int, body: ExportRequest = ExportRequest()) -> Dict:
         from .export import IMAGE_MODES
         if body.image is not None and body.image not in IMAGE_MODES:
@@ -611,7 +648,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         return jobs.cancel(job_id).as_dict()
 
     # ---- reading -----------------------------------------------------------------------------------
-    @app.get("/api/books/{book_id}/pages", dependencies=auth)
+    @both("get", "/{book_id}/pages", dependencies=auth)
     def pages(book_id: int, part: str = Query("training", pattern="^(training|read)$")) -> List[Dict]:
         with library.session() as s:
             book_or_404(s, book_id)
@@ -640,19 +677,19 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                                "image": f"/files/books/{p.book_id}/{ln.image}?token={token}"} for ln in p.lines],
                     "samples": [_sample_json(smp, p.book_id, token) for smp in samples]}
 
-    @app.post("/api/books/{book_id}/generate-letters", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/generate-letters", dependencies=ds, status_code=202)
     def generate_letters(book_id: int) -> Dict:
         book = library.get_book(book_id)
         if book.writing != "printed":
             raise HTTPException(400, "Generating missing letters is for printed books for now.")
         return jobs.generate_letters(book_id).as_dict()
 
-    @app.post("/api/books/{book_id}/top-up", dependencies=auth, status_code=202)
+    @app.post("/api/datasets/{book_id}/top-up", dependencies=ds, status_code=202)
     def top_up(book_id: int) -> Dict:
         library.get_book(book_id)
         return jobs.top_up(book_id).as_dict()
 
-    @app.get("/api/books/{book_id}/groups", dependencies=auth)
+    @app.get("/api/datasets/{book_id}/groups", dependencies=ds)
     def groups(book_id: int) -> List[Dict]:
         with library.session() as s:
             book = book_or_404(s, book_id)
@@ -688,13 +725,13 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             g = group_or_404(s, group_id)
             return {"ids": samples_read_as(s, s.get(Book, g.book_id), g.id, text)}
 
-    @app.get("/api/books/{book_id}/suggestion-accuracy", dependencies=auth)
+    @app.get("/api/datasets/{book_id}/suggestion-accuracy", dependencies=ds)
     def accuracy(book_id: int, engine: Optional[str] = None) -> Dict:
         with library.session() as s:
             book = book_or_404(s, book_id)
             return suggestion_accuracy(s, book, library.book_config(book), engine)
 
-    @app.get("/api/books/{book_id}/unsure", dependencies=auth)
+    @app.get("/api/datasets/{book_id}/unsure", dependencies=ds)
     def unsure(book_id: int, offset: int = 0, limit: int = Query(200, le=MAX_PAGE),
                suggest: bool = True, deleted: bool = False) -> Dict:
         with library.session() as s:
@@ -723,90 +760,90 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def after(book_id: int, result: Dict) -> Dict:
         return {**result, **actions.can_undo_redo(library, book_id)}
 
-    @app.post("/api/books/{book_id}/actions/move", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/move", dependencies=ds)
     def a_move(book_id: int, body: Move) -> Dict:
         return after(book_id, actions.move_samples(library, book_id, body.sample_ids, body.group_id))
 
-    @app.post("/api/books/{book_id}/actions/new-group", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/new-group", dependencies=ds)
     def a_new_group(book_id: int, body: SampleIds) -> Dict:
         return after(book_id, actions.new_group(library, book_id, body.sample_ids))
 
-    @app.post("/api/books/{book_id}/actions/merge", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/merge", dependencies=ds)
     def a_merge(book_id: int, body: Merge) -> Dict:
         return after(book_id, actions.merge_groups(library, book_id, body.target_id, body.source_ids))
 
-    @app.post("/api/books/{book_id}/actions/dissolve", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/dissolve", dependencies=ds)
     def a_dissolve(book_id: int, body: GroupRef) -> Dict:
         return after(book_id, actions.dissolve_group(library, book_id, body.group_id))
 
-    @app.post("/api/books/{book_id}/actions/label", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/label", dependencies=ds)
     def a_label(book_id: int, body: Label) -> Dict:
         return after(book_id, actions.set_label(library, book_id, body.group_id, body.text))
 
-    @app.post("/api/books/{book_id}/actions/accept-suggestions", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/accept-suggestions", dependencies=ds)
     def a_accept(book_id: int, body: AcceptSuggestions) -> Dict:
         return after(book_id, actions.accept_suggestions(library, book_id, [i.model_dump() for i in body.items]))
 
-    @app.post("/api/books/{book_id}/actions/reject-suggestion", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/reject-suggestion", dependencies=ds)
     def a_reject(book_id: int, body: RejectSuggestion) -> Dict:
         return after(book_id, actions.reject_suggestion(library, book_id, body.group_id, body.label_dev))
 
-    @app.post("/api/books/{book_id}/actions/split-mixed", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/split-mixed", dependencies=ds)
     def a_split_mixed(book_id: int) -> Dict:
         library.get_book(book_id)
         return after(book_id, actions.split_mixed(library, book_id))
 
-    @app.post("/api/books/{book_id}/actions/remove-readings", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/remove-readings", dependencies=ds)
     def a_remove_readings(book_id: int, body: RemoveReadings) -> Dict:
         return after(book_id, actions.remove_readings(library, book_id, body.sample_ids, body.engine))
 
-    @app.post("/api/books/{book_id}/actions/label-samples", dependencies=auth)
+    @both("post", "/{book_id}/actions/label-samples", dependencies=auth)
     def a_label_samples(book_id: int, body: LabelSamples) -> Dict:
         return after(book_id, actions.label_samples(library, book_id, body.sample_ids, body.text))
 
-    @app.post("/api/books/{book_id}/actions/status", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/status", dependencies=ds)
     def a_status(book_id: int, body: Status) -> Dict:
         return after(book_id, actions.set_status(library, book_id, body.group_id, body.reviewed, body.locked))
 
-    @app.post("/api/books/{book_id}/actions/variants", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/actions/variants", dependencies=ds)
     def a_variants(book_id: int, body: GroupRef) -> Dict:
         from .generate import variants
         return after(book_id, variants(library, book_id, body.group_id))
 
-    @app.post("/api/books/{book_id}/actions/delete", dependencies=auth)
+    @both("post", "/{book_id}/actions/delete", dependencies=auth)
     def a_delete(book_id: int, body: SampleIds) -> Dict:
         return after(book_id, actions.delete_samples(library, book_id, body.sample_ids))
 
-    @app.post("/api/books/{book_id}/actions/restore", dependencies=auth)
+    @both("post", "/{book_id}/actions/restore", dependencies=auth)
     def a_restore(book_id: int, body: SampleIds) -> Dict:
         return after(book_id, actions.restore_samples(library, book_id, body.sample_ids))
 
     # ---- fixing cuts and adding samples (C5f) ----------------------------------------------------------
-    @app.post("/api/books/{book_id}/samples/crop", dependencies=auth)
+    @both("post", "/{book_id}/samples/crop", dependencies=auth)
     def s_crop(book_id: int, body: Crop) -> Dict:
         return after(book_id, manual.crop_sample(library, book_id, body.page_id, tuple(body.box)))
 
-    @app.post("/api/books/{book_id}/samples/join", dependencies=auth)
+    @both("post", "/{book_id}/samples/join", dependencies=auth)
     def s_join(book_id: int, body: SampleIds) -> Dict:
         return after(book_id, manual.join_samples(library, book_id, body.sample_ids))
 
-    @app.post("/api/books/{book_id}/samples/split", dependencies=auth)
+    @both("post", "/{book_id}/samples/split", dependencies=auth)
     def s_split(book_id: int, body: Split) -> Dict:
         return after(book_id, manual.split_sample(library, book_id, body.sample_id, body.x))
 
-    @app.post("/api/books/{book_id}/samples/upload", dependencies=auth)
+    @app.post("/api/datasets/{book_id}/samples/upload", dependencies=ds)
     def s_upload(book_id: int, body: Upload) -> Dict:
         return after(book_id, manual.upload_sample(library, book_id, body.filename, body.data))
 
-    @app.post("/api/books/{book_id}/undo", dependencies=auth)
+    @both("post", "/{book_id}/undo", dependencies=auth)
     def a_undo(book_id: int) -> Dict:
         return after(book_id, actions.undo(library, book_id))
 
-    @app.post("/api/books/{book_id}/redo", dependencies=auth)
+    @both("post", "/{book_id}/redo", dependencies=auth)
     def a_redo(book_id: int) -> Dict:
         return after(book_id, actions.redo(library, book_id))
 
-    @app.get("/api/books/{book_id}/history", dependencies=auth)
+    @both("get", "/{book_id}/history", dependencies=auth)
     def a_history(book_id: int, limit: int = Query(50, le=MAX_PAGE)) -> List[Dict]:
         library.get_book(book_id)
         return actions.history(library, book_id, limit)
@@ -861,7 +898,17 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.get("/api/app", dependencies=auth)
     def app_info() -> Dict:
         return {"version": __version__, "library": str(library.root), "mode": context.mode,
-                "can_pick_folder": context.pick_folder is not None}
+                "can_pick_folder": context.pick_folder is not None,
+                "uploads": str(uploads_dir(library.root, context.settings_file))}
+
+    @app.post("/api/app/uploads", dependencies=auth)
+    def choose_uploads(body: FolderPath) -> Dict:
+        """The uploads folder (C20): where new uploads go from C21 on. Files already there are not moved."""
+        path = Path(body.path).expanduser()
+        if path.exists() and not path.is_dir():
+            raise HTTPException(400, f"Not a folder: {path}")
+        save_settings({"uploads": str(path)}, context.settings_file)
+        return {"uploads": str(path)}
 
     @app.post("/api/app/library", dependencies=auth)
     def choose_library(body: LibraryChoice) -> Dict:
@@ -895,7 +942,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         context.open_folder(path)
         return {"opened": str(path)}
 
-    @app.patch("/api/books/{book_id}/settings", dependencies=auth)
+    @both("patch", "/{book_id}/settings", dependencies=auth)
     def book_settings(book_id: int, body: BookSettings) -> Dict:
         try:
             cfg = load_config(None, **body.settings) if body.settings else Config()

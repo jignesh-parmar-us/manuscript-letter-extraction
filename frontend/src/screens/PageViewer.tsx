@@ -13,7 +13,7 @@
 // page scrolls by itself to its very bottom, and the panel never covers it; after a change (delete, join, split, move, label, new box) a dashed
 // marker stays on that spot until the next click, so the place is easy to find again.
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, Book, fileToBase64, Group, PageDetail, PageInfo, Part, Sample } from "../api";
+import { api, Book, fileToBase64, Group, PageDetail, PageInfo, Part, Sample } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
@@ -204,29 +204,6 @@ export default function PageViewer({ book, pageId, sampleId = null, part = "trai
     if (r) setMessage(`${file.name} was added as an unsure sample (see Review groups → Unsure).`);
   }
 
-  /** Move the page to the other part of the book, asking first when it holds reviewed work. */
-  async function movePage() {
-    if (!page) return;
-    const to: Part = reading ? "training" : "read";
-    const ask = reading
-      ? `Use ${page.file} for training? Its letters go to Unsure in Review groups, each with a suggested group.`
-      : `Use ${page.file} for reading? Its letters leave their groups.`;
-    if (!(await confirm(ask, reading ? "Use for training" : "Use for reading"))) return;
-    try {
-      try {
-        await api.pagePart(page.id, to);
-      } catch (e) {
-        if (!(e instanceof ApiError && e.needsConfirmation)) throw e;
-        if (!(await confirm(`${e.message} Use it for reading anyway?`, "Use for reading"))) return;
-        await api.pagePart(page.id, to, true);
-      }
-      onChanged();
-      go(`/books/${book.id}/${to === "read" ? "readpages" : "pages"}/${page.id}`);
-    } catch (e) {
-      setError(e);
-    }
-  }
-
   async function removeSelected() {
     if (await confirm(`Delete ${selected.size} sample(s)? Deleted samples can be restored.`, "Delete")) {
       setLastSpot(around(selected));
@@ -335,19 +312,6 @@ export default function PageViewer({ book, pageId, sampleId = null, part = "trai
           <button disabled={!next} onClick={() => next && go(`/books/${book.id}/${base}/${next.id}`)} aria-label="Next page" title="Next page">
             ▶
           </button>
-          {page && (
-            <button
-              className="page-part"
-              onClick={movePage}
-              title={
-                reading
-                  ? "This page reads badly: use it for training. Its letters go to Unsure in Review groups, to be labelled."
-                  : "Use this page for reading instead: its letters leave their groups."
-              }
-            >
-              {reading ? "Use for training" : "Use for reading"}
-            </button>
-          )}
           {!reading && (
             <label className="button upload">
               Upload letter image…

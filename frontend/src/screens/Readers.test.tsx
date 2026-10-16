@@ -6,7 +6,7 @@ import Readers from "./Readers";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { readers: vi.fn(), books: vi.fn(), train: vi.fn(), reader: vi.fn(), useReader: vi.fn(),
+  return { ...real, api: { readers: vi.fn(), datasets: vi.fn(), train: vi.fn(), reader: vi.fn(), useReader: vi.fn(),
     deleteReader: vi.fn(), job: vi.fn(), cancelJob: vi.fn() } };
 });
 
@@ -23,7 +23,7 @@ const job = { id: "j", book_id: 6, kind: "train" as const, status: "running" as 
 describe("Letter checker (Readers)", () => {
   beforeEach(() => {
     vi.mocked(api.readers).mockResolvedValue([reader(2), reader(1, { accuracy: 0.9 })]);
-    vi.mocked(api.books).mockResolvedValue([
+    vi.mocked(api.datasets).mockResolvedValue([
       { id: 6, name: "Printed", writing: "printed", reviewed: 4091 } as never,
       { id: 3, name: "Older print", writing: "printed", reviewed: 500 } as never,
     ]);
