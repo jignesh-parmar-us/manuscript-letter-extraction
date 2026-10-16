@@ -329,7 +329,7 @@ def convert_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] =
     book = lib.get_book(book_id)
     cfg = lib.book_config(book)
     with lib.session() as s:
-        q = select(Page.id).where(Page.book_id == book_id)
+        q = select(Page.id).where(Page.book_id == book_id, Page.excluded.is_not(True))          # excluded pages are not read (C22)
         q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
         ids = list(s.scalars(q.order_by(Page.number, Page.id)))
         targets = _groups_for(s, book)
@@ -390,7 +390,7 @@ def book_page_texts(lib: Library, book_id: int, part: str = "read", page_id: Opt
     page order."""
     with lib.session() as s:
         q = select(Page, PageText).join(PageText, PageText.page_id == Page.id).where(Page.book_id == book_id)
-        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part)
+        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part, Page.excluded.is_not(True))
         if page_ids:
             q = q.where(Page.id.in_(list(page_ids)))
         out = []
@@ -442,7 +442,8 @@ def proofread_stats(lib: Library, book_id: int, part: str = "read") -> Dict:
     points, spaces left out) wrong in the conversion's reading, with the groups and with Tesseract alone."""
     lines = chars = wrong = wrong_t = 0
     with lib.session() as s:
-        q = select(PageText).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id, Page.part == part)
+        q = (select(PageText).join(Page, PageText.page_id == Page.id)
+             .where(Page.book_id == book_id, Page.part == part, Page.excluded.is_not(True)))
         for row in s.scalars(q):
             proofread = json.loads(row.proofread or "{}")
             if not proofread:
@@ -468,7 +469,7 @@ def book_texts(lib: Library, book_id: int, part: str = "read",
     """The converted pages of a part (or one page), in page order."""
     with lib.session() as s:
         q = select(Page, PageText).join(PageText, PageText.page_id == Page.id).where(Page.book_id == book_id)
-        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part)
+        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part, Page.excluded.is_not(True))
         return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id)).all()]
 
 

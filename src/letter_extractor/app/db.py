@@ -86,7 +86,8 @@ class Page(Base):
     file: Mapped[str] = mapped_column(String(500))                   # file name in its folder
     part: Mapped[str] = mapped_column(String(10), default="training")    # training | read: how it is used (C16a)
     folder: Mapped[str] = mapped_column(String(10), default="training")  # training | read: where its file is
-    number: Mapped[int] = mapped_column(Integer, default=0)              # its place in the book
+    number: Mapped[int] = mapped_column(Integer, default=0)              # its place in the book (C22: changeable)
+    excluded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")   # kept, but skipped (C22)
     sha256: Mapped[str] = mapped_column(String(64), default="")
     width: Mapped[int] = mapped_column(Integer, default=0)
     height: Mapped[int] = mapped_column(Integer, default=0)

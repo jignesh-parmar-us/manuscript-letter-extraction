@@ -6,9 +6,9 @@ section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two 
 
 **Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); dry run on a copy and the split of your
 library done the same day (all counts equal; book 6 → dataset 6 + book 8, book 7 a book; backup
-`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21 built (2026-10-16).
+`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21 and C22 built (2026-10-16).
 Written 2026-10-15 from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
-(`docs/SPEED_PLAN.md`, S1–S4). Next: C22.
+(`docs/SPEED_PLAN.md`, S1–S4). Next: C23.
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -258,7 +258,47 @@ two screens and adds the uploads. `GET/POST /api/datasets` and `/api/books` exis
 - **Files:** `frontend/src/screens/Books.tsx` (split into `Datasets.tsx`, `Books.tsx`), `route.ts`,
   `App.tsx`, `app/api.py` (upload endpoints), `app/library.py`, tests.
 
-### C22. Page manager for a book and a dataset, 3 h
+### C22. Page manager for a book and a dataset, 3 h — built 2026-10-16
+
+As built (what differs from the points below, and why, is in section 8):
+
+- **Migration `0018`:** `page.excluded` (default off). `page.number` was there; now it can be changed.
+- **`app/pages.py`** (new): `page_list` (the pages in order, then the image files not prepared yet, each with lines,
+  letters, checked lines, corrections, letters in reviewed groups, missing file), `set_excluded`, `move_page`
+  (renumbers 1, 2, …), `delete_page`, `thumbnail` (`<row folder>/cache/thumbs/`). A file not prepared or captured
+  yet is excluded with a row of its own without lines (status *Not prepared*); including it again deletes that row.
+- **Order kept:** `Library._new_numbers` numbers new pages by file name while the pages are still in that order,
+  after the last page once the order was changed or pages deleted; *Cut again* / *Prepare again* keeps the page's
+  number (and refuses an excluded page); a dataset's *Capture again* skips the excluded pages and keeps them.
+- **Excluded pages are skipped** (`Page.excluded.is_not(True)`): reading (`wholelines.read_book_lines`,
+  `texts.convert_book`, the line search's pages), the downloads (`whole_line_texts`, `book_page_texts`, `book_texts`,
+  the page-images PDF unless one page is asked for), Measure and the reader's training (checked lines,
+  `_signature`, `_training_set`, `usual_spacing`), the language model (`_label_lines`, `_proofread_lines`), the
+  letter checker's training (`readers.py`), the dataset export, and the row counts. `GET …/pages` hides them
+  unless `?excluded=true`, so the C19 tick list, Text, Book pages and Line truth do not show them.
+- **Delete:** the page's letters, lines, readings, text, checked lines and corrections; its image when the app owns
+  it (`owns_files`: uploaded, or a PDF's page), otherwise the image stays and so does the page, excluded. Groups left
+  empty and never reviewed go; the undo history is cleared when it touched the page's letters.
+- **Ask first:** excluding or deleting a page with checked lines, corrections (corrected or reviewed whole lines,
+  proofread lines) or letters in reviewed groups answers 409 with what is on it; the screen asks, then repeats
+  with `force`. Deleting always asks.
+- **API:** `GET {B}/page-list`, `POST {B}/page-list/exclude`, `POST {B}/page-list/delete` (by file name),
+  `POST {B}/pages/{id}/move {"by"}`, `GET /files/rows/{id}/thumb?name=` (under both prefixes). Refused while a job
+  runs for the row.
+- **Add pages:** the C21 upload (Prepare, Pages & capture); uploads into a book read from a PDF now go into its
+  page folder (`read/pages/`). A row whose pages are in a folder of the user's own still takes no upload: the
+  message says to put the images into that folder.
+- **Screen:** `components/PageManager.tsx`, one for both, in Prepare (with *Open*, *Prepare again*) and in Pages &
+  capture (with *Cut again*), replacing their page tables: a table with thumbnails (a tick box hides them,
+  remembered in the browser), the place among the pages used, status, lines, letters, checked / reviewed, ▲ ▼,
+  Exclude / Include, Delete.
+- **Files:** `app/db.py`, `app/migrations/versions/0018_page_excluded.py`, `app/pages.py` (new), `app/library.py`,
+  `app/api.py`, `app/schemas.py`, `app/wholelines.py`, `app/texts.py`, `app/linesearch.py`, `app/dictionary.py`,
+  `app/readers.py`, `app/export.py`; `frontend/src/api.ts`, `components/PageManager.tsx` (new),
+  `screens/{ReadBook,Capture}.tsx`, `styles.css`; tests `tests/test_page_manager.py` (new), `tests/test_uploads.py`,
+  `components/PageManager.test.tsx` (new), `screens/{ReadBook,Capture,BookView}.test.tsx`; help, README.
+
+The plan as written:
 
 *After C21:* uploading exists (`library.upload_target` / `use_upload_folder`, `POST …/upload?name=`, the screen's
 `UploadMore` in Prepare and Pages & capture); **Add pages** can reuse it. Today uploading is refused into a row whose
@@ -405,3 +445,20 @@ About **16–20 hours** of building, after the speed plan's 5–7.
    Pages in a folder of the user's own are never touched.
 7. **The uploads folder is shown and changeable** at the bottom of both screens (C20 had only the API).
 8. **`route.ts` unchanged:** the address `#/datasets` is read in `App.tsx`; rows keep opening at `#/books/<id>`.
+
+**C22 (2026-10-16):**
+
+1. **Not `BookPages.tsx`:** the page manager is one component (`components/PageManager.tsx`) inside the tabs that
+   already hold the pages (Prepare, Pages & capture), so the tab names stay. *Book pages* (fixing cuts) is unchanged.
+2. **One table with thumbnails**, not a thumbnail grid and a table: one list to read, ▲ ▼ beside each page; the
+   thumbnails can be hidden. Drag to reorder stays later (section 6).
+3. **Pages not prepared yet are in the list** and can be excluded (a cover before a 300-page Prepare) through a row
+   without lines; they cannot be moved until prepared (they have no number yet).
+4. **Delete keeps a page of the user's own folder as an exclusion:** the app never deletes the user's files, and
+   without the row the next Prepare would bring the page back.
+5. **Excluded pages also leave Measure, training and the language model**, not only Prepare, reading and export as
+   planned: an excluded page is "kept but not used", and its checked lines are reading training. The question before
+   excluding says so. With nothing excluded every number is the same as before (the filters let every page through).
+6. **The order survives Cut again, Prepare again and Capture again** (they made new rows numbered by file name).
+7. **Later chunks:** C23's training queries already filter excluded pages (`Page.excluded.is_not(True)`): keep
+   the filter when they take several datasets. C24's `sha256` matching should ignore rows with status *Not prepared*.

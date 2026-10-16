@@ -271,12 +271,19 @@ class Library:
     def upload_dir(self, book: Book, uploads: Path) -> Path:
         return (Path(uploads).expanduser() / UPLOAD_SUB[book.kind] / book.folder).resolve()
 
+    def _upload_into(self, book: Book, uploads: Path) -> Path:
+        """Where uploaded pages of the row go: its upload folder, or for a book read from a PDF the folder of the
+        PDF's page images in the book folder (C22: pages added to it)."""
+        if book.kind == BOOK and book.read_pdf:
+            return (self.book_dir(book) / "read" / "pages").resolve()
+        return self.upload_dir(book, uploads)
+
     def _uses_other_folder(self, book: Book, folder: Path) -> str:
-        """The row's pages' folder (or PDF) if they come from somewhere else than its upload folder, else ''."""
+        """The row's pages' folder if they come from somewhere else than where uploads go, else ''."""
         if book.kind == DATASET:
             return book.input_dir if book.input_dir and Path(book.input_dir).resolve() != folder else ""
         if book.read_pdf:
-            return book.read_pdf
+            return ""
         return book.read_dir if book.read_dir and Path(book.read_dir).resolve() != folder else ""
 
     def upload_target(self, book_id: int, name: str, uploads: Path) -> Path:
@@ -288,15 +295,15 @@ class Library:
         ext = Path(name).suffix.lower()
         if not name or name.startswith(".") or ext not in io_utils.SUPPORTED_EXTENSIONS | {PDF}:
             raise LibraryError(f"'{name}' is not a page image (jpg, png, tif, bmp) or a PDF.")
-        folder = self.upload_dir(book, uploads)
+        folder = self._upload_into(book, uploads)
         other = self._uses_other_folder(book, folder)
         if other:
-            raise LibraryError(f"The pages of '{book.name}' come from {other}, not from uploads; uploading more "
-                               "pages to it comes with the page manager. Make a new one to upload pages.")
+            raise LibraryError(f"The pages of '{book.name}' are in a folder of your own ({other}): add the page "
+                               "images to that folder, and they show up as new pages.")
         if book.kind == BOOK and ext == PDF:
             with self.session() as s:
                 n = s.scalar(select(func.count(Page.id)).where(Page.book_id == book_id, Page.part == "read")) or 0
-            if n or book.read_dir:
+            if n or book.read_dir or book.read_pdf:
                 raise LibraryError(f"'{book.name}' has page images already; a PDF is uploaded into a new book.")
         target = folder / name
         if target.exists():
@@ -310,6 +317,8 @@ class Library:
             b = s.get(Book, book_id)
             if b is None:
                 raise NotFound(f"No book with id {book_id}.")
+            if b.kind == BOOK and b.read_pdf:
+                return                                     # the pages were added to the PDF's page folder
             folder = str(self.upload_dir(b, uploads))
             if b.kind == DATASET:
                 b.input_dir = folder
@@ -413,8 +422,10 @@ class Library:
                     "dataset_id": b.read_dataset_id, "dataset_name": names.get(b.read_dataset_id, ""),
                     "used_by": users.get(b.id, []),
                     "read_dir": b.read_dir, "read_pdf": b.read_pdf, "reader_id": b.reader_id,
-                    "pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "training")),
-                    "read_pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "read")),
+                    "pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "training",
+                                                                     Page.excluded.is_(False))),
+                    "read_pages": count(select(func.count(Page.id)).where(Page.book_id == b.id, Page.part == "read",
+                                                                          Page.excluded.is_(False))),
                     "reviewed": count(select(func.count(Sample.id)).join(LetterGroup, Sample.group_id == LetterGroup.id)
                                       .where(Sample.book_id == b.id, Sample.deleted.is_(False),
                                              LetterGroup.status != "auto")),
@@ -554,13 +565,13 @@ class Library:
         n_lines, n_samples = 0, 0
         where = folder_of or part                         # the folder the files are in (a moved page: the other)
         folder = self.part_folder(book, where)
-        order = {p.name: i for i, p in enumerate(io_utils.scan_folder(folder)[0], 1)}
+        numbers = self._new_numbers(s, book.id, where, folder, [r.file for r in results])
         root = self.part_root(where)
         for r in results:
             page = Page(book_id=book.id, file=r.file, width=r.width, height=r.height, status=r.status,
                         message=r.message, line_spacing=r.line_spacing, seconds=r.seconds,
                         sha256=file_sha256(folder / r.file), part=part, folder=where,
-                        number=order.get(r.file, 0))
+                        number=numbers[r.file])
             s.add(page)
             s.flush()
             line_ids = {}
@@ -592,6 +603,30 @@ class Library:
                     Library._store_readings(s, book, page.id, r.samples)
             n_samples += len(rows)
         return {"lines": n_lines, "samples": n_samples}
+
+    def _exclusion_rows(self, s: Session, book: Book, part: str, files: List[str]) -> None:
+        """Rows for page files excluded before they are prepared or captured (C22, pages.py): no lines, no letters,
+        so every step skips them, and the file is no longer new."""
+        from .pages import NOT_PREPARED
+        folder = self.part_folder(book, part)
+        numbers = self._new_numbers(s, book.id, part, folder, files)
+        for f in files:
+            path = folder / f
+            s.add(Page(book_id=book.id, file=f, part=part, folder=part, number=numbers[f], excluded=True,
+                       status=NOT_PREPARED, sha256=file_sha256(path) if path.is_file() else ""))
+
+    @staticmethod
+    def _new_numbers(s: Session, book_id: int, where: str, folder: Path, files: List[str]) -> Dict[str, int]:
+        """The places of new pages (C22): their place in the folder (by file name, as before) while the pages there
+        are still in that order; once the order was changed by hand (or pages deleted), after the last page."""
+        order = {p.name: i for i, p in enumerate(io_utils.scan_folder(folder)[0], 1)} if folder.is_dir() else {}
+        have = dict(s.execute(select(Page.file, Page.number).where(Page.book_id == book_id,
+                                                                  Page.folder == where)).all())
+        if all(order.get(f) == n for f, n in have.items()):
+            return {f: order.get(f, 0) for f in files}
+        last = max(have.values(), default=0)
+        ranked = sorted(files, key=lambda f: (order.get(f, len(order) + 1), io_utils.natural_key(Path(f))))
+        return {f: last + i for i, f in enumerate(ranked, 1)}
 
     @staticmethod
     def _store_readings(s: Session, book: Book, page_id: int, rows: List[Dict]) -> None:
@@ -634,7 +669,14 @@ class Library:
             raise BookHasReviewError(f"'{book.name}' has groups, labels or other changes made by hand; "
                                      "capturing again would discard them.")
         summary: Dict = {}
-        results, work = self._run(book, progress, cancel, summary=summary)
+        with self.session() as s:                               # excluded pages are not captured, but kept (C22)
+            excluded = set(s.scalars(select(Page.file).where(Page.book_id == book_id, Page.part == "training",
+                                                             Page.excluded.is_(True))))
+        files = None
+        if excluded:
+            files = [p.name for p in io_utils.scan_folder(self.part_folder(book, "training"))[0]
+                     if p.name not in excluded]
+        results, work = self._run(book, progress, cancel, summary=summary, files=files)
         self._install(book, work, results, replace_all=True)
         with self.session() as s:
             for table in (Action, LetterGroup):                 # Read Book pages stay (C16a)
@@ -653,6 +695,9 @@ class Library:
                         s.flush()
                         group_ids[gid] = g.id
             stored = self._store(s, book, results, group_ids)
+            if excluded:
+                s.flush()
+                self._exclusion_rows(s, book, "training", sorted(excluded))
             labels = self._auto_label(s, book)
             b = s.get(Book, book_id)
             b.captured_at = b.updated_at = now()
@@ -724,7 +769,9 @@ class Library:
             page = s.get(Page, page_id)
             if page is None or page.book_id != book_id:
                 raise NotFound(f"No page with id {page_id} in this book.")
-            file, part, where = page.file, page.part, page.folder
+            file, part, where, number = page.file, page.part, page.folder, page.number
+            if page.excluded:
+                raise LibraryError(f"Page {file} is excluded: include it first to cut it again.")
         if self.page_has_manual_work(page_id) and not force:
             raise BookHasReviewError(f"Page {file} has samples that were reviewed or changed by hand; "
                                      "cutting it again would replace them.")
@@ -739,6 +786,8 @@ class Library:
                 s.execute(delete(Action).where(Action.book_id == book_id))
             s.flush()
             stored = self._store(s, book, results, part=part, folder_of=where)
+            for p in s.scalars(select(Page).where(Page.book_id == book_id, Page.folder == where, Page.file == file)):
+                p.number = number                          # the page keeps its place (C22)
             recompute(s, touched)
             for gid in touched:                           # groups left empty and never reviewed go
                 g = s.get(LetterGroup, gid)                # (labels given at capture are "auto" too)

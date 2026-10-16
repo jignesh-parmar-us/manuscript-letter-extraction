@@ -1,12 +1,12 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, Book, Job } from "../api";
+import { api, ApiError, Book, Job, PageEntry } from "../api";
 import ReadBook from "./ReadBook";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), readPdf: vi.fn(), readFolder: vi.fn(),
+  return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), pageList: vi.fn(), readPdf: vi.fn(), readFolder: vi.fn(),
     readCapture: vi.fn(), cancelJob: vi.fn(), job: vi.fn(), pickFolder: vi.fn(), setSettings: vi.fn(), uploadPage: vi.fn() } };
 });
 
@@ -21,6 +21,7 @@ const job = (kind: Job["kind"]): Job => ({ id: "j", book_id: 4, kind, status: "r
 describe("ReadBook", () => {
   beforeEach(() => {
     vi.mocked(api.pages).mockResolvedValue([]);
+    vi.mocked(api.pageList).mockResolvedValue({ part: "read", folder: "", owned: false, pages: [] });
     vi.mocked(api.pageProblems).mockResolvedValue([]);
     window.location.hash = "";
   });
@@ -48,9 +49,12 @@ describe("ReadBook", () => {
     expect(await screen.findByText(/Turning the PDF into page images/)).toBeInTheDocument();
   });
 
-  it("offers no upload to a book read from a PDF", async () => {
+  it("adds uploaded pages to a book read from a PDF (C22)", async () => {
+    vi.mocked(api.uploadPage).mockResolvedValue({ book: book({ read_pdf: "book.pdf" }), job: null });
     render(<ReadBook book={book({ read_pdf: "book.pdf" })} info={null} onChanged={() => {}} />);
-    expect(screen.queryByLabelText("Upload page images or a PDF")).not.toBeInTheDocument();
+    await userEvent.upload(screen.getByLabelText("Upload page images or a PDF"), new File(["x"], "extra.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(api.uploadPage).toHaveBeenCalledWith("book", 4, expect.any(File));
   });
 
   it("takes a folder, prepares the remaining pages for reading and lists them", async () => {
@@ -60,6 +64,11 @@ describe("ReadBook", () => {
       { id: 9, file: "p1.png", width: 10, height: 10, status: "OK", message: "", lines: 12, samples: 340, image: "", part: "read", number: 1 },
       { id: 10, file: "p2.png", width: 10, height: 10, status: "OK", message: "", lines: 11, samples: 300, image: "", part: "read", number: 2 },
     ]);
+    const entry = (id: number | null, file: string, over: Partial<PageEntry> = {}): PageEntry => ({ id, file, number: id ? id - 8 : null,
+      excluded: false, prepared: id !== null, status: id ? "OK" : "new", message: "", lines: 12, samples: 340, checked: 0,
+      corrections: 0, reviewed: 0, missing: false, thumb: "", ...over });
+    vi.mocked(api.pageList).mockResolvedValue({ part: "read", folder: "/scans", owned: false,
+      pages: [entry(9, "p1.png"), entry(10, "p2.png"), entry(null, "p3.png")] });
     vi.mocked(api.readCapture).mockResolvedValue(job("capture_read"));
     const onChanged = vi.fn();
     render(<ReadBook book={book({ read_dir: "/scans" })} info={null} onChanged={onChanged} />);
@@ -75,8 +84,9 @@ describe("ReadBook", () => {
     expect(api.readCapture).toHaveBeenCalledWith(4);
     expect(await screen.findByText(/Preparing the book pages for reading/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this folder" })).toBeDisabled();   // not while cutting
-    const list = screen.getByRole("table", { name: "Read Book pages" });
+    const list = screen.getByRole("table", { name: "Pages" });                       // the page manager (C22)
     expect(within(list).getAllByText("Prepared")).toHaveLength(2);                  // C19: not "OK", not "cut"
+    expect(within(list).getByText("Not prepared yet")).toBeInTheDocument();
     expect(within(list).getAllByRole("button", { name: "Prepare again" })).toHaveLength(2);
     await userEvent.click(within(list).getAllByRole("button", { name: "Open" })[1]);
     expect(window.location.hash).toBe("#/books/4/readpages/10");

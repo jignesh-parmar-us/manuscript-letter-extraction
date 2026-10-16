@@ -257,10 +257,23 @@
     (<span class="ui">Text → Whole lines</span>) needs no dataset: choose <em>no dataset yet</em> and start here.</div>
   <ol class="steps">
     <li><strong>Book → Prepare.</strong> The pages uploaded when the book was made are here. More page images can be
-      added with <span class="ui">Upload page images or a PDF</span> → <span class="ui">Upload</span> (not to a book
-      read from a PDF, nor to one whose pages are in a folder of your own). Instead of uploading you can type the path
+      added with <span class="ui">Upload page images or a PDF</span> → <span class="ui">Upload</span> (also to a book
+      read from a PDF: they are added to its pages; not to a book whose pages are in a folder of your own: put the
+      images into that folder, and they show up as new pages). Instead of uploading you can type the path
       of the book's <strong>PDF</strong> and click <span class="ui">Use this PDF</span> (its pages become images in the
       book folder), or choose a <strong>folder of page images</strong> used where it is.</li>
+    <li><strong>The pages list</strong> (under Prepare, the same in a dataset's Pages &amp; capture) shows every page
+      in its order, with a thumbnail (<span class="ui">Thumbnails</span> hides them), its status (<em>Prepared</em>,
+      <em>Not prepared yet</em>, <em>Excluded</em>) and how many checked lines, corrections or reviewed letters it has.
+      <span class="ui">▲</span> / <span class="ui">▼</span> change the order; reading and the downloads follow it. New
+      pages come after the last one once you have changed the order (before that, in file-name order).
+      <span class="ui">Exclude</span> keeps a page with everything on it but skips it: a book's page is not prepared,
+      read, measured, trained on or downloaded; a dataset's page is not captured, trained on or exported
+      (<span class="ui">Include</span> brings it back). A page not prepared yet can be excluded too, for example a cover.
+      <span class="ui">Delete</span> removes the page with its lines, readings, text, checked lines and corrections; an
+      uploaded image or a PDF's page is removed too, but an image in a folder of your own stays there and the page
+      stays in the list, excluded. Excluding or deleting a page with checked lines, corrections or reviewed letters
+      asks first and says what is on it.</li>
     <li><strong>Prepare for reading.</strong> The lines of every page are found (and their letters cut: our reader
       needs their ink) in the background, a few pages at a time; a prepared page says <em>Prepared</em>. Stopping
       keeps the pages already prepared; the next <span class="ui">Prepare the remaining pages</span> continues.

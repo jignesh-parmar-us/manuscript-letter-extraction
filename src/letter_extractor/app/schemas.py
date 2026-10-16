@@ -26,6 +26,20 @@ class Force(BaseModel):
     force: bool = False                           # confirm discarding manual work
 
 
+class PageFile(BaseModel):
+    """A page of the page manager (C22), by its file name: a page not prepared yet has no id."""
+    file: str
+    force: bool = False
+
+
+class PageExclude(PageFile):
+    excluded: bool = True
+
+
+class PageMove(BaseModel):
+    by: int                                       # -1 up, +1 down
+
+
 class SampleIds(BaseModel):
     sample_ids: List[int] = Field(min_length=1)
 

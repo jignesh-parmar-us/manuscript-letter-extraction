@@ -1,10 +1,11 @@
 // "Pages & capture" tab: cut the book's pages into letters (capture), follow the progress,
 // add new pages, cut a single page again, and the settings used for that.
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
-import { api, ApiError, AppInfo, Book, Job, localTime, PageInfo, PageProblem, Writing } from "../api";
+import { api, ApiError, AppInfo, Book, Job, localTime, PageProblem, Writing } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
 import FolderField from "../components/FolderField";
+import PageManager from "../components/PageManager";
 import { UploadMore } from "../components/UploadPages";
 import { useJob } from "../components/useJob";
 import WritingChoice from "../components/WritingChoice";
@@ -37,14 +38,14 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
 };
 
 export default function Capture({ book, info, onChanged }: Props) {
-  const [pages, setPages] = useState<PageInfo[]>([]);
   const [problems, setProblems] = useState<PageProblem[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [dialog, confirm] = useConfirm();
 
+  const [reload, setReload] = useState(0);
   const loadPages = useCallback(() => {
-    api.pages(book.id).then(setPages, setError);
     api.pageProblems(book.id).then(setProblems, setError);
+    setReload((n) => n + 1);
   }, [book.id]);
   useEffect(loadPages, [loadPages]);
 
@@ -155,42 +156,13 @@ export default function Capture({ book, info, onChanged }: Props) {
 
       <Settings book={book} onSaved={onChanged} onError={setError} />
 
-      {pages.length > 0 && (
-        <table className="list">
-          <thead>
-            <tr>
-              <th>Page</th>
-              <th>Status</th>
-              <th className="num">Lines</th>
-              <th className="num">Letters</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {pages.map((p) => (
-              <tr key={p.id}>
-                <td>{p.file}</td>
-                <td>
-                  <span className={p.status === "OK" ? "badge ok" : "badge warn"}>{p.status}</span>{" "}
-                  <span className="muted small">{p.message}</span>
-                </td>
-                <td className="num">{p.lines}</td>
-                <td className="num">{p.samples}</td>
-                <td className="actions">
-                  <button
-                    disabled={running}
-                    onClick={() =>
-                      start((force) => api.recutPage(book.id, p.id, force), "Cut this page again anyway?")
-                    }
-                  >
-                    Cut again
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <PageManager bookId={book.id} kind="dataset" busy={running} reload={reload} onChanged={onEnd} onError={setError}
+        actions={(p) => (
+          <button disabled={running}
+            onClick={() => start((force) => api.recutPage(book.id, p.id!, force), "Cut this page again anyway?")}>
+            Cut again
+          </button>
+        )} />
     </div>
   );
 }

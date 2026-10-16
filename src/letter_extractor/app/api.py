@@ -13,6 +13,10 @@ and {B} /api/books/{id}; the older lines say /api/books/{id} for both.
   rows (C20) GET/POST /api/datasets, GET/POST /api/books (a book: `dataset_id`, the dataset it learns from),
              GET/PATCH/DELETE {B} or {D}; a row carries `kind`, `dataset_id`, `dataset_name`, `used_by`;
              POST /api/app/uploads (the uploads folder)
+  pages(C22) GET {B}/page-list (the page manager: order, excluded, not prepared yet, what is on each page),
+             POST {B}/page-list/exclude {"file", "excluded", "force"}, POST {B}/page-list/delete {"file", "force"},
+             POST {B}/pages/{page_id}/move {"by"}, GET /files/rows/{id}/thumb?name= (also under {D});
+             GET {B}/pages hides excluded pages unless ?excluded=true
   uploads    POST {D}/upload?name= | {B}/upload?name= (C21; one page image or PDF, the file as the body; a PDF
              answers with a job turning it into page images), POST {D}/copy-folder {"path"} (a job: a folder's
              images copied into the uploads folder); deleting a row deletes its uploads
@@ -65,7 +69,7 @@ from .centres import suggestions
 from .db import BOOK, DATASET, GENERATED, Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+from .schemas import (PageExclude, PageFile, PageMove, AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
                       GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
@@ -253,6 +257,44 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.post("/api/datasets/{book_id}/copy-folder", dependencies=ds, status_code=202)
     def copy_folder(book_id: int, body: FolderPath) -> Dict:
         return jobs.copy_pages(book_id, body.path, uploads()).as_dict()
+
+    # ---- the page manager (C22) -------------------------------------------------------------------------
+    def _no_job(book_id: int) -> None:
+        if jobs.running_for(book_id):
+            raise HTTPException(409, "A job is running for this book; change its pages when it has finished.")
+
+    @both("get", "/{book_id}/page-list", dependencies=auth)
+    def page_list(book_id: int) -> Dict:
+        """The pages in order (also excluded ones and image files not prepared yet), each with its thumbnail."""
+        from urllib.parse import quote
+        from .pages import page_list as listing
+        got = listing(library, book_id, uploads())
+        for p in got["pages"]:
+            p["thumb"] = f"/files/rows/{book_id}/thumb?name={quote(p['file'])}&token={token}"
+        return got
+
+    @both("post", "/{book_id}/page-list/exclude", dependencies=auth)
+    def exclude_page(book_id: int, body: PageExclude) -> Dict:
+        from .pages import set_excluded
+        _no_job(book_id)
+        return set_excluded(library, book_id, body.file, body.excluded, body.force)
+
+    @both("post", "/{book_id}/page-list/delete", dependencies=auth)
+    def delete_page(book_id: int, body: PageFile) -> Dict:
+        from .pages import delete_page as remove
+        _no_job(book_id)
+        return remove(library, book_id, body.file, uploads(), body.force)
+
+    @both("post", "/{book_id}/pages/{page_id}/move", dependencies=auth)
+    def move_page(book_id: int, page_id: int, body: PageMove) -> Dict:
+        from .pages import move_page as move
+        _no_job(book_id)
+        return move(library, book_id, page_id, body.by)
+
+    @app.get("/files/rows/{book_id}/thumb", dependencies=auth)
+    def page_thumb(book_id: int, name: str = Query(...)):
+        from .pages import thumbnail
+        return FileResponse(thumbnail(library, book_id, name), headers={"Cache-Control": "max-age=3600"})
 
     @both("get", "/{book_id}", dependencies=auth)
     def get_book(book_id: int) -> Dict:
@@ -465,6 +507,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
             q = select(Page).where(Page.book_id == book_id, Page.part == part)
             if page_id:
                 q = q.where(Page.id == page_id)
+            else:
+                q = q.where(Page.excluded.is_(False))                  # C22
             if page_ids:
                 q = q.where(Page.id.in_([int(i) for i in page_ids.split(",")]))
             rows = s.scalars(q.order_by(Page.number, Page.id)).all()
@@ -691,16 +735,20 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     # ---- reading -----------------------------------------------------------------------------------
     @both("get", "/{book_id}/pages", dependencies=auth)
-    def pages(book_id: int, part: str = Query("training", pattern="^(training|read)$")) -> List[Dict]:
+    def pages(book_id: int, part: str = Query("training", pattern="^(training|read)$"),
+              excluded: bool = False) -> List[Dict]:
+        """The pages of a part in order; excluded pages (C22) only with `excluded=true`."""
         with library.session() as s:
             book_or_404(s, book_id)
             out = []
-            for p in s.scalars(select(Page).where(Page.book_id == book_id, Page.part == part)
-                               .order_by(Page.number, Page.id)):
+            q = select(Page).where(Page.book_id == book_id, Page.part == part)
+            if not excluded:
+                q = q.where(Page.excluded.is_(False))
+            for p in s.scalars(q.order_by(Page.number, Page.id)):
                 n = s.scalar(select(func.count(Sample.id)).where(Sample.page_id == p.id, Sample.deleted.is_(False)))
                 out.append({"id": p.id, "file": p.file, "width": p.width, "height": p.height, "status": p.status,
                             "message": p.message, "lines": len(p.lines), "samples": n, "part": p.part,
-                            "number": p.number,
+                            "number": p.number, "excluded": p.excluded,
                             "image": f"/files/pages/{p.id}?token={token}"})
             return out
 

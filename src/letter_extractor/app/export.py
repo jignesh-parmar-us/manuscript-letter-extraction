@@ -87,15 +87,17 @@ def export_book(lib: Library, book_id: int, folder: Optional[Path] = None, image
         folder = Path(folder).expanduser()
         if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
             raise LibraryError(f"The export folder must be new or empty: {folder}")
-        pages = {p.id: p for p in s.scalars(select(Page).where(Page.book_id == book_id, Page.part == "training"))}
+        pages = {p.id: p for p in s.scalars(select(Page).where(Page.book_id == book_id, Page.part == "training",
+                                                               Page.excluded.is_not(True)))}           # excluded pages: C22
         groups = {g.id: g for g in s.scalars(select(LetterGroup).where(LetterGroup.book_id == book_id))}
         samples = _reading_order(list(s.scalars(select(Sample).where(Sample.book_id == book_id,
                                                                     Sample.part == "training",
                                                                     Sample.deleted.is_(False)))))
         # letters made by the system only once their group is reviewed
-        samples = [x for x in samples if x.source != GENERATED
-                   or (x.group_id in groups and groups[x.group_id].status != "auto")]
-        lines = list(s.scalars(select(Line).join(Page).where(Page.book_id == book_id, Page.part == "training")
+        samples = [x for x in samples if (x.source != GENERATED
+                   or (x.group_id in groups and groups[x.group_id].status != "auto"))
+                   and (x.page_id is None or x.page_id in pages)]
+        lines = list(s.scalars(select(Line).join(Page).where(Page.book_id == book_id, Page.part == "training", Page.excluded.is_not(True))
                                .order_by(Line.page_id, Line.number)))
 
         # ---- classes: one per label --------------------------------------------------------------------

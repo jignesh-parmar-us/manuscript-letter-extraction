@@ -6,7 +6,7 @@ import Capture from "./Capture";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), capture: vi.fn(), addPages: vi.fn(),
+  return { ...real, api: { pages: vi.fn(), pageProblems: vi.fn(), pageList: vi.fn(), capture: vi.fn(), addPages: vi.fn(),
     recutPage: vi.fn(), job: vi.fn(), cancelJob: vi.fn(), setSettings: vi.fn(), setWriting: vi.fn(),
     setInputFolder: vi.fn(), pickFolder: vi.fn() } };
 });
@@ -25,6 +25,7 @@ describe("Capture", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(api.pages).mockResolvedValue([]);
+    vi.mocked(api.pageList).mockResolvedValue({ part: "read", folder: "", owned: false, pages: [] });
     vi.mocked(api.pageProblems).mockResolvedValue([{ file: "p3.png", problem: "new" }]);
   });
   afterEach(() => vi.useRealTimers());

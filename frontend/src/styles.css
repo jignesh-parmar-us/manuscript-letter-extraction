@@ -1564,3 +1564,23 @@ a.button.disabled {
   overflow-y: auto; /* only when the window is too short for all the letters */
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
 }
+
+/* ---- page manager (C22) ---- */
+.page-manager {
+  margin-top: 12px;
+}
+.page-manager .row {
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.page-thumb {
+  display: block;
+  width: 56px;
+  max-height: 80px;
+  object-fit: contain;
+  background: var(--surface, transparent);
+  border: 1px solid var(--line, #ddd);
+}
+tr.excluded td {
+  opacity: 0.6;
+}

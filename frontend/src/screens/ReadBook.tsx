@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, AppInfo, Book, Job, PageInfo, PageProblem } from "../api";
 import { useConfirm } from "../components/Confirm";
 import ErrorBox from "../components/ErrorBox";
+import PageManager from "../components/PageManager";
 import { UploadMore } from "../components/UploadPages";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
@@ -28,9 +29,11 @@ export default function ReadBook({ book, info, onChanged }: Props) {
   const [error, setError] = useState<unknown>(null);
   const [dialog, confirm] = useConfirm();
 
+  const [reload, setReload] = useState(0);
   const load = useCallback(() => {
     api.pages(book.id, "read").then(setPages, setError);
     api.pageProblems(book.id, "read").then(setProblems, setError);
+    setReload((n) => n + 1);
   }, [book.id]);
   useEffect(load, [load, book.read_dir, book.read_pdf]);
 
@@ -122,10 +125,8 @@ export default function ReadBook({ book, info, onChanged }: Props) {
             <span className="muted">none yet: upload them, or choose a PDF or a folder of images below.</span>
           )}
         </p>
-        {!book.read_pdf && (
-          <UploadMore kind="book" id={book.id} disabled={running}
-            onDone={(j) => (j ? setJob(j) : onEnd())} onError={setError} />
-        )}
+        <UploadMore kind="book" id={book.id} disabled={running}
+          onDone={(j) => (j ? setJob(j) : onEnd())} onError={setError} />
         <div className="read-source">
           <label className="small">
             {book.read_pdf ? "PDF file" : "or a PDF file on this computer (only read)"}
@@ -190,40 +191,15 @@ export default function ReadBook({ book, info, onChanged }: Props) {
         </label>
       </details>
 
-      {pages.length > 0 && (
-        <table className="list" aria-label="Read Book pages">
-          <thead>
-            <tr>
-              <th className="num">#</th>
-              <th>Page</th>
-              <th>Status</th>
-              <th className="num">Lines</th>
-              <th className="num">Letters</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {pages.map((p) => (
-              <tr key={p.id}>
-                <td className="num">{p.number}</td>
-                <td>{p.file}</td>
-                <td>
-                  <span className={p.status === "OK" ? "badge ok" : "badge warn"}>{p.status === "OK" ? "Prepared" : p.status}</span>{" "}
-                  <span className="muted small">{p.message}</span>
-                </td>
-                <td className="num">{p.lines}</td>
-                <td className="num">{p.samples}</td>
-                <td className="actions">
-                  <button onClick={() => go(`/books/${book.id}/readpages/${p.id}`)}>Open</button>
-                  <button disabled={running} onClick={() => recut(p.id)} title="Prepare this page again, for example after a failure">
-                    Prepare again
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <PageManager bookId={book.id} kind="book" busy={running} reload={reload} onChanged={onEnd} onError={setError}
+        actions={(p) => (
+          <>
+            <button onClick={() => go(`/books/${book.id}/readpages/${p.id}`)}>Open</button>
+            <button disabled={running} onClick={() => recut(p.id!)} title="Prepare this page again, for example after a failure">
+              Prepare again
+            </button>
+          </>
+        )} />
     </div>
   );
 }

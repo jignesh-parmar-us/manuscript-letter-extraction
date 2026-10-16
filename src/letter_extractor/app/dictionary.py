@@ -115,7 +115,7 @@ def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
     q = (select(Sample.line_id, LetterGroup.label_dev)
          .join(Page, Sample.page_id == Page.id)
          .outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
-         .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training"))
+         .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training", Page.excluded.is_not(True)))
     if skip_files:
         q = q.where(Page.file.not_in(list(skip_files)))
     rows = s.execute(q.order_by(Page.id, Sample.line_number, Sample.x, Sample.pos)).all()
@@ -134,7 +134,7 @@ def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
 
 def _proofread_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
     out = []
-    q = select(PageText.proofread).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id)
+    q = select(PageText.proofread).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id, Page.excluded.is_not(True))
     if skip_files:
         q = q.where(Page.file.not_in(list(skip_files)))
     for raw in s.scalars(q):

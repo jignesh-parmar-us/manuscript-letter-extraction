@@ -167,6 +167,33 @@ export interface PageInfo {
   image: string;
   part?: Part;
   number?: number; // its place in the book
+  excluded?: boolean; // C22: listed only when asked for
+}
+
+/** A page of the page manager (C22): a page prepared or captured (`id`), an exclusion of a file not prepared
+ *  yet (`id`, not `prepared`), or an image file not prepared yet (no `id`, status "new"). */
+export interface PageEntry {
+  id: number | null;
+  file: string;
+  number: number | null;
+  excluded: boolean;
+  prepared: boolean;
+  status: string;
+  message: string;
+  lines: number;
+  samples: number;
+  checked: number;      // checked lines (Line truth)
+  corrections: number;  // corrected or reviewed whole lines, proofread lines
+  reviewed: number;     // letters in reviewed groups
+  missing: boolean;     // the image file is not in the folder
+  thumb: string;
+}
+
+export interface PageList {
+  part: Part;
+  folder: string;
+  owned: boolean;       // the images are the app's own copies (uploaded, or a PDF's pages): deleting removes them
+  pages: PageEntry[];
 }
 
 /** How uncertain letters are written in downloads: [?], [?ક] (the best guess inside), or the plain guess. */
@@ -605,6 +632,13 @@ export const api = {
     patch<Book>(`/api/books/${id}/settings`, { settings }),
   pageProblems: (id: number, part: Part = "training") => get<PageProblem[]>(`/api/books/${id}/page-problems?part=${part}`),
   pages: (id: number, part: Part = "training") => get<PageInfo[]>(`/api/books/${id}/pages?part=${part}`),
+  pageList: (id: number) => get<PageList>(`/api/books/${id}/page-list`),
+  excludePage: (id: number, file: string, excluded: boolean, force = false) =>
+    post<{ file: string; excluded: boolean }>(`/api/books/${id}/page-list/exclude`, { file, excluded, force }),
+  deletePage: (id: number, file: string, force = false) =>
+    post<{ file: string; file_removed: boolean; excluded: boolean }>(`/api/books/${id}/page-list/delete`, { file, force }),
+  movePage: (id: number, pageId: number, by: number) =>
+    post<{ page: number; number: number }>(`/api/books/${id}/pages/${pageId}/move`, { by }),
   readFolder: (id: number, path: string, force = false) => post<Book>(`/api/books/${id}/read/folder`, { path, force }),
   readPdf: (id: number, path: string, force = false) => post<Job>(`/api/books/${id}/read/pdf`, { path, force }),
   readCapture: (id: number) => post<Job>(`/api/books/${id}/read/capture`),

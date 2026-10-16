@@ -6,7 +6,7 @@ import BookView from "./BookView";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, api: { book: vi.fn(), pages: vi.fn(), pageProblems: vi.fn() } };
+  return { ...real, api: { book: vi.fn(), pages: vi.fn(), pageProblems: vi.fn(), pageList: vi.fn() } };
 });
 
 const book: Book = {
@@ -18,6 +18,7 @@ const book: Book = {
 describe("BookView", () => {
   beforeEach(() => {
     vi.mocked(api.book).mockResolvedValue(book);
+    vi.mocked(api.pageList).mockResolvedValue({ part: "read", folder: "", owned: false, pages: [] });
     window.location.hash = "";
   });
 
@@ -42,6 +43,7 @@ describe("BookView", () => {
     vi.mocked(api.book).mockResolvedValue({ ...book, id: 8, name: "Vachnamrut 1933", kind: "book", dataset_id: 7,
       dataset_name: "Vachnamrut Printed", pages: 0, reviewed: 0, unsure: 0 });
     vi.mocked(api.pages).mockResolvedValue([]);
+    vi.mocked(api.pageList).mockResolvedValue({ part: "read", folder: "", owned: false, pages: [] });
     vi.mocked(api.pageProblems).mockResolvedValue([]);
     const { rerender } = render(<BookView bookId={8} tab="capture" info={null} />);
     await waitFor(() => expect(window.location.hash).toBe("#/books/8/read"));  // capture is a dataset's

@@ -76,14 +76,14 @@ def _signature(s, book: Book) -> str:
     from .db import LineTruth
     checked = s.execute(select(LineTruth.line_id, LineTruth.text_dev).join(Line, LineTruth.line_id == Line.id)
                         .join(Page, Line.page_id == Page.id)
-                        .where(Page.book_id == book.id, Page.part == "read", LineTruth.text_dev != "")
+                        .where(Page.book_id == book.id, Page.part == "read", LineTruth.text_dev != "", Page.excluded.is_not(True))
                         .order_by(LineTruth.line_id)).all()
     src = Library.training_source(book)
     rows = [] if src is None else s.execute(
         select(Sample.id, LetterGroup.label_dev, LetterGroup.status, Sample.x, Sample.w)
         .join(LetterGroup, Sample.group_id == LetterGroup.id).outerjoin(Page, Sample.page_id == Page.id)
         .where(Sample.book_id == src, Sample.deleted.is_(False), LetterGroup.label_dev != "",
-               LetterGroup.status != "auto",
+               LetterGroup.status != "auto", Page.excluded.is_not(True),
                or_(and_(Page.part == "training", Sample.line_id.is_not(None)),
                    and_(Sample.line_id.is_(None), Sample.mask != "")))   # also letters on no line
         .order_by(Sample.id)).all()
@@ -168,7 +168,7 @@ def _checked_lines(lib: Library, book_id: int, skip_files: Sequence[str] = ()) -
     with lib.session() as s:
         q = (select(Line.id, Page.file, Page.line_spacing, LineTruth.text_dev)
              .join(LineTruth, LineTruth.line_id == Line.id).join(Page, Line.page_id == Page.id)
-             .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != ""))
+             .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "", Page.excluded.is_not(True)))
         if skip_files:
             q = q.where(Page.file.not_in(list(skip_files)))
         return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id, Line.number)).all()]
@@ -181,8 +181,8 @@ def usual_spacing(lib: Library, book_id: int) -> float:
     if src is None:
         return 0.0
     with lib.session() as s:
-        sp = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == src,
-                                                                    Page.part == "training")) if v]
+        sp = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == src, Page.part == "training",
+                                                                    Page.excluded.is_not(True))) if v]
     return float(np.median(sp)) if sp else 0.0
 
 
@@ -386,7 +386,7 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
     with lib.session() as s:
         q = (select(Sample, LetterGroup.label_dev, Page.line_spacing, Page.file)
              .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
-             .where(Sample.book_id == src, Sample.deleted.is_(False), Page.part == "training",
+             .where(Sample.book_id == src, Sample.deleted.is_(False), Page.part == "training", Page.excluded.is_not(True),
                     Sample.line_id.is_not(None), LetterGroup.label_dev != ""))
         rows = s.execute(q).all()
         status = dict(s.execute(select(LetterGroup.id, LetterGroup.status)
@@ -573,7 +573,7 @@ def search_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] = 
     book = lib.get_book(book_id)
     with lib.session() as s:
         q = (select(Page.id).join(Line, Line.page_id == Page.id).join(Sample, Sample.line_id == Line.id)
-             .where(Page.book_id == book_id, Sample.deleted.is_(False)).distinct())
+             .where(Page.book_id == book_id, Sample.deleted.is_(False), Page.excluded.is_not(True)).distinct())
         q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
         ids = list(s.scalars(q.order_by(Page.number, Page.id)))
     if not ids:
@@ -683,7 +683,7 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
                          .join(Line, Line.page_id == Page.id).join(LineTruth, LineTruth.line_id == Line.id)
                          .join(WholeLine, WholeLine.line_id == Line.id)
                          .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "",
-                                WholeLine.engine != "search")
+                                WholeLine.engine != "search", Page.excluded.is_not(True))
                          .order_by(Page.number, Page.id, Line.number)).all()
     if not rows:
         raise LibraryError("No checked lines yet: correct lines in Whole lines and mark them reviewed (✓), "

@@ -139,7 +139,7 @@ def read_book_lines(lib: Library, book_id: int, page_ids: Optional[Sequence[int]
     t0 = time.time()
     book = lib.get_book(book_id)
     with lib.session() as s:
-        q = select(Page.id).where(Page.book_id == book_id)
+        q = select(Page.id).where(Page.book_id == book_id, Page.excluded.is_not(True))          # excluded pages are not read (C22)
         q = q.where(Page.id.in_(list(page_ids))) if page_ids else q.where(Page.part == part)
         ids = list(s.scalars(q.order_by(Page.number, Page.id)))
     if not ids:
@@ -251,7 +251,7 @@ def whole_line_texts(lib: Library, book_id: int, part: str = "read", page_id: Op
     out = []
     with lib.session() as s:
         q = select(Page).where(Page.book_id == book_id)
-        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part)
+        q = q.where(Page.id == page_id) if page_id else q.where(Page.part == part, Page.excluded.is_not(True))
         if page_ids:
             q = q.where(Page.id.in_(list(page_ids)))
         pages = s.scalars(q.order_by(Page.number, Page.id)).all()

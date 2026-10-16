@@ -96,7 +96,7 @@ class UploadTests(unittest.TestCase):
         self.lib.set_input_folder(d["id"], own)
         r = self.upload("datasets", d["id"], "b.png", png())
         self.assertEqual(r.status_code, 400)
-        self.assertIn("come from", r.json()["detail"])
+        self.assertIn("folder of your own", r.json()["detail"])
         self.assertEqual(self.lib.get_book(d["id"]).input_dir, str(own.resolve()))
 
     def test_a_books_images_become_its_read_book_folder(self):
@@ -120,7 +120,10 @@ class UploadTests(unittest.TestCase):
         self.assertTrue((self.uploads / "books" / book.folder / "Book.pdf").is_file())       # the PDF is kept
         pages = sorted(p.name for p in (self.lib.book_dir(book) / "read" / "pages").iterdir())
         self.assertEqual(pages, ["page-0001.jpg", "page-0002.jpg", "page-0003.jpg"])
-        self.assertEqual(self.upload("books", b["id"], "more.png", png()).status_code, 400)
+        r = self.upload("books", b["id"], "more.png", png())                 # C22: added to the PDF's pages
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue((self.lib.book_dir(book) / "read" / "pages" / "more.png").is_file())
+        self.assertEqual(self.upload("books", b["id"], "again.pdf", pdf()).status_code, 400)
 
     def test_a_datasets_pdf_pages_are_put_beside_it(self):
         d = self.make("datasets")
