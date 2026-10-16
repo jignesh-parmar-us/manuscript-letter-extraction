@@ -137,7 +137,8 @@ class Sample(Base):
     page_id: Mapped[Optional[int]] = mapped_column(ForeignKey("page.id", ondelete="CASCADE"), index=True,
                                                    nullable=True)        # empty for uploaded samples
     part: Mapped[str] = mapped_column(String(10), default="training", index=True)   # its page's part (C16a)
-    line_id: Mapped[Optional[int]] = mapped_column(ForeignKey("line.id", ondelete="CASCADE"), nullable=True)
+    line_id: Mapped[Optional[int]] = mapped_column(ForeignKey("line.id", ondelete="CASCADE"), nullable=True,
+                                                   index=True)           # migration 0016
     line_number: Mapped[int] = mapped_column(Integer, default=0)
     pos: Mapped[int] = mapped_column(Integer, default=0)                  # reading order within the line
     x: Mapped[int] = mapped_column(Integer, default=0)

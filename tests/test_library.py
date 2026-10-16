@@ -52,6 +52,12 @@ class SchemaTests(LibraryTestCase):
             diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
         self.assertEqual(diff, [])
 
+    def test_the_letters_of_a_line_are_found_by_an_index(self):
+        from sqlalchemy import text
+        with self.lib.engine.connect() as conn:
+            plan = " ".join(str(r) for r in conn.execute(text("EXPLAIN QUERY PLAN SELECT * FROM sample WHERE line_id = 1")))
+        self.assertIn("ix_sample_line_id", plan)                          # migration 0016: not the whole table
+
     def test_reopening_runs_no_new_migration_and_keeps_data(self):
         self.lib.create_book("A", self.inp)
         self.lib.close()

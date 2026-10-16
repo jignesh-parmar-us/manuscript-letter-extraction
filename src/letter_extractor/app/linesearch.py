@@ -486,17 +486,28 @@ def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: floa
                 pool: Optional[LinePool] = None) -> Dict[int, tuple]:
     """{line id: (text, aksharas)} for the lines with cut letters (their ink); aksharas as `search_aksharas`.
     `pool`: read the lines in its worker processes (it holds this reader and language model)."""
+    return _read_many(lib, book, [(lid, spacing) for lid in line_ids], model, lm, settings, masks, pool)
+
+
+def _read_many(lib: Library, book: Book, lines: Sequence[tuple], model, lm,
+               settings: SearchSettings = SearchSettings(), masks: Optional[MaskPack] = None,
+               pool: Optional[LinePool] = None) -> Dict[int, tuple]:
+    """`_read_lines` of (line id, its page's line spacing) of several pages at once: Measure gives a fold's checked
+    lines together, so that the workers get enough lines (most pages have fewer than 8 checked lines)."""
     reader, meta = model
     found = {}
-    f = page_scale(spacing, meta.get("spacing"))
-    inks = [(lid, ink) for lid in line_ids
-            for ink in [_line_ink(lib, book, lid, meta["typical_width"], f, masks=masks)] if ink is not None]
-    jobs = [(ink[0], spacing * f, meta["typical_width"], meta["widths"], settings) for _, ink in inks]
+    inks = []
+    for lid, spacing in lines:
+        f = page_scale(spacing, meta.get("spacing"))
+        ink = _line_ink(lib, book, lid, meta["typical_width"], f, masks=masks)
+        if ink is not None:
+            inks.append((lid, f, spacing, ink))
+    jobs = [(ink[0], spacing * f, meta["typical_width"], meta["widths"], settings) for _, f, spacing, ink in inks]
     if pool is not None and pool.parallel(len(jobs)):
         readings = pool.read(jobs)
     else:
         readings = (read_line(c, sp, reader, T, w, lm, s) for c, sp, T, w, s in jobs)
-    for (lid, (c, x0, y0)), (text, steps, _) in zip(inks, readings):
+    for (lid, f, _, (c, x0, y0)), (text, steps, _) in zip(inks, readings):
         aks = []
         for st in steps:
             rows = np.flatnonzero(c[:, st.x0:st.x1].any(axis=1))
@@ -695,13 +706,13 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
         lm = book_model_without(lib, book_id, files[k]) if use_lm else None
         lm = lm if lm is not None and len(lm) else None
         pool = LinePool(pool_workers(cfg.line_workers), reader, lm)              # S4b: this fold's reader
-        try:
-            got = {}
-            for _, pid, file, spacing in pages[k::n_folds]:
-                got[pid] = _read_lines(lib, book, [r[4] for r in rows if r[0] == pid], spacing or 100.0,
-                                       (reader, meta), lm, settings, masks, pool)
+        try:                                                             # the fold's lines in one batch
+            read = _read_many(lib, book, [(r[4], spacing or 100.0) for _, pid, _, spacing in pages[k::n_folds]
+                                          for r in rows if r[0] == pid], (reader, meta), lm, settings, masks, pool)
         finally:
             pool.close()
+        got = {pid: {r[4]: read[r[4]] for r in rows if r[0] == pid and r[4] in read}
+               for _, pid, _, _ in pages[k::n_folds]}
         for _, pid, file, spacing in pages[k::n_folds]:
             mine = [r for r in rows if r[0] == pid]
             for r in mine:

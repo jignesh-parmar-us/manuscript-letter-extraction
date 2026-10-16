@@ -342,6 +342,14 @@ how it differs from the plan:
 - **Measured on a busy computer** (load 6–18: VS Code, the animated wallpaper, Spotlight), so the seconds
   above are only ratios; S5 times Retrain and reading on a quiet one.
 
+#### Found in S5 (2026-10-16), fixed the same day (same numbers)
+
+- **No index on `sample.line_id`:** "the letters of this line" read the whole sample table (129,509 rows, about
+  6 KB each) once per training line, per checked line and fold, and per line read. Migration 0016 adds
+  `ix_sample_line_id`. It changes no data; the real library gets it the next time the app opens it.
+- **Measure read a fold page by page**, and only the page's checked lines: most pages have fewer than 8, so the
+  workers were never used. A fold's checked lines now go to the pool in one batch (`linesearch._read_many`).
+
 ### S5. One heavy session, when the user chooses (about 2.5 h on the computer, mostly unattended)
 
 On a copy of the library in the scratchpad (S1's clone), one job after the other:
