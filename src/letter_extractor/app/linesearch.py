@@ -36,7 +36,7 @@ from sqlalchemy import and_, or_, select
 from ..ocr.aksharas import split_aksharas
 from ..ocr.features import FEATURE_VERSION, features, varied
 from ..ocr.reader import LetterReader
-from ..ocr.segment import SearchSettings, align, clear_borders, line_windows_range, narrow, read_line
+from ..ocr.segment import LinePool, SearchSettings, align, clear_borders, narrow, pool_workers, read_line
 from .db import Book, LetterGroup, Line, Page, Sample, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
 from .linestore import Entry, FeatureStore, MaskPack
@@ -46,7 +46,7 @@ from .suggest import LineDone
 NOT_A_LETTER = "<not a letter>"
 NEG_WEIGHT = 0.25
 EPOCHS = 40                 # 15 before learning from corrections; 40 measured better (TUNING_PHASE2.md)
-BASE_EPOCHS = 15            # the reader that cuts the checked lines into their aksharas
+BASE_EPOCHS = 15            # the reader that cuts the checked lines into their aksharas (Config.line_base_epochs)
 SCALE_TOLERANCE = 0.2       # a page whose line spacing is within this share of the training pages' is read as it is
 MIN_ALIGN = -3.0            # a checked line whose cut scores less per akshara is not learned from
 
@@ -130,16 +130,17 @@ def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=
     """The reader and its meta (letters, labels, checked lines learned, typical width, each label's
     width), trained on the reviewed letters of the Training Data pages and on the checked lines of the
     Read Book pages (learning from corrections), those of the pages `skip_files` left out."""
-    masks = MaskPack(lib.book_dir(lib.get_book(book_id)))
+    book = lib.get_book(book_id)
+    cfg, masks = lib.book_config(book), MaskPack(lib.book_dir(book))
     data = _training_set(lib, book_id, skip_files, progress, cancel, seed, masks=masks)
     if progress:
         progress(f"training on {len(data['X'])} windows")
-    base = _fit(data, cancel, epochs=BASE_EPOCHS)
+    base = _fit(data, cancel, epochs=cfg.line_base_epochs, batch=cfg.line_batch)
     learned = _learn_corrections(lib, book_id, data, base, skip_files, progress, cancel, masks)
     masks.save()
     if learned["lines"]:
         data = _with_corrections(data, learned)
-    reader = _fit(data, cancel)
+    reader = _fit(data, cancel, batch=cfg.line_batch)
     return reader, {**data["meta"], "lines": learned["lines"]}
 
 
@@ -219,11 +220,10 @@ def _learn_folds(lib: Library, book_id: int, folds: Dict[int, tuple], progress=N
     book = lib.get_book(book_id)
     out = {k: {"lines": 0, "X": [], "labels": [], "widths": defaultdict(list)} for k in folds}
     rows = _checked_lines(lib, book_id)
+    todo = []                                      # (line, its aksharas, the folds that learn from this ink, job)
     for n, (lid, file, spacing, text) in enumerate(rows, 1):
         if cancel and cancel():
             raise Cancelled("Cancelled; the line search reader was not changed.")
-        if progress and n % 10 == 1:
-            progress(f"learning from the checked lines: {n} of {len(rows)}")
         ks = [k for k, (_, _, skip) in folds.items() if file not in skip]
         if not ks:
             continue
@@ -240,7 +240,13 @@ def _learn_folds(lib: Library, book_id: int, folds: Dict[int, tuple], progress=N
         aks = [a for a in split_aksharas(_chars(text)) if a.strip() and a != "?"]
         for c, f, group in inks.values():
             Ts = [folds[k][1]["typical_width"] for k in group]
-            every = line_windows_range(c, (spacing or 100.0) * f, min(Ts), max(Ts))
+            todo.append((n, aks, group, (c, (spacing or 100.0) * f, min(Ts), max(Ts), SearchSettings())))
+    with LinePool(pool_workers(lib.book_config(book).line_workers)) as pool:      # S4b: cut in parallel, in order
+        for (n, aks, group, _), every in zip(todo, pool.windows([t[3] for t in todo])):
+            if cancel and cancel():
+                raise Cancelled("Cancelled; the line search reader was not changed.")
+            if progress and n % 10 == 1:
+                progress(f"learning from the checked lines: {n} of {len(rows)}")
             for k in group:
                 base, meta, _ = folds[k]
                 T = meta["typical_width"]
@@ -280,9 +286,9 @@ def _with_corrections(data: Dict, learned: Dict) -> Dict:
     return {"X": X, "y": y, "weights": weights, "classes": classes, "meta": meta}
 
 
-def _fit(data: Dict, cancel=None, hidden: int = 0, epochs: int = EPOCHS) -> LetterReader:
+def _fit(data: Dict, cancel=None, hidden: int = 0, epochs: int = EPOCHS, batch: int = 128) -> LetterReader:
     reader = LetterReader(data["classes"], data["X"].shape[1], hidden=hidden)
-    reader.train(data["X"], data["y"], weights=data["weights"], epochs=epochs, cancel=cancel)
+    reader.train(data["X"], data["y"], weights=data["weights"], epochs=epochs, batch=batch, cancel=cancel)
     if cancel and cancel():
         raise Cancelled("Cancelled; the line search reader was not changed.")
     return reader
@@ -476,17 +482,21 @@ def _load(lib: Library, book: Book):
 
 
 def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: float, model, lm,
-                settings: SearchSettings = SearchSettings(), masks: Optional[MaskPack] = None) -> Dict[int, tuple]:
-    """{line id: (text, aksharas)} for the lines with cut letters (their ink); aksharas as `search_aksharas`."""
+                settings: SearchSettings = SearchSettings(), masks: Optional[MaskPack] = None,
+                pool: Optional[LinePool] = None) -> Dict[int, tuple]:
+    """{line id: (text, aksharas)} for the lines with cut letters (their ink); aksharas as `search_aksharas`.
+    `pool`: read the lines in its worker processes (it holds this reader and language model)."""
     reader, meta = model
     found = {}
-    for lid in line_ids:
-        f = page_scale(spacing, meta.get("spacing"))
-        ink = _line_ink(lib, book, lid, meta["typical_width"], f, masks=masks)
-        if ink is None:
-            continue
-        c, x0, y0 = ink
-        text, steps, _ = read_line(c, spacing * f, reader, meta["typical_width"], meta["widths"], lm, settings)
+    f = page_scale(spacing, meta.get("spacing"))
+    inks = [(lid, ink) for lid in line_ids
+            for ink in [_line_ink(lib, book, lid, meta["typical_width"], f, masks=masks)] if ink is not None]
+    jobs = [(ink[0], spacing * f, meta["typical_width"], meta["widths"], settings) for _, ink in inks]
+    if pool is not None and pool.parallel(len(jobs)):
+        readings = pool.read(jobs)
+    else:
+        readings = (read_line(c, sp, reader, T, w, lm, s) for c, sp, T, w, s in jobs)
+    for (lid, (c, x0, y0)), (text, steps, _) in zip(inks, readings):
         aks = []
         for st in steps:
             rows = np.flatnonzero(c[:, st.x0:st.x1].any(axis=1))
@@ -497,7 +507,8 @@ def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: floa
     return found
 
 
-def search_page(lib: Library, page_id: int, model, lm, settings: SearchSettings = SearchSettings()) -> Dict:
+def search_page(lib: Library, page_id: int, model, lm, settings: SearchSettings = SearchSettings(),
+                pool: Optional[LinePool] = None) -> Dict:
     """Read every line of a page with the line search, and keep its reading. Tesseract need not have read
     the page: a line without a whole-line row gets one of engine "search" (no Tesseract text, so the Tesseract
     views leave it out)."""
@@ -509,7 +520,7 @@ def search_page(lib: Library, page_id: int, model, lm, settings: SearchSettings 
         spacing = page.line_spacing or 100.0
         line_ids = list(s.scalars(select(Line.id).where(Line.page_id == page_id).order_by(Line.number)))
         file = page.file
-    found = _read_lines(lib, book, line_ids, spacing, model, lm, settings)
+    found = _read_lines(lib, book, line_ids, spacing, model, lm, settings, pool=pool)
     with lib.session() as s:
         for lid, (text, aks) in found.items():
             row = s.scalar(select(WholeLine).where(WholeLine.line_id == lid))
@@ -550,14 +561,15 @@ def search_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] = 
         lm = book_model(lib, book_id)
         lm = lm if len(lm) else None
     lines = 0
-    for n, pid in enumerate(ids, 1):
-        if cancel and cancel():
-            raise Cancelled(f"Stopped after {n - 1} pages; those have their second opinion.")
-        t = time.time()
-        r = search_page(lib, pid, model, lm)
-        lines += r["lines"]
-        if progress:
-            progress(n, len(ids), LineDone(r["page"], "OK", f"{r['lines']} lines", time.time() - t))
+    with LinePool(pool_workers(lib.book_config(book).line_workers), model[0], lm) as pool:   # S4b
+        for n, pid in enumerate(ids, 1):
+            if cancel and cancel():
+                raise Cancelled(f"Stopped after {n - 1} pages; those have their second opinion.")
+            t = time.time()
+            r = search_page(lib, pid, model, lm, pool=pool)
+            lines += r["lines"]
+            if progress:
+                progress(n, len(ids), LineDone(r["page"], "OK", f"{r['lines']} lines", time.time() - t))
     return {"pages": len(ids), "lines": lines, "trained": trained, "seconds": round(time.time() - t0, 1)}
 
 
@@ -630,7 +642,8 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     from .wholelines import trim_edges
     t0 = time.time()
     book = lib.get_book(book_id)
-    use_lm = lib.book_config(book).language_model
+    cfg = lib.book_config(book)
+    use_lm = cfg.language_model
     with lib.session() as s:
         rows = s.execute(select(Page.id, Page.file, Page.number, Page.line_spacing, Line.id, Line.number,
                                 LineTruth.text_dev, WholeLine.aksharas)
@@ -661,7 +674,7 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
         stop(0)
         say(f"fold {k + 1}: the reader that cuts the checked lines")
         data = _training_set(lib, book_id, files[k], cancel=cancel, store=store, masks=masks)
-        bases[k] = (_fit(data, cancel, epochs=BASE_EPOCHS), data["meta"], set(files[k]))
+        bases[k] = (_fit(data, cancel, epochs=cfg.line_base_epochs, batch=cfg.line_batch), data["meta"], set(files[k]))
         del data
     store.save()
     masks.save()
@@ -677,21 +690,28 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
         data = _training_set(lib, book_id, files[k], cancel=cancel, store=store, masks=masks)
         if learned[k]["lines"]:
             data = _with_corrections(data, learned[k])
-        reader, meta = _fit(data, cancel), {**data["meta"], "lines": learned[k]["lines"]}
+        reader, meta = _fit(data, cancel, batch=cfg.line_batch), {**data["meta"], "lines": learned[k]["lines"]}
         del data
         lm = book_model_without(lib, book_id, files[k]) if use_lm else None
         lm = lm if lm is not None and len(lm) else None
+        pool = LinePool(pool_workers(cfg.line_workers), reader, lm)              # S4b: this fold's reader
+        try:
+            got = {}
+            for _, pid, file, spacing in pages[k::n_folds]:
+                got[pid] = _read_lines(lib, book, [r[4] for r in rows if r[0] == pid], spacing or 100.0,
+                                       (reader, meta), lm, settings, masks, pool)
+        finally:
+            pool.close()
         for _, pid, file, spacing in pages[k::n_folds]:
             mine = [r for r in rows if r[0] == pid]
-            got = _read_lines(lib, book, [r[4] for r in mine], spacing or 100.0, (reader, meta), lm, settings, masks)
             for r in mine:
-                if r[4] not in got:
+                if r[4] not in got[pid]:
                     continue
                 aks = trim_edges(json.loads(r[7]))
                 tess = "".join((" " if a[2] else "") + a[0] for a in aks)
                 tess_lm_aks = [a[3] if len(a) > 3 and a[3] else a[0] for a in aks]
                 tess_lm = "".join((" " if a[2] else "") + x for a, x in zip(aks, tess_lm_aks))
-                ours = got[r[4]][0]
+                ours = got[pid][r[4]][0]
                 wrong = _wrong_aksharas(tess_lm_aks, r[6])
                 marked = [o is not None for o in disagreements(tess_lm_aks, ours)]
                 truth = _chars(r[6])

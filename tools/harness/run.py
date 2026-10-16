@@ -3,7 +3,7 @@
 Usage (after build.py for folds 0-3):
   PYTHONPATH=src .venv/bin/python tools/harness/run.py --library <copy> --cache <dir> --name base [options]
 
-Options: --quick (only folds 0 and 1 trained and read: about half the time, to throw out bad ideas early;
+Options: --batch 512, --base-epochs 8 (S4d, S4e: tried in S5), --quick (only folds 0 and 1 trained and read: about half the time, to throw out bad ideas early;
 never quote its numbers), --lm 0.35 0.5 (language model weights to try; the readers are trained once), --hidden 0 (384: a
 network), --epochs 40, --seed 0, --no-corrections (do not learn from the other folds' checked lines),
 --unlined (also the reviewed letters on no line, System generated), --unreviewed-generated (with
@@ -47,9 +47,9 @@ def fold_data(cache, k):
             "files": j["files"]}
 
 
-def fit(data, hidden, epochs, seed):
+def fit(data, hidden, epochs, seed, batch=128):
     r = LetterReader(data["classes"], data["X"].shape[1], hidden=hidden, seed=seed)
-    r.train(data["X"], data["y"], weights=data["weights"], epochs=epochs, seed=seed)
+    r.train(data["X"], data["y"], weights=data["weights"], epochs=epochs, seed=seed, batch=batch)
     return r
 
 
@@ -131,6 +131,8 @@ def main():
     ap.add_argument("--no-corrections", action="store_true")
     ap.add_argument("--unlined", action="store_true")
     ap.add_argument("--unreviewed-generated", action="store_true")
+    ap.add_argument("--batch", type=int, default=128, help="training batch (S4d: 512 tried in S5)")
+    ap.add_argument("--base-epochs", type=int, default=linesearch.BASE_EPOCHS, help="the reader that cuts the checked lines (S4e)")
     ap.add_argument("--quick", action="store_true", help="2 of the 4 folds: for screening only, never quote it")
     a = ap.parse_args()
     lower_priority()
@@ -148,7 +150,7 @@ def _main(a):
             datas[k] = {**linesearch._with_corrections(d, extra), "files": d["files"]}
             print(f"fold {k}: {len(extra['labels'])} rows of letters on no line", flush=True)
     if not a.no_corrections:
-        bases = {k: fit(d, 0, linesearch.BASE_EPOCHS, a.seed) for k, d in datas.items()}
+        bases = {k: fit(d, 0, a.base_epochs, a.seed, a.batch) for k, d in datas.items()}
         learned = {k: {"X": [], "labels": [], "widths": collections.defaultdict(list), "lines": 0} for k in datas}
         for j in range(FOLDS):                              # one fold's lines in memory at a time
             lines = pickle.load(open(f"{a.cache}/lines{j}.pkl", "rb"))
@@ -172,7 +174,7 @@ def _main(a):
         for k in datas:
             datas[k] = {**linesearch._with_corrections(datas[k], learned[k]), "files": datas[k]["files"]}
             print(f"fold {k}: learned {learned[k]['lines']} checked lines", flush=True)
-    readers = {k: fit(d, a.hidden, a.epochs, a.seed) for k, d in datas.items()}
+    readers = {k: fit(d, a.hidden, a.epochs, a.seed, a.batch) for k, d in datas.items()}
 
     for w in a.lm:
         t0, out = time.time(), []

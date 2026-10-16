@@ -27,6 +27,27 @@ class TrainResult:
     history: List[Dict] = field(default_factory=list)
 
 
+def adam_step(prm: np.ndarray, gr: np.ndarray, m: np.ndarray, v: np.ndarray, buf, step: int, lr: float) -> None:
+    """One Adam step in place (S4c): m = 0.9 m + 0.1 g, v = 0.999 v + 0.001 g g, p -= lr m^ / (sqrt(v^) + 1e-8), with
+    m^, v^ the bias-corrected moments; the same operations in the same order as written out, without new arrays.
+    `buf`: two scratch arrays of the parameter's shape."""
+    a, b = buf
+    m *= 0.9
+    np.multiply(gr, 0.1, out=a)
+    m += a
+    v *= 0.999
+    np.multiply(gr, 0.001, out=a)
+    a *= gr
+    v += a
+    np.divide(m, 1 - 0.9 ** step, out=a)
+    a *= lr
+    np.divide(v, 1 - 0.999 ** step, out=b)
+    np.sqrt(b, out=b)
+    b += 1e-8
+    a /= b
+    prm -= a
+
+
 class LetterReader:
     def __init__(self, classes: Sequence[str], dim: int, hidden: int = 384, seed: int = 0):
         self.classes = list(classes)
@@ -85,6 +106,7 @@ class LetterReader:
         params = self._params()
         m = [np.zeros_like(p) for p in params]
         v = [np.zeros_like(p) for p in params]
+        buf = [(np.empty_like(p), np.empty_like(p)) for p in params]   # Adam's steps in place (S4c)
         w_all = np.ones(len(X), np.float32) if weights is None else weights.astype(np.float32)
         best, best_state, best_epoch, waited, step = np.inf, None, 0, 0, 0
         history = []
@@ -116,12 +138,8 @@ class LetterReader:
                 else:
                     grads = [Z.T @ g + decay * self.W2, g.sum(axis=0)]
                 step += 1
-                for k, (prm, gr) in enumerate(zip(params, grads)):          # Adam
-                    m[k] = 0.9 * m[k] + 0.1 * gr
-                    v[k] = 0.999 * v[k] + 0.001 * gr * gr
-                    mh = m[k] / (1 - 0.9 ** step)
-                    vh = v[k] / (1 - 0.999 ** step)
-                    prm -= lr * mh / (np.sqrt(vh) + 1e-8)
+                for k, (prm, gr) in enumerate(zip(params, grads)):
+                    adam_step(prm, gr, m[k], v[k], buf[k], step, lr)
             val = self.loss(Xv, yv) if Xv is not None and len(Xv) else total / len(X)
             history.append({"epoch": epoch, "train_loss": round(total / len(X), 4), "val_loss": round(val, 4)})
             if progress:

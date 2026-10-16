@@ -51,12 +51,16 @@ def hog(img: np.ndarray) -> np.ndarray:
     return np.concatenate(blocks)
 
 
-def normalize(mask: np.ndarray, size: int) -> np.ndarray:
-    """Ink mask -> square uint8 image (ink 255 on 0), ink centred, aspect ratio kept."""
-    ys, xs = np.nonzero(mask)
-    if ys.size == 0:
-        return np.zeros((size, size), np.uint8)
-    m = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+def normalize(mask: np.ndarray, size: int, tight: bool = False) -> np.ndarray:
+    """Ink mask -> square uint8 image (ink 255 on 0), ink centred, aspect ratio kept. `tight`: the mask is
+    already cropped to its ink (its first and last rows and columns hold ink), so it is not searched again."""
+    if tight:
+        m = mask
+    else:
+        ys, xs = np.nonzero(mask)
+        if ys.size == 0:
+            return np.zeros((size, size), np.uint8)
+        m = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
     h, w = m.shape
     side = max(h, w) + 2
     sq = np.zeros((side, side), np.uint8)
@@ -88,12 +92,16 @@ def fingerprint_size(cfg: Config) -> int:
 
 
 def hog_batch(imgs: np.ndarray) -> np.ndarray:
-    """`hog` of many square images at once (N x size x size, the same size): the same numbers, without a
-    Python loop per image (the line search reads about 10,000 windows a line)."""
-    g = imgs.astype(np.float32)
-    n, size, _ = g.shape
-    gx = np.stack([cv2.Sobel(im, cv2.CV_32F, 1, 0, ksize=3) for im in g]) if n else g
-    gy = np.stack([cv2.Sobel(im, cv2.CV_32F, 0, 1, ksize=3) for im in g]) if n else g
+    """`hog` of many square 8-bit images at once (N x size x size, the same size), without a Python loop per
+    image or per block (the line search reads about 7,000 windows a line). The gradients are OpenCV's 3 x 3 Sobel
+    (border reflected without repeating the edge, as cv2's default) computed in NumPy: on 8-bit images every
+    gradient is a small whole number, exact whatever the order of the sums, so the same numbers as `cv2.Sobel`."""
+    n, size, _ = imgs.shape
+    p = np.pad(imgs.astype(np.float32), ((0, 0), (1, 1), (1, 1)), mode="reflect")
+    dx = p[:, :, 2:] - p[:, :, :-2]
+    gx = dx[:, :-2] + 2 * dx[:, 1:-1] + dx[:, 2:]
+    dy = p[:, 2:, :] - p[:, :-2, :]
+    gy = dy[:, :, :-2] + 2 * dy[:, :, 1:-1] + dy[:, :, 2:]
     mag = np.sqrt(gx * gx + gy * gy)
     ang = (np.degrees(np.arctan2(gy, gx)) + 180.0) % 180.0
     b = np.minimum((ang / (180.0 / HOG_BINS)).astype(np.int64), HOG_BINS - 1)
@@ -105,11 +113,10 @@ def hog_batch(imgs: np.ndarray) -> np.ndarray:
     hist = np.bincount(idx.ravel(), weights=mag.ravel().astype(np.float64),
                        minlength=n * HOG_CELLS * HOG_CELLS * HOG_BINS).astype(np.float32)
     hist = hist.reshape(n, HOG_CELLS, HOG_CELLS, HOG_BINS)
-    blocks = []
-    for i in range(HOG_CELLS - 1):
-        for j in range(HOG_CELLS - 1):
-            v = hist[:, i:i + 2, j:j + 2].reshape(n, -1)
-            v = v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-6)
-            v = np.minimum(v, 0.2)
-            blocks.append(v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-6))
-    return np.concatenate(blocks, axis=1) if blocks else np.zeros((n, 0), np.float32)
+    # every 2 x 2 block of cells, its cells in the order (0, 0), (0, 1), (1, 0), (1, 1): all blocks at once
+    v = np.concatenate([hist[:, :-1, :-1], hist[:, :-1, 1:], hist[:, 1:, :-1], hist[:, 1:, 1:]], axis=3)
+    v = v.reshape(n, (HOG_CELLS - 1) ** 2, 4 * HOG_BINS)
+    v = v / (np.linalg.norm(v, axis=2, keepdims=True) + 1e-6)
+    v = np.minimum(v, 0.2)
+    v = v / (np.linalg.norm(v, axis=2, keepdims=True) + 1e-6)
+    return v.reshape(n, -1)

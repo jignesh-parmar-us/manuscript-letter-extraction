@@ -158,6 +158,11 @@ class Config:
     recut_min_width: float = 0.45         # a new sample must be at least this x a letter width wide...
     recut_min_group: int = 5              # ...and near the centre of a group with at least this many samples
 
+    # ---- our reader (the line search; docs/SPEED_PLAN.md, S4) -------------------------------------------
+    line_batch: int = 128                 # training batch (S4d: 512 is tried in S5; the numbers change)
+    line_base_epochs: int = 15            # epochs of the reader that cuts the checked lines (S4e: 5 and 8 tried in S5)
+    line_workers: int = 3                 # lines read / cut into windows in this many processes (S4b); 1: in the app's
+
     black: InkParams = field(default_factory=lambda: InkParams(
         min_speck_px=8, break_max_frac=0.3, min_break_px=2, min_piece_ink_px=15))
     red: InkParams = field(default_factory=lambda: InkParams(

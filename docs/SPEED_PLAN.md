@@ -3,7 +3,8 @@
 Comes **before Phase 3** (built from `docs/implementation_plan_phase3_lean.md`): every Phase 3 chunk is checked with the
 tests and with Measure, so they must be fast first.
 
-**Status:** S1, S2 and S3 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S4. Written 2026-10-15; the questions were answered the same day (section 5) and
+**Status:** S1–S4 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S5, the heavy session,
+when the user chooses (questions 7–9 still open; the defaults chosen are in S4). Written 2026-10-15; the questions were answered the same day (section 5) and
 the plan cut down to a lean scope the same day (section 6). S4 (faster reading and retraining) added the
 same day; its questions are open (section 5).
 
@@ -312,6 +313,34 @@ test book; c's check written; d and e are settings ready for S5; killing a paral
 |---|---|---|---|
 | Retrain | 28 min | about 15 min | about 8–10 min |
 | Reading | 6.6 s per line | about 1.5–2 s per line | about 1.5–2 s per line |
+
+#### Built (2026-10-16)
+
+Tests `tests/test_fast_reader.py` (9; the 3 that start worker processes run in `full` only). What was done and
+how it differs from the plan:
+
+- **a. Window features (same numbers, tested bit for bit against the code before):** a window's ink box comes
+  from the line's per-column ink counts and top / bottom rows (`segment._Ink`), not from searching its pixels;
+  the crop is passed on as tight, so `normalize` and the size part do not search it again; `hog_batch` computes
+  the 3 x 3 Sobel gradients for all windows at once in NumPy (on 8-bit images every gradient is a small whole
+  number, exact in any order, so equal to `cv2.Sobel`'s) and normalises the 25 blocks in one step. On two lines
+  of `samples/page1.jpg` (5,600–9,000 windows): **1.8–2.05x**. The blur and the two resizes per window are still
+  one OpenCV call each (about a third of what is left).
+- **b. Lines in parallel (same results, tested):** `segment.LinePool`, 3 worker processes by default (book
+  setting `line_workers`; question 7 open: 3 or 4), one thread each, lower priority, stopped with their parent
+  (tested by killing the parent). Reading (`search_book`: one pool for the book; Measure: one per fold, holding
+  that fold's reader and language model) and learning from the checked lines (`_learn_folds`: the windows in
+  the workers, the base readers' probabilities and `align` in the main process). Results in line order.
+  Workers start only for **8 lines or more at once** (`MIN_PARALLEL_LINES`): starting one costs about 3 s here,
+  about one line's work, so Read this page on a short page and the tests stay in one process. 9 sample lines
+  with 3 workers, the start included: **1.99x**. `LETTER_EXTRACTOR_WORKERS` (the test runner: 1) caps it too.
+- **c. Adam in place (same numbers, tested bit for bit):** `reader.adam_step`, buffers made once. With the
+  linear reader (the one used) on 6,000 rows: **1.5–1.6x** on training; with a hidden layer no gain (there the
+  matrix products dominate).
+- **d, e. Settings, defaults unchanged:** `line_batch` (128) and `line_base_epochs` (15) in the book's settings,
+  used by Retrain and Measure; `run.py --batch` / `--base-epochs` for the harness. Not tried yet (S5).
+- **Measured on a busy computer** (load 6–18: VS Code, the animated wallpaper, Spotlight), so the seconds
+  above are only ratios; S5 times Retrain and reading on a quiet one.
 
 ### S5. One heavy session, when the user chooses (about 2.5 h on the computer, mostly unattended)
 

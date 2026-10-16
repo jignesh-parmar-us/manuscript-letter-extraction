@@ -63,6 +63,29 @@ def _crop(mask: np.ndarray, a: int, b: int) -> Optional[np.ndarray]:
     return part[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 
 
+class _Ink:
+    """Where a line's ink is, column by column (how much, its top and bottom row), so that a window's ink box is
+    found from its columns without searching its pixels: the same box as `_crop` (S4a)."""
+
+    def __init__(self, mask: np.ndarray):
+        h, self.w = mask.shape
+        has = mask.any(axis=0)
+        self.count = np.concatenate([[0], np.cumsum(mask.sum(axis=0))])
+        self.top = np.where(has, mask.argmax(axis=0), h)
+        self.bot = np.where(has, h - 1 - mask[::-1].argmax(axis=0), -1)
+        self.cols = np.flatnonzero(has)
+        self.first = np.searchsorted(self.cols, np.arange(self.w + 1))          # first ink column at or after x
+        self.mask = mask
+
+    def crop(self, a: int, b: int) -> Optional[np.ndarray]:
+        a, b = max(0, a), min(self.w, b)
+        if a >= b or self.count[b] - self.count[a] < 10:
+            return None
+        c0, c1 = self.cols[self.first[a]], self.cols[self.first[b] - 1]
+        r0, r1 = self.top[c0:c1 + 1].min(), self.bot[c0:c1 + 1].max()
+        return self.mask[r0:r1 + 1, c0:c1 + 1]
+
+
 def _ink_runs(mask: np.ndarray, join: float) -> List[Tuple[int, int]]:
     """Stretches of columns with ink, those closer than `join` px joined."""
     cols = mask.any(axis=0)
@@ -162,6 +185,7 @@ def line_windows_range(mask: np.ndarray, spacing: float, lo: float, hi: float,
     if n < 2:
         return None
     empty = ~mask.any(axis=0)
+    ink = _Ink(mask)
     empty_edges, crops, meta = [], [], []
     for i in range(n):
         for j in range(i + 1, n):
@@ -173,11 +197,11 @@ def line_windows_range(mask: np.ndarray, spacing: float, lo: float, hi: float,
                 continue
             if width < s.min_width * lo:
                 continue
-            m = _crop(mask, cand[i], cand[j])
+            m = ink.crop(cand[i], cand[j])
             if m is not None:
                 crops.append(m)
                 meta.append((i, j, width))
-    return Windows(cand, empty_edges, meta, features_batch(crops, spacing))
+    return Windows(cand, empty_edges, meta, features_batch(crops, spacing, tight=True))
 
 
 def narrow(win: Optional[Windows], typical_width: float, s: SearchSettings = SearchSettings()) -> Optional[Windows]:
@@ -199,6 +223,87 @@ def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, wi
         return "", [], {"candidates": len(candidates(mask, s.step)), "windows": 0, "kept": 0}
     return search(win, reader.probabilities(win.X) if len(win.X) else None, reader.classes, typical_width,
                   widths, lm, s)
+
+
+# ---- lines in parallel (docs/SPEED_PLAN.md, S4b) ---------------------------------------------------------
+_MODEL: tuple = (None, None)                         # in a worker: the reader and language model it reads with
+MIN_PARALLEL_LINES = 8                               # fewer lines at once are cut in this process
+
+
+def _init_lines(reader, lm) -> None:
+    global _MODEL
+    from ..heavy import worker_init
+    worker_init()                                    # one thread, lower priority, stops with its parent
+    _MODEL = (reader, lm)
+
+
+def _windows_job(job) -> Optional[Windows]:
+    mask, spacing, lo, hi, s = job
+    return line_windows_range(mask, spacing, lo, hi, s)
+
+
+def _read_job(job, model=None):
+    mask, spacing, typical_width, widths, s = job
+    reader, lm = model or _MODEL
+    return read_line(mask, spacing, reader, typical_width, widths, lm, s)
+
+
+def pool_workers(workers: int) -> int:
+    """The number of line workers to use: LETTER_EXTRACTOR_WORKERS (the test runner: 1) caps the setting."""
+    import os
+    env = os.environ.get("LETTER_EXTRACTOR_WORKERS", "")
+    return min(workers, int(env)) if env.isdigit() and int(env) > 0 else workers
+
+
+class LinePool:
+    """Lines cut into windows or read in `workers` processes (S4b), one thread each, stopped with their parent.
+    The results come back in the order of the lines, so the text, the windows and their order are those of one
+    line after the other. The reader and language model given are copied into each worker once (a reader is
+    about 2.6 MB). With 1 worker everything runs in this process; the workers start only for `min_lines` lines
+    or more at once (starting one costs about 3 s on the development computer, about one line's work)."""
+
+    def __init__(self, workers: int, reader=None, lm=None, min_lines: Optional[int] = None):
+        self.model = (reader, lm)
+        self.workers = workers
+        self.min_lines = MIN_PARALLEL_LINES if min_lines is None else min_lines
+        self.ex = None
+
+    def parallel(self, n: int) -> bool:
+        """Whether `n` lines at once go to the workers."""
+        return self.workers > 1 and n >= self.min_lines
+
+    def _pool(self, jobs):
+        if self.ex is None and self.parallel(len(jobs)):
+            import multiprocessing
+            from concurrent.futures import ProcessPoolExecutor
+            self.ex = ProcessPoolExecutor(self.workers, mp_context=multiprocessing.get_context("spawn"),
+                                          initializer=_init_lines, initargs=self.model)
+        return self.ex
+
+    def windows(self, jobs):
+        """`line_windows_range` of each (mask, spacing, lo, hi, settings), in order."""
+        jobs = list(jobs)
+        ex = self._pool(jobs)
+        return ex.map(_windows_job, jobs) if ex else map(_windows_job, jobs)
+
+    def read(self, jobs):
+        """`read_line` of each (mask, spacing, typical width, widths, settings) with the pool's reader, in order."""
+        jobs = list(jobs)
+        ex = self._pool(jobs)
+        if ex:
+            return ex.map(_read_job, jobs)
+        return (_read_job(j, self.model) for j in jobs)
+
+    def close(self) -> None:
+        if self.ex is not None:
+            self.ex.shutdown(wait=True, cancel_futures=True)
+            self.ex = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
 
 def search(win: Windows, P: Optional[np.ndarray], classes: Sequence[str], typical_width: float,
