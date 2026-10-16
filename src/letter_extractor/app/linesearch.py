@@ -16,8 +16,8 @@ It is kept in the book folder (line-search/) with each label's usual width, and 
 
 Its reading is kept per line (`search_dev`) with each akshara's place on the page (`search_aksharas`), so
 Text → Whole lines (our reader) can show it like Tesseract's. `measure` scores it fold-fair on the checked
-lines (Line truth): the Read Book pages are also Training Data pages, so for each fold of pages the reader
-and the language model are rebuilt without them (as in stages 3 and 4).
+lines (Line truth): for each fold of pages the reader and the language model are rebuilt without them and without
+the pages of the book's datasets that are the same pages by content (`Library.left_out`, C24; as in stages 3 and 4).
 """
 from __future__ import annotations
 
@@ -152,7 +152,8 @@ def train_line_reader(lib: Library, book_id: int, progress: Optional[Callable[[s
 def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None, seed: int = 0):
     """The reader and its meta (letters, labels, checked lines learned, typical width, each label's
     width), trained on the reviewed letters of the Training Data pages and on the checked lines of the
-    Read Book pages (learning from corrections), those of the pages `skip_files` left out."""
+    Read Book pages (learning from corrections), those of the pages `skip_files` left out (with the same pages of
+    the datasets: Library.left_out, C24)."""
     book = lib.get_book(book_id)
     cfg, masks = lib.book_config(book), _masks(lib, book)
     data = _training_set(lib, book_id, skip_files, progress, cancel, seed, masks=masks)
@@ -167,15 +168,22 @@ def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=
     return reader, {**data["meta"], "lines": learned["lines"]}
 
 
-def _checked_lines(lib: Library, book_id: int, skip_files: Sequence[str] = ()) -> List[tuple]:
-    """(line id, page file, line spacing, checked text) of the checked lines of the Read Book pages."""
+def _checked_lines(lib: Library, book_id: int, skip_files: Sequence = ()) -> List[tuple]:
+    """(line id, page file, line spacing, checked text) of the checked lines of the Read Book pages, those of the
+    pages `skip_files` (file names or a LeftOut) left out."""
+    return [r[1:] for r in _checked_rows(lib, book_id, skip_files)]
+
+
+def _checked_rows(lib: Library, book_id: int, skip_files: Sequence = ()) -> List[tuple]:
+    """`_checked_lines` with the page id first."""
     from .db import LineTruth
+    skip = lib.left_out(book_id, skip_files)
     with lib.session() as s:
-        q = (select(Line.id, Page.file, Page.line_spacing, LineTruth.text_dev)
+        q = (select(Page.id, Line.id, Page.file, Page.line_spacing, LineTruth.text_dev)
              .join(LineTruth, LineTruth.line_id == Line.id).join(Page, Line.page_id == Page.id)
              .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "", Page.excluded.is_not(True)))
-        if skip_files:
-            q = q.where(Page.file.not_in(list(skip_files)))
+        if skip:
+            q = q.where(Page.id.not_in(list(skip)))
         return [tuple(r) for r in s.execute(q.order_by(Page.number, Page.id, Line.number)).all()]
 
 
@@ -234,23 +242,26 @@ def _learn_corrections(lib: Library, book_id: int, data: Dict, base: LetterReade
     """Learning from corrections: each checked line is cut into the aksharas of its checked text
     (`segment.align`, with the reader trained on the letters), and each of its windows becomes a training
     example of its akshara, also of aksharas no group has yet."""
-    return _learn_folds(lib, book_id, {0: (base, data["meta"], set(skip_files))}, progress, cancel, masks)[0]
+    return _learn_folds(lib, book_id, {0: (base, data["meta"], lib.left_out(book_id, skip_files))}, progress, cancel,
+                        masks)[0]
 
 
 def _learn_folds(lib: Library, book_id: int, folds: Dict[int, tuple], progress=None, cancel=None,
                  masks: Optional[MaskPack] = None) -> Dict[int, Dict]:
-    """`_learn_corrections` for several folds at once ({fold: (base reader, its meta, its left-out page files)}):
+    """`_learn_corrections` for several folds at once ({fold: (base reader, its meta, its left-out pages: file
+    names or a LeftOut)}):
     each checked line is cut into windows once, with the widest range of window widths of the folds that learn
     from it, and each fold takes its own windows from them (`segment.narrow`): the same windows and rows as one
     fold at a time (docs/SPEED_PLAN.md, S3b)."""
     book = lib.get_book(book_id)
     out = {k: {"lines": 0, "X": [], "labels": [], "widths": defaultdict(list)} for k in folds}
-    rows = _checked_lines(lib, book_id)
+    skips = {k: lib.left_out(book_id, skip) for k, (_, _, skip) in folds.items()}
+    rows = _checked_rows(lib, book_id)
     todo = []                                      # (line, its aksharas, the folds that learn from this ink, job)
-    for n, (lid, file, spacing, text) in enumerate(rows, 1):
+    for n, (pid, lid, file, spacing, text) in enumerate(rows, 1):
         if cancel and cancel():
             raise Cancelled("Cancelled; the line search reader was not changed.")
-        ks = [k for k, (_, _, skip) in folds.items() if file not in skip]
+        ks = [k for k in folds if pid not in skips[k]]
         if not ks:
             continue
         inks = {}                                  # the line's ink per (scale, typical width): usually all equal
@@ -386,10 +397,10 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
     own_store, own_masks = store is None, masks is None
     store = _store(lib, book) if store is None else store
     masks = _masks(lib, book) if masks is None else masks
-    skip = set(skip_files)
+    skip = lib.left_out(book_id, skip_files)          # page ids (C24: the same pages by content)
     letters, every = [], []
     with lib.session() as s:
-        q = (select(Sample, LetterGroup.label_dev, Page.line_spacing, Page.file)
+        q = (select(Sample, LetterGroup.label_dev, Page.line_spacing, Page.id)
              .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
              .where(Sample.book_id.in_(src), Sample.deleted.is_(False), Page.part == "training", Page.excluded.is_not(True),
                     Sample.line_id.is_not(None), LetterGroup.label_dev != ""))
@@ -397,11 +408,11 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
         status = dict(s.execute(select(LetterGroup.id, LetterGroup.status)
                                 .where(LetterGroup.book_id.in_(src))).all())
         by_line = defaultdict(list)
-        for smp, lab, spacing, file in rows:
+        for smp, lab, spacing, pid in rows:
             if status.get(smp.group_id) == "auto" or len(split_aksharas(lab)) != 1:
                 continue
             every.append(smp.id)
-            if file not in skip:
+            if pid not in skip:
                 by_line[smp.line_id].append((smp, lab, spacing))
         for items in by_line.values():
             if cancel and cancel():
@@ -667,9 +678,10 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
             settings: SearchSettings = SearchSettings(), quick: bool = False) -> Dict:
     """Score the line search on the checked lines (Line truth) of the Read Book pages, fold-fair: the pages
     with checked lines are split into `folds` folds; for each, the reader and the language model are
-    rebuilt without those pages (they are also Training Data pages) and its lines are read. Beside it:
+    rebuilt without those pages and without the same pages of the book's datasets (by `sha256`, C24) and its
+    lines are read. Beside it:
     Tesseract alone and Tesseract + language model as read whole (that language model knows every page),
-    and the second opinion's marks on Tesseract + language model. Kept in line-search/measure.json.
+    and the second opinion's marks on Tesseract + language model. Kept in the reader's folder (measure.json).
 
     The letters' rows come from the feature store (each computed once, kept); the base readers of all folds
     are trained first, so that each checked line is cut into windows once for learning from corrections and
@@ -698,6 +710,8 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     n_folds = max(1, min(folds, len(pages)))
     tested = list(range(max(1, n_folds // 2) if quick else n_folds))
     files = {k: [p[2] for p in pages[k::n_folds]] for k in tested}
+    # C24: a fold leaves out its pages and the datasets' pages with the same content (sha256), not the same name
+    skips = {k: lib.left_out(book_id, [p[1] for p in pages[k::n_folds]]) for k in tested}
     store, masks = _store(lib, book), _masks(lib, book)
 
     def stop(k):
@@ -712,8 +726,8 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     for k in tested:
         stop(0)
         say(f"fold {k + 1}: the reader that cuts the checked lines")
-        data = _training_set(lib, book_id, files[k], cancel=cancel, store=store, masks=masks)
-        bases[k] = (_fit(data, cancel, epochs=cfg.line_base_epochs, batch=cfg.line_batch), data["meta"], set(files[k]))
+        data = _training_set(lib, book_id, skips[k], cancel=cancel, store=store, masks=masks)
+        bases[k] = (_fit(data, cancel, epochs=cfg.line_base_epochs, batch=cfg.line_batch), data["meta"], skips[k])
         del data
     store.save()
     masks.save()
@@ -726,12 +740,12 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     for k in tested:
         stop(k)
         t = time.time()
-        data = _training_set(lib, book_id, files[k], cancel=cancel, store=store, masks=masks)
+        data = _training_set(lib, book_id, skips[k], cancel=cancel, store=store, masks=masks)
         if learned[k]["lines"]:
             data = _with_corrections(data, learned[k])
         reader, meta = _fit(data, cancel, batch=cfg.line_batch), {**data["meta"], "lines": learned[k]["lines"]}
         del data
-        lm = book_model_without(lib, book_id, files[k]) if use_lm else None
+        lm = book_model_without(lib, book_id, skips[k]) if use_lm else None
         lm = lm if lm is not None and len(lm) else None
         pool = LinePool(pool_workers(cfg.line_workers), reader, lm)              # S4b: this fold's reader
         try:                                                             # the fold's lines in one batch

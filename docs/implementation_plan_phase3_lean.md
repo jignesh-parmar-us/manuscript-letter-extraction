@@ -6,9 +6,9 @@ section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two 
 
 **Status:** C19 built and committed (2026-10-16). C20 built (2026-10-16); dry run on a copy and the split of your
 library done the same day (all counts equal; book 6 → dataset 6 + book 8, book 7 a book; backup
-`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21, C22 and C23 built (2026-10-16; C23's one training not run yet).
+`~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21, C22, C23 and C24 built (2026-10-16/17); C24's gate Measure not run yet (heavy: when you ask). Stop 3 next.
 Written 2026-10-15 from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
-(`docs/SPEED_PLAN.md`, S1–S4). Next: C24.
+(`docs/SPEED_PLAN.md`, S1–S4). Next: Stop 3 (and the gate Measure).
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -374,7 +374,31 @@ the book's folder (`line-search/`, moved there by the split) and its mask pack a
   (sources), `app/api.py`, `frontend/src/screens/ReadingSetup.tsx` (replaces `Dictionary.tsx` as the tab),
   tests. `app/readers.py` (letter checker) unchanged.
 
-### C24. Fold-fair measuring without "same book", 2–3 h
+### C24. Fold-fair measuring without "same book", 2–3 h — built 2026-10-17 (the gate Measure: not run yet)
+
+As built (what differs from the points below, and why, is in section 8):
+
+- **`Library.left_out(book_id, tested)`** → a `LeftOut` (a frozenset of page ids): the tested pages of the book
+  (by id or file name) and every Training Data page of the book's datasets with the same `sha256` (not rows with
+  status *Not prepared*, C22). Pages in no dataset add nothing. A `LeftOut` passed again is returned as it is.
+- **Measure** (`linesearch.measure`) makes one `LeftOut` per fold and passes it to `_training_set` (letters, by page
+  id), `_learn_folds` (checked lines, by page id: `_checked_rows`) and `dictionary.book_model_without` (labels and
+  proofread lines: `_without`). File names still work where tests and the harness pass them (they are resolved to
+  the book's pages first).
+- **Same numbers, checked without a Measure** (2026-10-17, on a copy of your library in the scratchpad, migrations
+  0018–0019 applied to the copy): for book 8 (15 pages with checked lines, 4 folds) the old rule (same file name)
+  and the new one (same content) leave out exactly the same dataset pages in every fold (3, 1, 3, 3 pages), so the
+  training, the language model and the checked lines of each fold are the same as before. Book 8's reader signature
+  is also unchanged after C22–C24 (same letters and checked lines): it stays *up to date*.
+- **Gate (still to run, heavy):** Measure of book 8 on a copy of your library after the migrations must give the
+  numbers of `docs/SPEED_PLAN.md` S4 (with the line-by-line page). Only printed checked lines exist (book 8); there is
+  no handwritten number to compare.
+- **Files:** `app/library.py` (`LeftOut`, `left_out`), `app/linesearch.py`, `app/dictionary.py`; tests
+  `tests/test_fold_fair.py` (new: a renamed copy of a page is left out, a same-named other page is not),
+  `test_split.py` (the two synthetic pages are byte-identical: p2 gets its own hash there), `test_linestore.py`,
+  `test_wholelines.py`; help (`tech-reading`, `new-book`), README.
+
+The plan as written:
 
 *After C20:* Measure of a split book already leaves out its dataset's pages with the tested pages' **file names**
 (the same pages, as before the split), so its numbers should not change; C24 changes the match to `sha256` (robust to
@@ -521,3 +545,13 @@ About **16–20 hours** of building, after the speed plan's 5–7.
 7. **Train and Measure are also in Reading setup**, besides Whole lines (our reader) where they were.
 8. **Later chunks:** C24's Measure leaves out pages of every chosen dataset (`training_sources`); the reader's folder
    is `lib.model_dir(book)`.
+
+**C24 (2026-10-17):**
+
+1. **Left out by page id, not by file name**, also for the book's own pages (its checked and proofread lines): a
+   book's file names are unique, so this is the same for them, and it is exact for the datasets' pages.
+2. **A page whose content appears twice in a dataset** (the same image under two names) is left out under both
+   names; the old rule left out only the one with the same name. The test book's two synthetic pages are such a pair.
+3. **The gate was replaced, for now, by a check of the left-out pages** (no Measure: a heavy run waits for your
+   word): identical in every fold of book 8, which proves the numbers cannot change through this chunk. The full gate
+   Measure is still to run when you ask.

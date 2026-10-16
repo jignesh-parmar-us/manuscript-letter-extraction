@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from ..mapping import load_mapping
 from ..ocr.language import LanguageModel, tokens
 from .db import Book, LetterGroup, Page, PageText, Sample, WordList
-from .library import Library, LibraryError, NotFound
+from .library import LeftOut, Library, LibraryError, NotFound
 
 _NOT_DEVANAGARI = re.compile(r"[^ऀ-ॿ\s]+")
 _cache: Dict[Tuple[str, int], Tuple[tuple, LanguageModel]] = {}
@@ -104,7 +104,7 @@ def delete_word_list(lib: Library, list_id: int) -> None:
 
 
 # ---- what a book's model learns from ----------------------------------------------------------------------
-def _labels_of(s, book: Book, skip_files: Sequence[str] = ()) -> List[str]:
+def _labels_of(s, book: Book, skip_files: Sequence = ()) -> List[str]:
     """The labelled letters the book's model learns: those of its reading model's datasets (C23; a dataset's
     own), dataset after dataset."""
     out: List[str] = []
@@ -113,14 +113,14 @@ def _labels_of(s, book: Book, skip_files: Sequence[str] = ()) -> List[str]:
     return out
 
 
-def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
-    """The labelled letters of a row's Training Data pages in reading order, in stretches."""
+def _label_lines(s, book_id: int, skip_files: Sequence = ()) -> List[str]:
+    """The labelled letters of a row's Training Data pages in reading order, in stretches; `skip_files`: page ids
+    (a LeftOut, C24) or file names of pages left out."""
     q = (select(Sample.line_id, LetterGroup.label_dev)
          .join(Page, Sample.page_id == Page.id)
          .outerjoin(LetterGroup, Sample.group_id == LetterGroup.id)
          .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training", Page.excluded.is_not(True)))
-    if skip_files:
-        q = q.where(Page.file.not_in(list(skip_files)))
+    q = _without(q, skip_files)
     rows = s.execute(q.order_by(Page.id, Sample.line_number, Sample.x, Sample.pos)).all()
     out, cur, line = [], [], None
     for line_id, label in rows:
@@ -135,11 +135,19 @@ def _label_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
     return out
 
 
-def _proofread_lines(s, book_id: int, skip_files: Sequence[str] = ()) -> List[str]:
+def _without(q, skip):
+    """`q` without the pages `skip`: page ids (a LeftOut) or file names."""
+    if not skip:
+        return q
+    if isinstance(skip, LeftOut):
+        return q.where(Page.id.not_in(list(skip)))
+    return q.where(Page.file.not_in(list(skip)))
+
+
+def _proofread_lines(s, book_id: int, skip_files: Sequence = ()) -> List[str]:
     out = []
     q = select(PageText.proofread).join(Page, PageText.page_id == Page.id).where(Page.book_id == book_id, Page.excluded.is_not(True))
-    if skip_files:
-        q = q.where(Page.file.not_in(list(skip_files)))
+    q = _without(q, skip_files)
     for raw in s.scalars(q):
         out.extend(v for v in json.loads(raw or "{}").values() if v)
     return out
@@ -178,10 +186,12 @@ def book_model(lib: Library, book_id: int) -> LanguageModel:
     return lm
 
 
-def book_model_without(lib: Library, book_id: int, skip_files: Sequence[str]) -> LanguageModel:
-    """The book's language model without the labels and proofread lines of the pages `skip_files` (both
-    parts), for measuring on those pages; the word lists are kept. Not cached."""
+def book_model_without(lib: Library, book_id: int, skip_files: Sequence) -> LanguageModel:
+    """The book's language model without the labels and proofread lines of the pages `skip_files` (the book's
+    pages, by id or file name, and the same pages of its datasets by content: Library.left_out, C24), for measuring
+    on those pages; the word lists are kept. Not cached."""
     book = lib.get_book(book_id)
+    skip_files = lib.left_out(book_id, skip_files)
     with lib.session() as s:
         lm = LanguageModel()
         lm.add_all(_labels_of(s, book, skip_files))

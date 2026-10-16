@@ -67,9 +67,12 @@
   <p><strong>Whole lines (our reader)</strong> is the same line search shown as a tab of its own, with its own text instead of only marks (it needs only the cut pages, not Tesseract's reading): the line search's reading with each akshara's columns on the line and
     its ink rows as a box on the page (<code>whole_line.search_aksharas</code>), shown like Tesseract's; corrections
     and reviews are per line, shared. The reader keeps a hash of the reviewed letters it learned (label and place):
-    when they change, Retrain is offered. <strong>Measure</strong> (<code>linesearch.measure</code>): every Read Book
-    page is also a Training Data page, so the pages with checked lines go in 4 folds and, for each, the reader and the
-    language model are trained without them (the word lists are kept); CER in code points, spaces and "|" left out,
+    when they change, Retrain is offered. <strong>Measure</strong> (<code>linesearch.measure</code>): the pages with
+    checked lines go in 4 folds and, for each, the reader and the language model are trained without them: without
+    their checked lines and proofread lines, and without the letters and labels of every page of the book's datasets
+    that is the same page, found by its content (<code>sha256</code>, <code>Library.left_out</code>, since C24; by
+    file name before), whatever its name there. A page in no dataset needs nothing more left out. The word lists are
+    kept; CER in code points, spaces and "|" left out,
     beside Tesseract alone and Tesseract + language model as read whole (that model knows every page).</p>
   <p><strong>Learning from corrections</strong> (<code>linesearch._learn_corrections</code>,
     <code>segment.align</code>): Retrain first fits a reader on the reviewed letters, then cuts every checked line

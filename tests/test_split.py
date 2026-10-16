@@ -48,6 +48,11 @@ class SplitTests(unittest.TestCase):
         shutil.copytree(pages, self.read)
         legacy_read_book(self.lib, self.row, self.read)
         with self.lib.session() as s:
+            # the two synthetic pages are the same image: give p2 its own content, so that a fold leaving out p1
+            # (C24: by content) leaves out p1 alone, in both parts
+            for p in s.scalars(select(Page).where(Page.book_id == self.row, Page.file == "p2.png")):
+                p.sha256 = "another page"
+        with self.lib.session() as s:
             self.read_page = s.scalar(select(Page.id).where(Page.book_id == self.row, Page.part == "read")
                                       .order_by(Page.number))
             self.file = s.get(Page, self.read_page).file

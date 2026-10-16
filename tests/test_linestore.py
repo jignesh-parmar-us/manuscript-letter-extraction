@@ -256,7 +256,8 @@ class CorrectionTests(unittest.TestCase):
         self.assertEqual(many.call_count, 1)                                 # the fold's lines in one batch
         self.assertEqual(sorted(lid for lid, _ in many.call_args.args[2]), checked)
         self.assertEqual((r["quick"], r["folds"], r["tested_folds"], r["pages"]), (True, 2, 1, 2))
-        self.assertEqual([c.args[2] for c in train.call_args_list], [[self.files[0]]] * 2)   # one fold, base and final
+        fold = self.lib.left_out(self.book, [self.files[0]])                 # C24: the fold's pages, resolved
+        self.assertEqual([c.args[2] for c in train.call_args_list], [fold] * 2)               # one fold, base and final
         self.assertEqual(list(learn.call_args.args[2]), [0])
         self.assertEqual({x["page"] for x in linesearch.last_measure(self.lib, self.book, quick=True)["line_results"]},
                          {self.files[0]})

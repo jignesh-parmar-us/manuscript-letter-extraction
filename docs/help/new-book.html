@@ -339,7 +339,8 @@
       Untick <em>Use the language model</em> to turn it off. It follows the datasets and word lists by itself.
       <strong>3. Reading model:</strong> what our reader was trained on, <em>out of date</em> when the datasets, their
       reviewed letters or the checked lines changed since, <span class="ui">Train</span> /
-      <span class="ui">Retrain</span> and <span class="ui">Measure</span> (fold-fair on the checked lines; takes a
+      <span class="ui">Retrain</span> and <span class="ui">Measure</span> (fold-fair on the checked lines: each group of tested pages is left out of the
+      training, also where the same page is in a dataset under another name; takes a
       while). Each book has its own reading model, kept in <code>models/</code> in the library folder.</li>
   </ol>
   <div class="box tip"><strong>Printed books</strong> are read by Tesseract and checked against your labelled groups;

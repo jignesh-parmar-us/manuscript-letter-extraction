@@ -238,10 +238,12 @@ class WholeLineTests(unittest.TestCase):
                 mock.patch("letter_extractor.app.dictionary.book_model_without", return_value=LanguageModel()) as lm, \
                 mock.patch.object(linesearch, "read_line", return_value=("नारायण भग", [], {})):
             r = linesearch.measure(self.lib, self.book)
-        self.assertEqual([c.args[2] for c in train.call_args_list], [[file], [file]])   # trained without the tested page
-        self.assertEqual(learn.call_args.args[2][0][2], {file})                # learns from no checked line of it
+        fold = self.lib.left_out(self.book, [file])                          # C24: the tested page, resolved
+        self.assertIn(self.page, fold)
+        self.assertEqual([c.args[2] for c in train.call_args_list], [fold, fold])   # trained without the tested page
+        self.assertEqual(learn.call_args.args[2][0][2], fold)                  # learns from no checked line of it
         self.assertEqual(fit.call_args_list[0].kwargs["epochs"], linesearch.BASE_EPOCHS)
-        self.assertEqual(lm.call_args.args[2], [file])
+        self.assertEqual(lm.call_args.args[2], fold)
         self.assertEqual((r["folds"], r["lines"]), (1, 1))
         self.assertEqual(r["cer"]["ours"], 0.0)
         self.assertGreater(r["cer"]["tesseract"], 0.0)                         # व for ण

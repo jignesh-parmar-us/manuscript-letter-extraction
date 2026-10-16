@@ -122,6 +122,10 @@ def _slug(name: str) -> str:
     return s[:40] or "book"
 
 
+class LeftOut(frozenset):
+    """Page ids a fold of Measure leaves out (Library.left_out, C24): the tested pages and the same pages in datasets."""
+
+
 class Library:
     def __init__(self, root: Path):
         self.root = Path(root)
@@ -173,6 +177,35 @@ class Library:
         return list(s.scalars(select(ReadingModelDataset.dataset_id)
                               .where(ReadingModelDataset.model_id == book.reading_model_id)
                               .order_by(ReadingModelDataset.dataset_id)))
+
+    def left_out(self, book_id: int, tested) -> "LeftOut":
+        """What a fold of Measure leaves out (C24): the tested pages of the book (given by page id or file name) and
+        every page of the book's datasets that is the same page, by its content (`sha256`), whatever its name.
+        Already a LeftOut: returned as it is. Pages in no dataset need nothing more left out."""
+        if isinstance(tested, LeftOut):
+            return tested
+        tested = list(tested or ())
+        if not tested:
+            return LeftOut()
+        from .pages import NOT_PREPARED
+        files = [t for t in tested if isinstance(t, str)]
+        ids = [t for t in tested if not isinstance(t, str)]
+        with self.session() as s:
+            book = s.get(Book, book_id)
+            if book is None:
+                raise NotFound(f"No book with id {book_id}.")
+            mine = s.execute(select(Page.id, Page.sha256).where(
+                Page.book_id == book_id, Page.part == "read",
+                Page.file.in_(files) | Page.id.in_(ids))).all()
+            out = {pid for pid, _ in mine}
+            shas = {h for _, h in mine if h}
+            srcs = [x for x in self.sources_in(s, book) if x != book_id]
+            if book.kind != BOOK:                         # a row holding both parts (before C20): its own pages
+                srcs = [book_id]
+            if shas and srcs:
+                out |= set(s.scalars(select(Page.id).where(Page.book_id.in_(srcs), Page.part == "training",
+                                                           Page.sha256.in_(shas), Page.status != NOT_PREPARED)))
+        return LeftOut(out)
 
     def model_dir(self, book: Book) -> Path:
         """The folder of a book's reading model, <library>/models/<folder>/ (C23): its line-search reader, Measure
