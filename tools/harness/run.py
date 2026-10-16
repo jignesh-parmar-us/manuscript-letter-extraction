@@ -3,7 +3,8 @@
 Usage (after build.py for folds 0-3):
   PYTHONPATH=src .venv/bin/python tools/harness/run.py --library <copy> --cache <dir> --name base [options]
 
-Options: --lm 0.35 0.5 (language model weights to try; the readers are trained once), --hidden 0 (384: a
+Options: --quick (only folds 0 and 1 trained and read: about half the time, to throw out bad ideas early;
+never quote its numbers), --lm 0.35 0.5 (language model weights to try; the readers are trained once), --hidden 0 (384: a
 network), --epochs 40, --seed 0, --no-corrections (do not learn from the other folds' checked lines),
 --unlined (also the reviewed letters on no line, System generated), --unreviewed-generated (with
 --unlined: also generated letters not reviewed).
@@ -130,6 +131,7 @@ def main():
     ap.add_argument("--no-corrections", action="store_true")
     ap.add_argument("--unlined", action="store_true")
     ap.add_argument("--unreviewed-generated", action="store_true")
+    ap.add_argument("--quick", action="store_true", help="2 of the 4 folds: for screening only, never quote it")
     a = ap.parse_args()
     lower_priority()
     with heavy_lock(f"harness run ({a.library})"):
@@ -139,7 +141,7 @@ def main():
 def _main(a):
     lib = Library(a.library)
 
-    datas = {k: fold_data(a.cache, k) for k in range(FOLDS)}
+    datas = {k: fold_data(a.cache, k) for k in range(FOLDS // 2 if a.quick else FOLDS)}
     if a.unlined:
         for k, d in datas.items():
             extra = unlined_rows(lib, a.book, d["classes"], d["y"], a.unreviewed_generated)
@@ -191,7 +193,7 @@ def _main(a):
         C = sum(x["chars"] for x in out)
         new = [x for x in out if x["page"] in NEW_PAGES]
         Cn = sum(x["chars"] for x in new) or 1
-        scores = (f"{a.name} lm{w}: ours {100 * sum(x['w_ours'] for x in out) / C:.2f}%, tesseract "
+        scores = (f"{'QUICK (2 of 4 folds, screening only) ' if a.quick else ''}{a.name} lm{w}: ours {100 * sum(x['w_ours'] for x in out) / C:.2f}%, tesseract "
                   f"{100 * sum(x['w_tess'] for x in out) / C:.2f}% | new pages ours "
                   f"{100 * sum(x['w_ours'] for x in new) / Cn:.2f}%, tesseract {100 * sum(x['w_tess'] for x in new) / Cn:.2f}%"
                   f" | {len(out)} lines, {C} characters")

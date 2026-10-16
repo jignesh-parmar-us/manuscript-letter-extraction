@@ -12,28 +12,22 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from ..features import hog, normalize
+from ..features import HOG_BINS, HOG_CELLS, normalize
 
 SIZE = 40
 PIXELS = 20
+FEATURE_VERSION = 1          # raise when the features change: the kept rows (app/linestore.py) are then made again
 
 
 def features(mask: np.ndarray, spacing: float) -> np.ndarray:
-    """One letter's feature vector (float32). `spacing`: its page's line spacing in pixels."""
-    img = normalize(mask, SIZE)
-    img = cv2.GaussianBlur(img, (0, 0), 0.8)
-    pix = cv2.resize(img, (PIXELS, PIXELS), interpolation=cv2.INTER_AREA).astype(np.float32).ravel() / 255.0
-    h_vec = hog(img)
-    ys, xs = np.nonzero(mask)
-    h = float(ys.max() - ys.min() + 1) if ys.size else 0.0
-    w = float(xs.max() - xs.min() + 1) if xs.size else 0.0
-    sp = max(spacing, 1.0)
-    size = np.array([w / max(h, 1.0), w / sp, h / sp], np.float32)
-    return np.concatenate([pix, h_vec.astype(np.float32), size]).astype(np.float32)
+    """One letter's feature vector (float32). `spacing`: its page's line spacing in pixels. Computed as
+    `features_batch` does, so the same numbers every time (`hog` of one image normalises with NumPy's norm,
+    whose last bit depends on where the array lies in memory) and the same as a window's (S3, 2026-10-16)."""
+    return features_batch([mask], spacing)[0]
 
 
 def dimension() -> int:
-    return len(features(np.ones((10, 10), bool), 100.0))
+    return PIXELS * PIXELS + (HOG_CELLS - 1) ** 2 * 4 * HOG_BINS + 3          # picture, stroke directions, size
 
 
 def varied(mask: np.ndarray, rng: np.random.Generator) -> np.ndarray:

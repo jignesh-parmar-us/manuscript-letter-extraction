@@ -153,10 +153,10 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
       setError(e);
     }
   }
-  async function measure() {
+  async function measure(quick = false) {
     setError(null);
     try {
-      setJob(await api.lineSearchMeasure(book.id));
+      setJob(quick ? await api.lineSearchMeasure(book.id, true) : await api.lineSearchMeasure(book.id));
     } catch (e) {
       setError(e);
     }
@@ -494,13 +494,21 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             title="Learn again from the reviewed groups and every checked line (✓ or Line truth), as they are now (about half an hour). It does not read the pages: Read all pages (or a page) afterwards to use it.">
             Retrain
           </button>
-          <button disabled={running} onClick={measure}
-            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also Training Data pages (about 30 minutes per group, four groups: about 2 hours).">
+          <button disabled={running} onClick={() => measure()}
+            title="Score our reader on your checked lines (✓ or Line truth). Fair: for each group of pages it is trained again without them, since they are also Training Data pages (four groups). The letters' features are kept between runs, so a Measure after few changes is faster than the first.">
             Measure
+          </button>
+          <button disabled={running} onClick={() => measure(true)}
+            title="Only 2 of the 4 groups of pages, about half the time: to throw out a bad idea early. Its numbers are not results: judge a change only on the full Measure. It does not replace the last Measure.">
+            Quick measure
           </button>
         </div>
       )}
       {ours && state?.measure && <MeasureResult m={state.measure} />}
+      {ours && state?.quick_measure &&
+        (!state.measure || state.quick_measure.measured_at > state.measure.measured_at) && (
+          <MeasureResult m={state.quick_measure} />
+        )}
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
       {!pages.length ? (
         <p className="muted">No Read Book pages are cut yet: upload the book and cut its pages first (Upload &amp; capture).</p>
@@ -714,7 +722,15 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
 function MeasureResult({ m }: { m: NonNullable<LineSearchState["measure"]> }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="measure-result small" aria-label="Measure">
+    <div className="measure-result small" aria-label={m.quick ? "Quick measure" : "Measure"}>
+      {m.quick && (
+        <p>
+          <strong>
+            Quick measure ({m.tested_folds} of {m.folds} groups of pages): for screening only, not a result. Judge a
+            change on the full Measure.
+          </strong>
+        </p>
+      )}
       <p>
         On <strong>{m.lines}</strong> checked lines ({m.pages} pages, {m.chars} characters; measured{" "}
         {new Date(m.measured_at).toLocaleString()}), characters wrong: <strong>our reader {m.cer.ours}%</strong> ·

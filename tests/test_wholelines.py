@@ -231,11 +231,16 @@ class WholeLineTests(unittest.TestCase):
             page.part, file = "read", page.file                                # the checked lines are Read Book lines
         set_whole_line(self.lib, self.lines, text="नारायण भग", reviewed=True)
         meta = {"letters": 30, "labels": 3, "typical_width": 30.0, "widths": {}}
-        with mock.patch.object(linesearch, "_train", return_value=(None, meta)) as train, \
+        data = {"meta": meta}
+        with mock.patch.object(linesearch, "_training_set", return_value=data) as train, \
+                mock.patch.object(linesearch, "_fit", return_value=None) as fit, \
+                mock.patch.object(linesearch, "_learn_folds", return_value={0: {"lines": 0}}) as learn, \
                 mock.patch("letter_extractor.app.dictionary.book_model_without", return_value=LanguageModel()) as lm, \
                 mock.patch.object(linesearch, "read_line", return_value=("नारायण भग", [], {})):
             r = linesearch.measure(self.lib, self.book)
-        self.assertEqual(train.call_args.args[2], [file])                      # trained without the tested page
+        self.assertEqual([c.args[2] for c in train.call_args_list], [[file], [file]])   # trained without the tested page
+        self.assertEqual(learn.call_args.args[2][0][2], {file})                # learns from no checked line of it
+        self.assertEqual(fit.call_args_list[0].kwargs["epochs"], linesearch.BASE_EPOCHS)
         self.assertEqual(lm.call_args.args[2], [file])
         self.assertEqual((r["folds"], r["lines"]), (1, 1))
         self.assertEqual(r["cer"]["ours"], 0.0)
@@ -323,7 +328,8 @@ class WholeLineTests(unittest.TestCase):
         txt = c.get(f"/files/texts/{self.book}?readers=lines&part=training&marker=mark&script=devanagari"
                     f"&page_id={self.page}&token=t").text
         self.assertIn("नारायण भग", txt)                                             # the correction is downloaded
-        self.assertEqual(c.get(f"/api/books/{self.book}/line-search", headers=h).json(), {"reader": None, "measure": None})
+        self.assertEqual(c.get(f"/api/books/{self.book}/line-search", headers=h).json(), {"reader": None, "measure": None,
+                                                                                         "quick_measure": None})
         self.assertEqual(c.get(f"/api/pages/{self.page}/whole-lines?engine=search", headers=h).status_code, 404)
         self.assertEqual(c.get(f"/api/books/{self.book}/whole-lines?part=training&engine=search", headers=h).json(), [])
         c.close()

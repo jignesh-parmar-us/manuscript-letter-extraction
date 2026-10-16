@@ -241,15 +241,18 @@ export interface WholeLines {
   read_at: string | null;
 }
 
-/** Our reader (the line search): what it was trained on and its last fold-fair measure. */
+/** Our reader (the line search): what it was trained on, its last fold-fair measure and its last quick one. */
 export interface LineSearchState {
   reader: { letters: number; labels: number; lines: number; trained_at: string; seconds: number; changed: boolean } | null;
   measure: LineSearchMeasure | null;
+  quick_measure?: LineSearchMeasure | null; // 2 of the 4 folds: for screening only, never a result
 }
 
 export interface LineSearchMeasure {
   measured_at: string;
   folds: number;
+  quick?: boolean;
+  tested_folds?: number; // the folds read: all, or 2 of 4 when quick
   pages: number;
   lines: number;
   chars: number;
@@ -584,7 +587,8 @@ export const api = {
   lineSearch: (id: number, pageIds?: number[], retrain = false) =>
     post<Job>(`/api/books/${id}/line-search`, { page_ids: pageIds ?? null, part: "read", retrain }),
   lineSearchReader: (id: number) => get<LineSearchState>(`/api/books/${id}/line-search`),
-  lineSearchMeasure: (id: number) => post<Job>(`/api/books/${id}/line-search/measure`, {}),
+  lineSearchMeasure: (id: number, quick = false) =>
+    post<Job>(`/api/books/${id}/line-search/measure${quick ? "?quick=true" : ""}`, {}),
   lineSearchTrain: (id: number) => post<Job>(`/api/books/${id}/line-search/train`, {}),
   wholeLines: (pageId: number, engine: LineEngine = "tesseract") =>
     get<WholeLines>(`/api/pages/${pageId}/whole-lines?engine=${engine}`),

@@ -150,28 +150,44 @@ class Windows:
 def line_windows(mask: np.ndarray, spacing: float, typical_width: float,
                  s: SearchSettings = SearchSettings()) -> Optional[Windows]:
     """Steps 1 and 2 (see the module notes): the line's windows and their features; None for no line."""
+    return line_windows_range(mask, spacing, typical_width, typical_width, s)
+
+
+def line_windows_range(mask: np.ndarray, spacing: float, lo: float, hi: float,
+                       s: SearchSettings = SearchSettings()) -> Optional[Windows]:
+    """The windows of every typical width from `lo` to `hi` at once (the folds of a Measure differ a little):
+    `narrow` gives those of one width, the same as `line_windows` with it (docs/SPEED_PLAN.md, S3b)."""
     cand = candidates(mask, s.step)
     n = len(cand)
     if n < 2:
         return None
     empty = ~mask.any(axis=0)
-    T = typical_width
     empty_edges, crops, meta = [], [], []
     for i in range(n):
         for j in range(i + 1, n):
             width = cand[j] - cand[i]
-            if width > s.max_width * T:
+            if width > s.max_width * hi:
                 break
             if empty[cand[i]:cand[j]].all():
                 empty_edges.append((i, j, width))
                 continue
-            if width < s.min_width * T:
+            if width < s.min_width * lo:
                 continue
             m = _crop(mask, cand[i], cand[j])
             if m is not None:
                 crops.append(m)
                 meta.append((i, j, width))
     return Windows(cand, empty_edges, meta, features_batch(crops, spacing))
+
+
+def narrow(win: Optional[Windows], typical_width: float, s: SearchSettings = SearchSettings()) -> Optional[Windows]:
+    """The windows of `line_windows_range` that `line_windows` makes for this typical width, in the same order."""
+    if win is None:
+        return None
+    T = typical_width
+    keep = [q for q, (_, _, width) in enumerate(win.meta) if s.min_width * T <= width <= s.max_width * T]
+    return Windows(win.cand, [e for e in win.empty_edges if e[2] <= s.max_width * T], [win.meta[q] for q in keep],
+                   win.X[keep] if len(win.X) else win.X)
 
 
 def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, widths: Dict[str, float],

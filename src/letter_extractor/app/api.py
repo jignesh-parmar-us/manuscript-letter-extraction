@@ -253,10 +253,11 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
 
     @app.get("/api/books/{book_id}/line-search", dependencies=auth)
     def line_search_reader(book_id: int) -> Dict:
-        """The book's line-search reader (what it was trained on, or null) and its last measure (or null)."""
+        """The book's line-search reader (what it was trained on, or null), its last measure and its last quick
+        measure (2 of the 4 folds, for screening only), each null when there is none."""
         from .linesearch import last_measure, line_reader_info
-        m = last_measure(library, book_id)
-        return {"reader": line_reader_info(library, book_id), "measure": m}
+        return {"reader": line_reader_info(library, book_id), "measure": last_measure(library, book_id),
+                "quick_measure": last_measure(library, book_id, quick=True)}
 
     @app.post("/api/books/{book_id}/line-search/train", dependencies=auth, status_code=202)
     def line_search_train(book_id: int) -> Dict:
@@ -264,9 +265,9 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         return jobs.line_search_train(book_id).as_dict()
 
     @app.post("/api/books/{book_id}/line-search/measure", dependencies=auth, status_code=202)
-    def line_search_measure(book_id: int) -> Dict:
-        """Score the line search fold-fair on the checked lines (a job)."""
-        return jobs.line_search_measure(book_id).as_dict()
+    def line_search_measure(book_id: int, quick: bool = Query(False)) -> Dict:
+        """Score the line search fold-fair on the checked lines (a job); `quick`: 2 of the 4 folds, for screening."""
+        return jobs.line_search_measure(book_id, quick).as_dict()
 
     @app.get("/api/books/{book_id}/whole-lines", dependencies=auth)
     def whole_lines_of_book(book_id: int, part: str = Query("read", pattern="^(training|read)$"),

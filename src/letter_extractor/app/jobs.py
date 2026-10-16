@@ -236,12 +236,14 @@ class Jobs:
             return r
         return self.start(book_id, "line_search_train", _heavy(f"Retrain (book {book_id})", run), total=1)
 
-    def line_search_measure(self, book_id: int) -> Job:
-        """Score the line search fold-fair on the checked lines (linesearch.measure): one step per fold."""
+    def line_search_measure(self, book_id: int, quick: bool = False) -> Job:
+        """Score the line search fold-fair on the checked lines (linesearch.measure): one step per fold.
+        `quick`: 2 of the 4 folds, for screening only."""
         from .linesearch import measure
         self.lib.get_book(book_id)
         return self.start(book_id, "line_search_measure", _heavy(f"Measure (book {book_id})", lambda progress, cancel:
-                          measure(self.lib, book_id, progress=progress, cancel=cancel)), total=4)
+                          measure(self.lib, book_id, progress=progress, cancel=cancel, quick=quick)),
+                          total=2 if quick else 4)
 
     def train(self, book_id: int, books=None, min_samples: int = 5, include_unreviewed: bool = False,
               include_words: bool = False, name: str = "") -> Job:

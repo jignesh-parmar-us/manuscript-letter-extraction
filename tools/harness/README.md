@@ -41,6 +41,9 @@ linear reader), `--epochs`, `--seed` (to see how much a result moves by chance),
 (without learning from the other folds' checked lines), `--unlined` (also the reviewed letters on no
 line, System generated), `--unreviewed-generated` (with `--unlined`: also unreviewed generated letters).
 
+`build.py` takes the training rows from the app's feature store in the copy's book folder
+(`line-search/features/`, `docs/SPEED_PLAN.md` S3): after the first fold, the other folds compute almost nothing.
+
 ## Rebuild the cache when
 
 - the groups, labels or checked lines changed (a new copy first), or

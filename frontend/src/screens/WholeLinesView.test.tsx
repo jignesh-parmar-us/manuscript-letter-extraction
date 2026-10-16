@@ -203,6 +203,23 @@ describe("Whole lines", () => {
     expect(await screen.findByText(/Measuring our reader/)).toBeInTheDocument();
   });
 
+  it("a quick measure is marked as screening only and keeps the full one", async () => {
+    const m = { measured_at: "2026-10-12T09:00:00Z", folds: 4, pages: 8, lines: 73, chars: 6677,
+      cer: { ours: 10.2, tesseract: 5.1, tesseract_lm: 4.45 }, marked: 19.4, mistakes: 277, caught: 244, line_results: [] };
+    vi.mocked(api.lineSearchReader).mockResolvedValue({ reader: null, measure: m,
+      quick_measure: { ...m, measured_at: "2026-10-13T09:00:00Z", quick: true, tested_folds: 2, cer: { ...m.cer, ours: 9.0 } } });
+    vi.mocked(api.lineSearchMeasure).mockResolvedValue({ id: "j", book_id: 4, kind: "line_search_measure", status: "running",
+      done: 0, total: 2, current: "", pages: [], result: null, error: "", seconds: 0 } as never);
+    localStorage.setItem("text-mode", "search");
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    const quick = await screen.findByLabelText("Quick measure");
+    expect(within(quick).getByText(/2 of 4 groups of pages\): for screening only/)).toBeInTheDocument();
+    expect(within(quick).getByText(/our reader 9%/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Measure")).getByText(/our reader 10.2%/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Quick measure" }));
+    expect(api.lineSearchMeasure).toHaveBeenCalledWith(4, true);
+  });
+
   it("reads a page whole and switches to the cut-letter view", async () => {
     vi.mocked(api.convert).mockResolvedValue({ id: "j", book_id: 4, kind: "convert", status: "running", done: 0, total: 1,
       current: "", pages: [], result: null, error: "", seconds: 0 });

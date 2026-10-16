@@ -34,11 +34,12 @@ import numpy as np
 from sqlalchemy import and_, or_, select
 
 from ..ocr.aksharas import split_aksharas
-from ..ocr.features import features, varied
+from ..ocr.features import FEATURE_VERSION, features, varied
 from ..ocr.reader import LetterReader
-from ..ocr.segment import SearchSettings, align, clear_borders, line_windows, read_line
+from ..ocr.segment import SearchSettings, align, clear_borders, line_windows_range, narrow, read_line
 from .db import Book, LetterGroup, Line, Page, Sample, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
+from .linestore import Entry, FeatureStore, MaskPack
 from .samples import _sample_mask
 from .suggest import LineDone
 
@@ -86,16 +87,17 @@ def line_reader_info(lib: Library, book_id: int) -> Optional[Dict]:
             "changed": changed}
 
 
-def _paste(lib: Library, book: Book, smps: Sequence[Sample]):
-    """The line's ink: every sample's mask pasted at its place. (mask, left column, masks by sample id)."""
+def _paste(lib: Library, book: Book, smps: Sequence[Sample], masks: Optional[MaskPack] = None):
+    """The line's ink: every sample's mask pasted at its place. (mask, left column, masks by sample id).
+    `masks`: the book's mask pack (one file) instead of a PNG per letter."""
     x0 = min(m.x for m in smps)
     y0 = min(m.y for m in smps)
     x1 = max(m.x + m.w for m in smps)
     y1 = max(m.y + m.h for m in smps)
     c = np.zeros((y1 - y0, x1 - x0), bool)
-    masks = {}
+    pack, masks = masks, {}
     for m in smps:
-        mk = _sample_mask(lib, book, m)
+        mk = _sample_mask(lib, book, m) if pack is None else pack.get(m)
         masks[m.id] = mk
         c[m.y - y0:m.y - y0 + mk.shape[0], m.x - x0:m.x - x0 + mk.shape[1]] |= mk
     return c, x0, masks
@@ -128,11 +130,13 @@ def _train(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=
     """The reader and its meta (letters, labels, checked lines learned, typical width, each label's
     width), trained on the reviewed letters of the Training Data pages and on the checked lines of the
     Read Book pages (learning from corrections), those of the pages `skip_files` left out."""
-    data = _training_set(lib, book_id, skip_files, progress, cancel, seed)
+    masks = MaskPack(lib.book_dir(lib.get_book(book_id)))
+    data = _training_set(lib, book_id, skip_files, progress, cancel, seed, masks=masks)
     if progress:
         progress(f"training on {len(data['X'])} windows")
     base = _fit(data, cancel, epochs=BASE_EPOCHS)
-    learned = _learn_corrections(lib, book_id, data, base, skip_files, progress, cancel)
+    learned = _learn_corrections(lib, book_id, data, base, skip_files, progress, cancel, masks)
+    masks.save()
     if learned["lines"]:
         data = _with_corrections(data, learned)
     reader = _fit(data, cancel)
@@ -181,7 +185,8 @@ def _scaled(mask: np.ndarray, f: float) -> np.ndarray:
     return big > 127
 
 
-def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float, scale: float = 1.0):
+def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float, scale: float = 1.0,
+              masks: Optional[MaskPack] = None):
     """A line's ink (its cut letters' masks pasted together, scaled by `scale` to the reader's scale, a page
     border at its edges cleared), with its top left corner on the page (in page pixels); None for a line
     without letters."""
@@ -189,7 +194,7 @@ def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float, scal
         smps = s.scalars(select(Sample).where(Sample.line_id == line_id, Sample.deleted.is_(False))).all()
         if not smps:
             return None
-        c, x0, _ = _paste(lib, book, smps)
+        c, x0, _ = _paste(lib, book, smps, masks)
         y0 = min(m.y for m in smps)
         band = (float(np.median([m.y - y0 for m in smps])) * scale,
                 float(np.median([m.y + m.h - y0 for m in smps])) * scale)
@@ -198,36 +203,61 @@ def _line_ink(lib: Library, book: Book, line_id: int, typical_width: float, scal
 
 
 def _learn_corrections(lib: Library, book_id: int, data: Dict, base: LetterReader, skip_files: Sequence[str] = (),
-                       progress=None, cancel=None) -> Dict:
+                       progress=None, cancel=None, masks: Optional[MaskPack] = None) -> Dict:
     """Learning from corrections: each checked line is cut into the aksharas of its checked text
     (`segment.align`, with the reader trained on the letters), and each of its windows becomes a training
     example of its akshara, also of aksharas no group has yet."""
+    return _learn_folds(lib, book_id, {0: (base, data["meta"], set(skip_files))}, progress, cancel, masks)[0]
+
+
+def _learn_folds(lib: Library, book_id: int, folds: Dict[int, tuple], progress=None, cancel=None,
+                 masks: Optional[MaskPack] = None) -> Dict[int, Dict]:
+    """`_learn_corrections` for several folds at once ({fold: (base reader, its meta, its left-out page files)}):
+    each checked line is cut into windows once, with the widest range of window widths of the folds that learn
+    from it, and each fold takes its own windows from them (`segment.narrow`): the same windows and rows as one
+    fold at a time (docs/SPEED_PLAN.md, S3b)."""
     book = lib.get_book(book_id)
-    T = data["meta"]["typical_width"]
-    X, labels, widths, used = [], [], defaultdict(list), 0
-    rows = _checked_lines(lib, book_id, skip_files)
-    for n, (lid, _, spacing, text) in enumerate(rows, 1):
+    out = {k: {"lines": 0, "X": [], "labels": [], "widths": defaultdict(list)} for k in folds}
+    rows = _checked_lines(lib, book_id)
+    for n, (lid, file, spacing, text) in enumerate(rows, 1):
         if cancel and cancel():
             raise Cancelled("Cancelled; the line search reader was not changed.")
         if progress and n % 10 == 1:
             progress(f"learning from the checked lines: {n} of {len(rows)}")
-        f = page_scale(spacing, data["meta"].get("spacing"))
-        ink = _line_ink(lib, book, lid, T, f)
-        if ink is None:
+        ks = [k for k, (_, _, skip) in folds.items() if file not in skip]
+        if not ks:
             continue
-        win = line_windows(ink[0], (spacing or 100.0) * f, T)
-        if win is None or not len(win.X):
-            continue
+        inks = {}                                  # the line's ink per (scale, typical width): usually all equal
+        for k in ks:
+            meta = folds[k][1]
+            f = page_scale(spacing, meta.get("spacing"))
+            ink = _line_ink(lib, book, lid, meta["typical_width"], f, masks)
+            if ink is None:
+                continue
+            c = ink[0]
+            same = (f, c.shape, hashlib.sha1(np.packbits(c).tobytes()).hexdigest())
+            inks.setdefault(same, (c, f, []))[2].append(k)
         aks = [a for a in split_aksharas(_chars(text)) if a.strip() and a != "?"]
-        path, score = align(win, base.probabilities(win.X), base.classes, T, aks)
-        if path is None or score < MIN_ALIGN:
-            continue
-        used += 1
-        for q, a in path:
-            X.append(win.X[q])
-            labels.append(a)
-            widths[a].append(win.meta[q][2])
-    return {"lines": used, "X": X, "labels": labels, "widths": widths}
+        for c, f, group in inks.values():
+            Ts = [folds[k][1]["typical_width"] for k in group]
+            every = line_windows_range(c, (spacing or 100.0) * f, min(Ts), max(Ts))
+            for k in group:
+                base, meta, _ = folds[k]
+                T = meta["typical_width"]
+                win = narrow(every, T)
+                if win is None or not len(win.X):
+                    continue
+                path, score = align(win, base.probabilities(win.X), base.classes, T, aks)
+                if path is None or score < MIN_ALIGN:
+                    continue
+                got = out[k]
+                got["lines"] += 1
+                for q, a in path:
+                    got["X"].append(win.X[q].copy())     # not a view: it would keep the line's windows in memory
+                    got["labels"].append(a)
+                    got["widths"][a].append(win.meta[q][2])
+            del every
+    return out
 
 
 def _with_corrections(data: Dict, learned: Dict) -> Dict:
@@ -258,42 +288,110 @@ def _fit(data: Dict, cancel=None, hidden: int = 0, epochs: int = EPOCHS) -> Lett
     return reader
 
 
+def _vary_count(n: int) -> int:
+    """Varied copies of each letter of a label with `n` letters (fairness rule: small labels topped up)."""
+    return max(3, min(30, -(-20 // n)))
+
+
+def _letter_key(seed: int, sp: float, line_sig: str, smp) -> str:
+    """What a letter's rows are computed from: the feature version, the seed, its line spacing, its box and the
+    letters of its line (their boxes and mask contents: their ink is in its windows)."""
+    return hashlib.sha1(json.dumps([FEATURE_VERSION, seed, round(float(sp), 6), line_sig, smp.id, smp.x, smp.w],
+                                   ensure_ascii=False).encode()).hexdigest()
+
+
+def _line_signature(smps, masks: MaskPack) -> str:
+    return hashlib.sha1(json.dumps(sorted([m.id, m.x, m.y, m.w, m.h, masks.digest(m.id)] for m in smps))
+                        .encode()).hexdigest()
+
+
+def _letter_rows(L: Dict, seed: int) -> Entry:
+    """A letter's rows, from its own random numbers (seed, sample id, which copy): the same in every fold and
+    every run (docs/SPEED_PLAN.md, S3a). Varied copies are added by `_varied_rows`."""
+    sp, mask = L["sp"], L["mask"]
+    if L["c"] is None:                                      # on no line: its picture (and varied copies)
+        return Entry(L["key"], [features(mask, sp)], [], [])
+    x, w, c, x0 = L["x"], L["w"], L["c"], L["x0"]
+    rng = np.random.default_rng([seed, L["sid"], 0])
+
+    def win(a, b):
+        m = _crop(c, a - x0, b - x0)
+        return features(m, sp) if m is not None else None
+    pos = [features(mask, sp), win(x, x + w)]
+    for sign in (-1, 1):
+        shift = sign * max(1, int(round(rng.uniform(0.03, 0.10) * w)))
+        pos.append(win(x + shift, x + w + shift))
+    negs = [win(x, x + w // 2), win(x + w // 2, x + w)]
+    if L["nxt"] is not None and L["nxt"][0] - (x + w) < 0.5 * w:
+        negs.append(win(x, L["nxt"][0] + L["nxt"][1]))
+    for sign in (-1, 1):
+        shift = sign * int(round(rng.uniform(0.25, 0.45) * w))
+        negs.append(win(x + shift, x + w + shift))
+    return Entry(L["key"], [f for f in pos if f is not None], [f for f in negs if f is not None], [])
+
+
+def _varied_rows(e: Entry, mask: np.ndarray, sp: float, sid: int, seed: int, n: int) -> int:
+    """Make the letter's varied copies up to `n` (copy k always from the same seed); how many were made."""
+    made = 0
+    for k in range(len(e.varied), n):
+        e.varied.append(features(varied(mask, np.random.default_rng([seed, sid, 1 + k])), sp))
+        made += 1
+    return made
+
+
 def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), progress=None, cancel=None,
-                  seed: int = 0, unlined: bool = True) -> Dict:
+                  seed: int = 0, unlined: bool = True, store: Optional[FeatureStore] = None,
+                  masks: Optional[MaskPack] = None) -> Dict:
     """The training windows (X, y, weights), the classes and the meta, before fitting. With `unlined`, the
     reviewed letters that are on no line (System generated, uploaded) are learned from their picture alone
-    (and its varied copies): there is no line to cut windows or "not a letter" pieces from."""
-    rng = np.random.default_rng(seed)
+    (and its varied copies): there is no line to cut windows or "not a letter" pieces from.
+
+    The rows come from the feature store (kept in the book folder, made only for the letters that changed;
+    pass `store` and `masks` to share them between the folds of a Measure); the labels and the review status
+    always come from the database."""
     book = lib.get_book(book_id)
-    letters = []
+    own_store, own_masks = store is None, masks is None
+    store = FeatureStore(lib.book_dir(book)) if store is None else store
+    masks = MaskPack(lib.book_dir(book)) if masks is None else masks
+    skip = set(skip_files)
+    letters, every = [], []
     with lib.session() as s:
-        q = (select(Sample, LetterGroup.label_dev, Page.line_spacing)
+        q = (select(Sample, LetterGroup.label_dev, Page.line_spacing, Page.file)
              .join(LetterGroup, Sample.group_id == LetterGroup.id).join(Page, Sample.page_id == Page.id)
              .where(Sample.book_id == book_id, Sample.deleted.is_(False), Page.part == "training",
                     Sample.line_id.is_not(None), LetterGroup.label_dev != ""))
-        if skip_files:
-            q = q.where(Page.file.not_in(list(skip_files)))
         rows = s.execute(q).all()
         status = dict(s.execute(select(LetterGroup.id, LetterGroup.status)
                                 .where(LetterGroup.book_id == book_id)).all())
         by_line = defaultdict(list)
-        for smp, lab, spacing in rows:
-            by_line[smp.line_id].append((smp, lab, spacing))
+        for smp, lab, spacing, file in rows:
+            if status.get(smp.group_id) == "auto" or len(split_aksharas(lab)) != 1:
+                continue
+            every.append(smp.id)
+            if file not in skip:
+                by_line[smp.line_id].append((smp, lab, spacing))
         for items in by_line.values():
             if cancel and cancel():
                 raise Cancelled("Cancelled; the line search reader was not changed.")
-            # the line's ink from all its letters, labelled or not
+            # the line's letters, labelled or not: their ink is in the windows
             line_smps = s.scalars(select(Sample).where(Sample.line_id == items[0][0].line_id,
                                                        Sample.deleted.is_(False))).all()
-            c, x0, masks = _paste(lib, book, line_smps)
+            for m in line_smps:
+                masks.get(m)
+            line_sig = _line_signature(line_smps, masks)
             order = sorted(line_smps, key=lambda m: m.x)
             nxt_of = {a.id: b for a, b in zip(order, order[1:])}
+            pasted = None
             for smp, lab, spacing in items:
-                if status.get(smp.group_id) == "auto" or len(split_aksharas(lab)) != 1:
-                    continue
-                nxt = nxt_of.get(smp.id)
-                letters.append(dict(label=lab, x=smp.x, w=smp.w, mask=masks[smp.id], c=c, x0=x0,
-                                    sp=spacing or 1.6 * smp.h, nxt=(nxt.x, nxt.w) if nxt is not None else None))
+                sp = spacing or 1.6 * smp.h
+                L = dict(sid=smp.id, label=lab, x=smp.x, w=smp.w, sp=sp, key=_letter_key(seed, sp, line_sig, smp))
+                if store.get(smp.id, L["key"]) is None:          # its rows are computed below, from its line
+                    if pasted is None:
+                        pasted = _paste(lib, book, line_smps, masks)
+                    nxt = nxt_of.get(smp.id)
+                    L.update(mask=pasted[2][smp.id], c=pasted[0], x0=pasted[1],
+                             nxt=(nxt.x, nxt.w) if nxt is not None else None)
+                letters.append(L)
         if unlined:
             spacings = [v for v in s.scalars(select(Page.line_spacing).where(Page.book_id == book_id,
                                                                              Page.part == "training")) if v]
@@ -306,49 +404,45 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
             for smp, lab in alone:
                 if len(split_aksharas(lab)) != 1:
                     continue
-                letters.append(dict(label=lab, x=smp.x, w=smp.w, mask=_sample_mask(lib, book, smp), c=None, x0=0,
-                                    sp=usual or 1.6 * smp.h, nxt=None))
+                every.append(smp.id)
+                sp = usual or 1.6 * smp.h
+                masks.get(smp)
+                letters.append(dict(sid=smp.id, label=lab, x=smp.x, w=smp.w, sp=sp, c=None, nxt=None,
+                                    key=_letter_key(seed, sp, masks.digest(smp.id), smp)))
     if len(letters) < 20 or len({L["label"] for L in letters}) < 2:
         raise LibraryError("The line search learns the letters from this book's reviewed Training Data: review "
                            "and label more groups first (at least 20 letters).")
     if progress:
         progress(f"{len(letters)} reviewed letters; their windows")
     freq = Counter(L["label"] for L in letters)
-    for n, L in enumerate(letters):
-        if cancel and n % 500 == 0 and cancel():
-            raise Cancelled("Cancelled; the line search reader was not changed.")
-        x, w, c, x0, sp = L["x"], L["w"], L["c"], L["x0"], L["sp"]
-        if c is None:                                       # on no line: its picture and its varied copies
-            L["pos"] = [features(L["mask"], sp)] + [features(varied(L["mask"], rng), sp)
-                                                    for _ in range(max(3, min(30, -(-20 // freq[L["label"]]))))]
-            L["negs"] = []
-            continue
-
-        def win(a, b):
-            m = _crop(c, a - x0, b - x0)
-            return features(m, sp) if m is not None else None
-        pos = [features(L["mask"], sp), win(x, x + w)]
-        for sign in (-1, 1):
-            shift = sign * max(1, int(round(rng.uniform(0.03, 0.10) * w)))
-            pos.append(win(x + shift, x + w + shift))
-        pos += [features(varied(L["mask"], rng), sp) for _ in range(max(3, min(30, -(-20 // freq[L["label"]]))))]
-        negs = [win(x, x + w // 2), win(x + w // 2, x + w)]
-        if L["nxt"] is not None and L["nxt"][0] - (x + w) < 0.5 * w:
-            negs.append(win(x, L["nxt"][0] + L["nxt"][1]))
-        for sign in (-1, 1):
-            shift = sign * int(round(rng.uniform(0.25, 0.45) * w))
-            negs.append(win(x + shift, x + w + shift))
-        L["pos"] = [f for f in pos if f is not None]
-        L["negs"] = [f for f in negs if f is not None]
-        del L["c"]
+    entries = []
+    with lib.session() as s:
+        for n, L in enumerate(letters):
+            if cancel and n % 500 == 0 and cancel():
+                raise Cancelled("Cancelled; the line search reader was not changed.")
+            e = store.get(L["sid"], L["key"])
+            if e is None:
+                if "mask" not in L:                                 # on no line
+                    L["mask"] = masks.get(s.get(Sample, L["sid"]))
+                e = _letter_rows(L, seed)
+                store.put(L["sid"], e)
+                store.computed += 1
+            need = _vary_count(freq[L["label"]])
+            if len(e.varied) < need:
+                mask = L.get("mask")
+                if mask is None:
+                    mask = masks.get(s.get(Sample, L["sid"]))
+                store.copies += _varied_rows(e, mask, L["sp"], L["sid"], seed, need)
+                store.dirty = True
+            entries.append((L, e, need))
     classes = sorted(freq) + [NOT_A_LETTER]
     ci = {c_: i for i, c_ in enumerate(classes)}
     X, y = [], []
-    for L in letters:
-        for f in L["pos"]:
+    for L, e, need in entries:
+        for f in e.base + e.varied[:need]:
             X.append(f)
             y.append(ci[L["label"]])
-        for f in L["negs"]:
+        for f in e.negs:
             X.append(f)
             y.append(ci[NOT_A_LETTER])
     X, y = np.array(X, np.float32), np.array(y, np.int64)
@@ -359,6 +453,12 @@ def _training_set(lib: Library, book_id: int, skip_files: Sequence[str] = (), pr
     widths = defaultdict(list)
     for L in letters:
         widths[L["label"]].append(L["w"])
+    if own_store:
+        if unlined:
+            store.keep_only(every)
+        store.save()
+    if own_masks:
+        masks.save()
     return {"X": X, "y": y, "weights": weights, "classes": classes,
             "meta": {"letters": len(letters), "labels": len(freq),
                      "typical_width": float(np.median([L["w"] for L in letters])),
@@ -376,13 +476,13 @@ def _load(lib: Library, book: Book):
 
 
 def _read_lines(lib: Library, book: Book, line_ids: Sequence[int], spacing: float, model, lm,
-                settings: SearchSettings = SearchSettings()) -> Dict[int, tuple]:
+                settings: SearchSettings = SearchSettings(), masks: Optional[MaskPack] = None) -> Dict[int, tuple]:
     """{line id: (text, aksharas)} for the lines with cut letters (their ink); aksharas as `search_aksharas`."""
     reader, meta = model
     found = {}
     for lid in line_ids:
         f = page_scale(spacing, meta.get("spacing"))
-        ink = _line_ink(lib, book, lid, meta["typical_width"], f)
+        ink = _line_ink(lib, book, lid, meta["typical_width"], f, masks=masks)
         if ink is None:
             continue
         c, x0, y0 = ink
@@ -503,22 +603,28 @@ def _wrong_aksharas(aksharas: Sequence[str], truth: str) -> List[bool]:
     return out
 
 
-def _measure_file(lib: Library, book: Book) -> "Path":
-    return _folder(lib, book) / "measure.json"
+def _measure_file(lib: Library, book: Book, quick: bool = False) -> "Path":
+    return _folder(lib, book) / ("measure-quick.json" if quick else "measure.json")
 
 
-def last_measure(lib: Library, book_id: int) -> Optional[Dict]:
-    f = _measure_file(lib, lib.get_book(book_id))
+def last_measure(lib: Library, book_id: int, quick: bool = False) -> Optional[Dict]:
+    f = _measure_file(lib, lib.get_book(book_id), quick)
     return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
 
 
 def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: Optional[Callable[[], bool]] = None,
-            settings: SearchSettings = SearchSettings()) -> Dict:
+            settings: SearchSettings = SearchSettings(), quick: bool = False) -> Dict:
     """Score the line search on the checked lines (Line truth) of the Read Book pages, fold-fair: the pages
     with checked lines are split into `folds` folds; for each, the reader and the language model are
     rebuilt without those pages (they are also Training Data pages) and its lines are read. Beside it:
     Tesseract alone and Tesseract + language model as read whole (that language model knows every page),
-    and the second opinion's marks on Tesseract + language model. Kept in line-search/measure.json."""
+    and the second opinion's marks on Tesseract + language model. Kept in line-search/measure.json.
+
+    The letters' rows come from the feature store (each computed once, kept); the base readers of all folds
+    are trained first, so that each checked line is cut into windows once for learning from corrections and
+    once to be read (docs/SPEED_PLAN.md, S3). `quick`: only the first half of the folds (2 of 4) are read (about
+    half the time):
+    for screening ideas only, never a result to quote."""
     from .db import LineTruth
     from .dictionary import book_model_without
     from .wholelines import trim_edges
@@ -538,19 +644,46 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
                            "or check lines in Line truth.")
     pages = sorted({(r[2], r[0], r[1], r[3]) for r in rows})
     n_folds = max(1, min(folds, len(pages)))
-    lines = []
-    for k in range(n_folds):
+    tested = list(range(max(1, n_folds // 2) if quick else n_folds))
+    files = {k: [p[2] for p in pages[k::n_folds]] for k in tested}
+    store, masks = FeatureStore(lib.book_dir(book)), MaskPack(lib.book_dir(book))
+
+    def stop(k):
         if cancel and cancel():
-            raise Cancelled(f"Stopped after {k} of {n_folds} folds; nothing was kept.")
-        fold = pages[k::n_folds]
-        files = [p[2] for p in fold]
+            raise Cancelled(f"Stopped after {k} of {len(tested)} folds; nothing was kept.")
+
+    def say(msg):
+        if progress:
+            progress(0, len(tested), LineDone(msg, "OK", "", time.time() - t0))
+    # 1. each fold's base reader, from the letters of the other pages (their rows from the store)
+    bases = {}
+    for k in tested:
+        stop(0)
+        say(f"fold {k + 1}: the reader that cuts the checked lines")
+        data = _training_set(lib, book_id, files[k], cancel=cancel, store=store, masks=masks)
+        bases[k] = (_fit(data, cancel, epochs=BASE_EPOCHS), data["meta"], set(files[k]))
+        del data
+    store.save()
+    masks.save()
+    # 2. learning from corrections: every checked line cut into windows once, for all the folds that learn from it
+    say("learning from the checked lines")
+    learned = _learn_folds(lib, book_id, bases, cancel=cancel, masks=masks)
+    masks.save()
+    lines = []
+    # 3. each fold's reader reads its pages
+    for k in tested:
+        stop(k)
         t = time.time()
-        reader, meta = _train(lib, book_id, files, cancel=cancel, seed=k)
-        lm = book_model_without(lib, book_id, files) if use_lm else None
+        data = _training_set(lib, book_id, files[k], cancel=cancel, store=store, masks=masks)
+        if learned[k]["lines"]:
+            data = _with_corrections(data, learned[k])
+        reader, meta = _fit(data, cancel), {**data["meta"], "lines": learned[k]["lines"]}
+        del data
+        lm = book_model_without(lib, book_id, files[k]) if use_lm else None
         lm = lm if lm is not None and len(lm) else None
-        for _, pid, file, spacing in fold:
+        for _, pid, file, spacing in pages[k::n_folds]:
             mine = [r for r in rows if r[0] == pid]
-            got = _read_lines(lib, book, [r[4] for r in mine], spacing or 100.0, (reader, meta), lm, settings)
+            got = _read_lines(lib, book, [r[4] for r in mine], spacing or 100.0, (reader, meta), lm, settings, masks)
             for r in mine:
                 if r[4] not in got:
                     continue
@@ -570,13 +703,15 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
                               "aksharas": len(tess_lm_aks), "marked": sum(marked), "mistakes": sum(wrong),
                               "caught": sum(m and w for m, w in zip(marked, wrong))})
         if progress:
-            progress(k + 1, n_folds, LineDone(f"fold {k + 1}: {', '.join(files)}", "OK",
-                                              f"trained on {meta['letters']} letters", time.time() - t))
+            progress(k + 1, len(tested), LineDone(f"fold {k + 1}: {', '.join(files[k])}", "OK",
+                                                  f"trained on {meta['letters']} letters", time.time() - t))
+    masks.save()
     chars = sum(x["chars"] for x in lines) or 1
     aksharas = sum(x["aksharas"] for x in lines) or 1
     mistakes = sum(x["mistakes"] for x in lines)
     result = {
         "measured_at": now().isoformat(), "seconds": round(time.time() - t0, 1), "folds": n_folds,
+        "quick": quick, "tested_folds": len(tested),
         "pages": len(pages), "lines": len(lines), "chars": chars,
         "cer": {e: round(100 * sum(x["wrong"][e] for x in lines) / chars, 2)
                 for e in ("ours", "tesseract", "tesseract_lm")},
@@ -584,7 +719,7 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
         "mistakes": mistakes, "caught": sum(x["caught"] for x in lines),
         "line_results": lines,
     }
-    f = _measure_file(lib, book)
+    f = _measure_file(lib, book, quick)                     # a quick one never replaces the last full measure
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return {k: v for k, v in result.items() if k != "line_results"}

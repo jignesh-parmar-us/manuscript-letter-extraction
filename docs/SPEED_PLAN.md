@@ -3,7 +3,7 @@
 Comes **before Phase 3** (built from `docs/implementation_plan_phase3_lean.md`): every Phase 3 chunk is checked with the
 tests and with Measure, so they must be fast first.
 
-**Status:** S1 and S2 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S3. Written 2026-10-15; the questions were answered the same day (section 5) and
+**Status:** S1, S2 and S3 are built (2026-10-16); S2 missed its `fast` target (see S2). Next: S4. Written 2026-10-15; the questions were answered the same day (section 5) and
 the plan cut down to a lean scope the same day (section 6). S4 (faster reading and retraining) added the
 same day; its questions are open (section 5).
 
@@ -207,6 +207,46 @@ same in every fold; a second training on an unchanged book computes no features;
 group computes none either; recutting one line computes only that line's letters; b and c give exactly the
 rows and windows of today's code.
 
+#### Built (2026-10-16)
+
+Code: `app/linestore.py` (the mask pack and the feature store), `linesearch._training_set` / `_learn_folds` /
+`measure`, `segment.line_windows_range` / `narrow`; tests `tests/test_linestore.py` (11, on the synthetic book).
+What differs from the plan:
+
+- **Rows kept exactly, not in 16-bit.** A row's picture part is a whole number / 255, so it is kept as 8 bits
+  (exact); the stroke directions and the size as 32-bit. About 460 MB for book 6 instead of 330, and rows from
+  the store are bit for bit the rows computed (tested), so the one-time change of the numbers is only the seeds.
+- **`features()` of one letter now uses `features_batch`.** The single-letter HOG normalised its blocks with
+  `np.linalg.norm`, which goes through Accelerate and can round the last bit differently depending on where
+  the array lies in memory: the same letter gave rows up to 6e-8 apart from one call to the next. Now one
+  letter's features are reproducible and equal to a window's. This moves every letter's row by at most 1 ulp
+  (part of the one-time change; also the C14 letter readers' features, by the same 1 ulp). The grouping
+  fingerprints (`letter_extractor.features`) are unchanged.
+- **One seed for all folds.** Measure trained fold k with seed k; with per-letter seeds the rows of all folds
+  come from seed 0, or they could not be shared. The reader's own random start is unchanged (seed 0).
+- **The store key** (`_letter_key`): the feature version, the seed, the letter's line spacing, its id and box,
+  and the line's letters (ids, boxes, mask contents). Labels and review status are never in it. Retrain also
+  forgets the letters no longer trained on; a fold of a Measure does not.
+- **Varied copies** are made per letter up to the number its label needs in that fold and kept.
+- **Checked lines' windows: twice per Measure, not once.** Keeping every line's window features for all folds
+  would take about 4.7 GB of memory (119 lines x 7,600 windows x 1,303 numbers), too much for 8 GB. Measure is
+  reorganised instead: (1) the base reader of every fold, (2) one pass over the checked lines: each cut into
+  windows once, with the widest window range of the folds that learn from it, each fold taking its own
+  (`narrow`: the same windows bit for bit, tested), (3) each fold's final reader reads its own lines (cut again).
+  So 2 cuts per line instead of 4. Nothing is kept on disk for the windows (their places are cheap to compute).
+- **A memory leak fixed on the way:** each row learned from a checked line was a view into the line's whole
+  window array, so all lines' window features (up to about 4.7 GB) stayed in memory until the fit. They are
+  copied now (same values).
+- **Mask pack** (`masks.npz`): every mask the training opens (training lines, checked lines), read again when
+  its PNG changed (path, size, time); a hash of its content goes into the letter keys. Reading a page with
+  Read Book still opens the PNGs (S4b looks at reading).
+- **Quick Measure** reads the first half of the folds (2 of 4) and trains only those; kept in
+  `measure-quick.json`, so it never replaces the last full Measure. In the app: **Quick measure**, its result
+  marked "screening only". `run.py --quick` trains and reads folds 0 and 1.
+- **Phase 3 (C24):** the store is keyed by sample id inside the book folder; moving Training Data into
+  datasets will make it cold once (built again), never wrong.
+- **Not measured yet** (S5): the times of a cold and a warm Measure and Retrain, and the one-time CER change.
+
 ### S4. Faster reading and retraining (added 2026-10-15, about 3–4 h)
 
 Measure got faster in S3; this chunk makes the reader itself faster: **Retrain** (Text → Whole lines (our
@@ -337,7 +377,7 @@ To cut the building time from 11–13 h to **about 5–7 h**, the first plan was
 |---|---|---|
 | S1 CPU fights, copies (built) | about 1 h | — |
 | S2 parallel tests (built) | 1.5–2 h | — |
-| S3 Measure cache | 3–4 h | — |
+| S3 Measure cache (built) | 3–4 h | — |
 | S4 faster reading and retraining | 3–4 h | — |
 | S5 heavy session | 30 min to set up and report | about 2.5 h, unattended, when the user says |
 

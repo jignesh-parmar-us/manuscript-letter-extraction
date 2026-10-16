@@ -160,7 +160,13 @@
     <dd>Scores our reader on your checked lines, beside Tesseract. It must not score a page the reader learned
       from (that would be like marking an exam the pupil has seen), and every Read Book page is also a Training Data
       page. So the pages with checked lines are split into 4 groups; for each group a reader is trained without
-      those pages (and without their checked lines) and reads them. That is four trainings, hence the time.</dd>
+      those pages (and without their checked lines) and reads them. That is four trainings, hence the time.
+      The letters' features are kept between runs (see below), so a Measure after a few changes takes much less
+      than the first.</dd>
+    <dt>Quick measure (about half a Measure)</dt>
+    <dd>Only 2 of the 4 groups of pages. It is there to throw out a bad idea early, and nothing more: its numbers
+      are marked <em>screening only</em> and must never be quoted as a result; judge a change on the full Measure.
+      It does not replace the last Measure; both are shown, the quick one while it is the newer.</dd>
   </dl>
 
   <h2>Photos and scans at another size</h2>
@@ -192,9 +198,18 @@
     same for every idea about the reader or the search. So for the experiments they are computed once per group of
     pages and kept in files (about 5 GB), a <em>cache</em>; then a new idea, such as another language model weight,
     takes minutes instead of hours.</p>
-  <p>The app keeps no such cache: Retrain and Measure compute the features each time, from your groups and lines as
-    they are then. What the app keeps is the trained reader (<code>line-search/reader.npz</code> in the book folder),
-    the last measure (<code>line-search/measure.json</code>) and each line's reading in the library.</p>
+  <p>Since 16 October the app keeps a cache of its own, in <code>line-search/features/</code> in the book folder:
+    each training letter's features (about 14 rows of numbers per letter: the letter, its window on the line, the
+    window shifted a little, its varied copies and its "not a letter" pieces) and every letter mask in one file.
+    Retrain and Measure compute only the features of letters that changed (a new page, a recut line, a changed
+    mask); reviewing or relabelling a group changes nothing there, since the labels are always read from your
+    groups. It is about 0.5 GB for book 6. It is only a cache: deleting the folder is safe, it is made again
+    (the next Retrain or Measure then takes as long as the first). The random choices for a letter (its shifts and
+    varied copies) now come from the letter itself, so the same letter gets the same rows in every group of pages
+    and every run.</p>
+  <p>What else the app keeps is the trained reader (<code>line-search/reader.npz</code>), the last measure
+    (<code>line-search/measure.json</code>; a quick one in <code>measure-quick.json</code>) and each line's
+    reading in the library.</p>
 </main>
 </body>
 </html>
