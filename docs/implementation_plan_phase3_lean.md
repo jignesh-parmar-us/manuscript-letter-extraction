@@ -12,6 +12,43 @@ Written 2026-10-15 from the full plan of 2026-10-14 and its answered decisions. 
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
+## Start here next session (written 2026-10-17)
+
+State: C21–C24 are committed on branch `c0-c1-skeleton-prepare` (`9170b47` C21, `843560f` C22, `1400370` C23,
+`fdc1ee7` C24), one commit per chunk, not pushed. `docs/INSTALL_TESSERACT.md` has your own uncommitted changes
+(not part of Phase 3). Tests at the last commit: backend `fast` 438 passed, screen 169 passed, type check and build
+OK. Not run: the backend `full` suite and the gate Measure (both heavy).
+
+Do, in this order (each heavy step only when you say so, one at a time):
+
+1. **Back up the real library** before the app opens it with the new code: the next start applies migrations
+   `0018` (page.excluded) and `0019` (reading models; drops `book.read_dataset_id`). Both ran fine on a copy on
+   2026-10-17 (about 13 s; books 7 and 8 got reading models, book 8 learning from dataset 6).
+2. **The gate Measure (C24) on a copy**, not on the real library. Make the copy with
+   `tools/harness/copy_library.sh <copy folder> 0006-vachnamrut-printed-1933-training-data`. That script copies
+   **one** book folder; since the split, book 8's letters are in dataset 6's folder and its lines and checked lines
+   in `0008-vachnamrut-printed-1944-training-data`, so copy that folder into the copy's `books/` too (clone with
+   `cp -c -R`). Then on the copy: Measure book 8 (4 folds). It must match the "after" row of
+   `docs/TUNING_PHASE2.md`, "Speed plan S5: before and after": ours 8.03%, Tesseract 5.38%, Tesseract + LM 4.45%,
+   marked 13.5%, caught 354 of 410, on 119 checked lines on 15 pages (within the about 1 point that one training
+   differs from another by chance). Show the line-by-line page. Expected the same: a check on 2026-10-17 found that
+   the old (file name) and the new (sha256) rules leave out exactly the same dataset pages in every fold, and book
+   8's reader signature is unchanged. Record the result under C24 and in `docs/TUNING_PHASE2.md`. Printed only: there
+   are no handwritten checked lines.
+3. **Backend `full` suite** (`PYTHONPATH=src .venv/bin/python tools/test_parallel.py full`, about 2 min).
+4. **Stop 3: you check C21–C24 in the app** (`npm run build`, then
+   `PYTHONPATH=src .venv/bin/python -m letter_extractor.app --browser --port 8675`):
+   - Books and Datasets screens (top bar links); New book / New dataset with uploaded images or a PDF, a dataset
+     from a copied folder; the uploads folder at the bottom (*change…*).
+   - Prepare / Pages & capture: the pages list (thumbnails, ▲ ▼, Exclude / Include, Delete and its questions).
+   - Book → Reading setup: datasets used (add, remove, other-writing warning), word lists, reading model (book 8
+     should say *up to date*; its reader moves to `models/0008-…/` the first time it is opened).
+   - Note: test datasets or books made in the app put files in `<library>/uploads/`; deleting them removes those.
+5. After Stop 3: fixes as one commit each; then the branch is ready to merge.
+
+The 900 MB database copy made on 2026-10-17 was in that session's scratchpad (gone with the session): make a new
+copy for step 2.
+
 ## 0. The idea in one picture
 
 | Today | After Phase 3 (lean) |
