@@ -495,5 +495,14 @@ Spotlight; load 4–18), and every job had one thread (S1), so the times are hig
   lines are all printed).
 - Reading one page (13 lines) with the after code and 2 workers: 25 s, about 1.9 s per line (6.6 s before, stage 5).
 - A base reader of the warm Measure: 163 s (cold: 328 s, which built the store).
+- **Is +0.26 points a loss?** Most likely chance (checked the same day on the two runs' lines): 869 against 841
+  characters wrong of 10,820; 56 lines worse, 41 better, 22 the same (sign test p = 0.15); 6 pages better, 8
+  worse, 1 the same, the largest moves both ways (Untitled-26 +21, the 8.30.59 PM photo -14); no confusion grew
+  by more than 5 (इ -> ई 0 -> 5), the rest 2–3 each and scattered, no pattern of one kind. Only three things in
+  S1–S4 change numbers, all of them the random draw: each letter's shifts and varied copies from its own seed
+  (S3a), seed 0 for every fold (before: seed k for fold k), one letter's features by at most 6e-8 (S3). S4 is the
+  same bit for bit. To settle it: 2 more after-runs at other seeds (and one more before-run), compared by their
+  averages; if after is clearly worse, return to the old way of drawing shifts and copies and keep the store.
+  Not done (the user stopped here).
 - Not done (stopped by the user): the warm Measure, batch 512, base epochs 5 and 8, Retrain before and after.
   Analysis of why the plan missed its target: `docs/SPEED_PLAN.md`, S5.

@@ -356,7 +356,9 @@ how it differs from the plan:
 #### Outcome (2026-10-16, stopped after the cold Measure)
 
 Numbers in `docs/TUNING_PHASE2.md` ("Speed plan S5"): Measure 5 h 56 min before, 4 h 14 min after (cold, without
-the two fixes above); our reader 7.77% -> 8.03% (chance level); reading about 1.9 s per line instead of 6.6 s.
+the two fixes above); our reader 7.77% -> 8.03% (most likely chance: sign test over the lines p = 0.15, no
+systematic confusion; the check with more seeds is not done, see `docs/TUNING_PHASE2.md`); reading about 1.9 s
+per line instead of 6.6 s.
 The full test suite after S5: 408 passed in 137 s. It found a race in S1 (a worker still starting when its run
 died watched launchd as its parent and never stopped), fixed with a test.
 
