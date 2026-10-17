@@ -15,10 +15,12 @@ from typing import Dict, Iterator, List
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
-from letter_extractor.app.db import Book, LetterGroup, Sample
+from letter_extractor.app.db import DATASET, Book, LetterGroup, Sample
 from letter_extractor.ocr.aksharas import split_aksharas
 
-SCHEMA = "0015"                     # the reading app's newest migration that Font Maker was written for
+SCHEMA = "0019"                     # the reading app's newest migration that Font Maker was written for
+# 0016-0019 (Phase 3): `book` holds datasets and books (`kind`); groups and samples are on datasets,
+# hand-checked lines on the books that read with a reading model of those datasets (texts.truth).
 
 
 class StoreError(Exception):
@@ -61,16 +63,17 @@ class Store:
 
     def book_count(self) -> int:
         with self.session() as s:
-            return s.scalar(select(func.count(Book.id))) or 0
+            return s.scalar(select(func.count(Book.id)).where(Book.kind == DATASET)) or 0
 
     def sources(self) -> List[Dict]:
-        """The books a font can be made from, with their groups counted per status (F1).
+        """The datasets a font can be made from (a Read Book `book` row has no groups), with their groups counted per status (F1).
 
         `usable` counts, per status, the groups that can become a glyph: they have a label of exactly one
         akshara. A label of several aksharas (a cut error such as ખાખા) cannot, and neither can a group
         with no label (every `reviewed` group)."""
         with self.session() as s:
-            books = s.execute(select(Book.id, Book.name, Book.writing).order_by(Book.id)).all()
+            books = s.execute(select(Book.id, Book.name, Book.writing).where(Book.kind == DATASET)
+                              .order_by(Book.id)).all()
             groups = s.execute(select(LetterGroup.book_id, LetterGroup.status, LetterGroup.label_dev)).all()
             samples = dict(s.execute(select(Sample.book_id, func.count(Sample.id))
                                      .where(Sample.deleted.is_(False), Sample.group_id.is_not(None))

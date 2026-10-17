@@ -1,8 +1,9 @@
 """Test texts (F7): fixed texts the font is measured on after every build.
 
   - **Yours:** texts you save on the Try it tab, kept in the font project (`texts.json`: id, name, text).
-  - **Hand-checked lines** of each of the font's books (Read Book → Line truth, `line_truth`), read-only, in
-    page and line order. They come from the same pages as the groups, so they flatter the font a little;
+  - **Hand-checked lines** (Read Book → Line truth, `line_truth`), read-only, in page and line order: of each
+    of the font's datasets, and of each book whose reading model learns from one of them (Phase 3 moved the
+    Read Book pages and their line truth from the dataset to a `book` row). They come from the same pages as the groups, so they flatter the font a little;
     your own texts (another edition, a letter) show the gaps new text has.
 
 `coverage` counts, per text, what the newest build draws as the book's own, pieced, filled or missing
@@ -19,7 +20,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy import select
 
-from letter_extractor.app.db import Book, Line, LineTruth, Page
+from letter_extractor.app.db import Book, Line, LineTruth, Page, ReadingModelDataset
 
 from .projects import ProjectError, Projects
 from .store import Store
@@ -43,7 +44,11 @@ class Texts:
     def truth(self, sources: List[int]) -> List[Dict]:
         out = []
         with self.store.session() as s:
-            for book_id in sources:
+            readers = s.execute(select(Book.id).join(ReadingModelDataset,
+                                                     ReadingModelDataset.model_id == Book.reading_model_id)
+                                .where(ReadingModelDataset.dataset_id.in_(sources))
+                                .order_by(Book.id)).scalars().all()
+            for book_id in dict.fromkeys([*sources, *readers]):
                 book = s.get(Book, book_id)
                 rows = s.execute(select(LineTruth.text_dev).join(Line, Line.id == LineTruth.line_id)
                                  .join(Page, Page.id == Line.page_id).where(Page.book_id == book_id)

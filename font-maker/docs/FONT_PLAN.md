@@ -67,8 +67,11 @@ Neither app's tests run the other's: the reading app's `discover -s tests` and `
 Rules:
 
 - **One-way imports.** `font_maker` may import `letter_extractor.app.db` (the tables),
-  `letter_extractor.ocr.aksharas` (akshara splitting). Nothing in `letter_extractor` or `tests/` imports `font_maker` or `fontTools`. A small test in
-  `font-maker/tests/` checks this.
+  `letter_extractor.ocr.aksharas` (akshara splitting). Nothing in `letter_extractor` or `tests/` imports `font_maker`. A small test in
+  `font-maker/tests/` checks this. (Loosened 2026-10-17: the reading app may use `fontTools` itself, for the
+  fonts it shows text in; `docs/CUSTOM_FONT_PLAN.md`.)
+- **Library schema.** `store.SCHEMA` is `0019` (Phase 3): sources are `kind = 'dataset'` rows, and the
+  hand-checked lines come from those datasets and from the books whose reading model learns from them.
 - **Read-only database.** Font Maker opens `library.db` as `file:…?mode=ro` with its own engine. It does
   **not** use `Library()`, because that runs migrations. If the database's `alembic_version` is not the one
   Font Maker knows, it says so and stops instead of guessing. Both apps can run at the same time (WAL).

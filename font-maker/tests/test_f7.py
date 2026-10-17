@@ -15,7 +15,7 @@ import numpy as np
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from letter_extractor.app.db import Line, LineTruth, Page
+from letter_extractor.app.db import BOOK, Book, Line, LineTruth, Page, ReadingModel, ReadingModelDataset
 from font_maker import export
 from font_maker.glyphs import GlyphMaker
 from font_maker.projects import Projects
@@ -32,8 +32,15 @@ class F7Test(unittest.TestCase):
         self.root = make_library(Path(self.tmp.name))
         make_font_groups(self.root)
         engine = create_engine(f"sqlite:///{self.root / 'library.db'}")
-        with Session(engine) as s:                        # one hand-checked line
-            page = Page(book_id=1, file="p.png")
+        with Session(engine) as s:                        # one hand-checked line, on a book that reads with dataset 1
+            model = ReadingModel(name="Test book", folder="0002-test-book")
+            s.add(model)
+            s.flush()
+            s.add(ReadingModelDataset(model_id=model.id, dataset_id=1))
+            book = Book(name="Test book", kind=BOOK, folder="0002-test-book", input_dir="", reading_model_id=model.id)
+            s.add(book)
+            s.flush()
+            page = Page(book_id=book.id, file="p.png", part="read", folder="read")
             s.add(page)
             s.flush()
             line = Line(page_id=page.id, number=1, x=0, y=0, w=10, h=10, ink="black", image="l.png")
