@@ -249,6 +249,24 @@ replaces the old *Use for training*, which C20 removed.
 Our reader would read a line from its own ink, not from the masks of its cut letters pasted together. This chunk
 only **builds the option and measures it**. Nothing changes for you unless C28a passes and C28b is built.
 
+**In simple terms** (written 2026-10-17):
+
+- **Today:** *Prepare* finds the lines on each page, then cuts each line into letters, the same way a dataset is
+  cut. A book's letters are never grouped or labelled, but our reader needs them: to read a line, it pastes the
+  letter pictures back side by side to rebuild the line, then slides along it looking for aksharas it knows. It is
+  like photocopying a page by cutting out every letter and gluing them onto a blank sheet before reading it.
+- **The change:** when Prepare finds a line it already knows exactly which ink belongs to it; today that is thrown
+  away. C28a keeps it (a small file per line), adds a setting so the reader takes its line from that file instead of
+  the glued letters (the old way stays the default), and measures both ways on book 8's 119 checked lines,
+  fold-fair, with the line-by-line page.
+- **Why it might read better:** nothing is lost or broken by cutting; a badly cut letter (a matra split off, two
+  letters merged) does not matter when the reader never uses the cuts.
+- **Why it might read worse:** cutting also drops specks, dust and stray marks; reading the whole line brings them
+  back, and they might confuse the reader. Only the measurement tells which is bigger.
+- **What it leads to (C28b):** if the new way reads at least as well, Prepare stops cutting a book's letters:
+  faster, and no thousands of unused letter pictures per book. If it reads worse, nothing changes.
+- **The catch:** all checked lines are printed (book 8), so it can only be measured on printed pages (question 4).
+
 - **Keep the line's ink mask at Prepare:** `pipeline.process_file` writes `lines/<stem>_L01_mask.png` (the
   `Line.mask` it has already) beside the line image, and records the line's headline row and main zone, which
   `_line_ink` needs for its band. That is a few KB per line.
