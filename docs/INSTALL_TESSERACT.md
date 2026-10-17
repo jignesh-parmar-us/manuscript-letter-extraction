@@ -10,50 +10,75 @@ You need:
 
 ## macOS
 
-This Mac has no Homebrew yet. Homebrew is the usual way to install command-line tools on macOS, and it makes updates easy. Steps A and B take about 10 to 15 minutes.
+Which way to install depends on the processor (Apple menu → **About This Mac**):
+- **Intel Mac** (this one: Intel Core i5): use **MacPorts** (section A). Recent Homebrew versions no longer support Intel Macs. The Homebrew installer stops with *"Homebrew on macOS is only supported on Apple Silicon processors!"*
+- **Apple Silicon Mac** (M1 or later): use **Homebrew** (section B).
 
-### A. Install Homebrew (once)
+### A. Intel Mac: MacPorts
+
+MacPorts needs the **Xcode Command Line Tools**. This Mac already has them. On another Mac, run `xcode-select --install` first.
+
+1. Download the MacPorts installer for **macOS 15 Sequoia** from https://www.macports.org/install.php. Choose the `.pkg` file for your macOS version (Apple menu → About This Mac).
+2. Open the `.pkg` and follow the steps. It asks for your Mac password.
+3. **Close Terminal and open a new window.** The installer adds `/opt/local/bin` to the PATH, but only new windows see it. Check it:
+   ```sh
+   port version
+   ```
+4. Install Tesseract with the Hindi, Sanskrit and Marathi models (this takes a few minutes):
+   ```sh
+   sudo port selfupdate
+   sudo port install tesseract tesseract-hin tesseract-san tesseract-mar
+   ```
+5. Add the script model `script/Devanagari`. You can also replace the three language models with the more accurate "best" versions (about 60 MB):
+   ```sh
+   TESSDATA=/opt/local/share/tessdata
+   for lang in hin san mar; do
+     sudo curl -fL -o "$TESSDATA/$lang.traineddata" \
+       "https://github.com/tesseract-ocr/tessdata_best/raw/main/$lang.traineddata"
+   done
+   sudo mkdir -p "$TESSDATA/script"
+   sudo curl -fL -o "$TESSDATA/script/Devanagari.traineddata" \
+     "https://github.com/tesseract-ocr/tessdata_best/raw/main/script/Devanagari.traineddata"
+   ```
+   If `tesseract --list-langs` (step C) shows another folder, use that folder instead of `/opt/local/share/tessdata`.
+
+Updating later:
+```sh
+sudo port selfupdate && sudo port upgrade outdated
+```
+An upgrade may put back the default models. If it does, run step 5 again.
+
+### B. Apple Silicon Mac: Homebrew
 
 1. Open **Terminal** (Applications → Utilities → Terminal).
-2. Paste this line and press Return:
+2. Install Homebrew. Paste this line and press Return:
    ```sh
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
-   It asks for your Mac password (nothing shows while you type it). It may also install the **Xcode Command Line Tools**; accept that.
-3. At the end, Homebrew prints **"Next steps"**. Run the commands it shows there. On an **Intel Mac** (this one) Homebrew lives in `/usr/local` and usually needs nothing more. On an **Apple Silicon Mac** (M1 to M4) it lives in `/opt/homebrew`, and the next steps are:
+   It asks for your Mac password (nothing shows while you type it).
+3. At the end, Homebrew prints **"Next steps"**. Run them:
    ```sh
    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
    eval "$(/opt/homebrew/bin/brew shellenv)"
    ```
-4. Check it:
+4. Install Tesseract:
    ```sh
-   brew --version
+   brew install tesseract
    ```
+5. This installs Tesseract with English only. Add only the models we need, in the more accurate "best" version (about 60 MB):
+   ```sh
+   TESSDATA="$(brew --prefix)/share/tessdata"
+   for lang in hin san mar; do
+     curl -fL -o "$TESSDATA/$lang.traineddata" \
+       "https://github.com/tesseract-ocr/tessdata_best/raw/main/$lang.traineddata"
+   done
+   mkdir -p "$TESSDATA/script"
+   curl -fL -o "$TESSDATA/script/Devanagari.traineddata" \
+     "https://github.com/tesseract-ocr/tessdata_best/raw/main/script/Devanagari.traineddata"
+   ```
+   (Or `brew install tesseract-lang` for all languages, about 650 MB.)
 
-### B. Install Tesseract and the Devanagari models
-
-```sh
-brew install tesseract
-```
-
-This installs Tesseract with English only. Choose **one** way to add the Devanagari models:
-
-**Option 1: all languages (simplest, about 650 MB):**
-```sh
-brew install tesseract-lang
-```
-
-**Option 2: only the models we need, in the more accurate "best" version (about 60 MB, recommended):**
-```sh
-TESSDATA="$(brew --prefix)/share/tessdata"
-for lang in hin san mar; do
-  curl -fL -o "$TESSDATA/$lang.traineddata" \
-    "https://github.com/tesseract-ocr/tessdata_best/raw/main/$lang.traineddata"
-done
-mkdir -p "$TESSDATA/script"
-curl -fL -o "$TESSDATA/script/Devanagari.traineddata" \
-  "https://github.com/tesseract-ocr/tessdata_best/raw/main/script/Devanagari.traineddata"
-```
+Updating later: `brew upgrade tesseract`. If an upgrade removes the models, run step 5 again.
 
 The "best" models are slower but more accurate than the default ones. A page of printed text still takes only a few seconds.
 
@@ -72,23 +97,6 @@ tesseract samples/blackandwhite/Untitled-15.jpg - -l san+hin --psm 6
 ```
 
 Devanagari text should appear in the Terminal. A few errors are normal at this stage. If the text looks right, Tesseract is ready.
-
-### Updating later
-
-```sh
-brew upgrade tesseract
-```
-
-The models you downloaded in Option 2 stay where they are. If an upgrade removes them, run the Option 2 commands again.
-
-### Without Homebrew (alternative)
-
-If you would rather not install Homebrew, **MacPorts** works too. Install MacPorts from https://www.macports.org/install.php (pick your macOS version), then run:
-```sh
-sudo port install tesseract tesseract-hin tesseract-san tesseract-mar
-```
-
-Then check it as in step C.
 
 ---
 
@@ -114,7 +122,7 @@ In this order:
 1. the path set in the app's settings (**Settings → Tesseract program**), if any;
 2. `tesseract` on the PATH;
 3. the usual install folders:
-   - `/usr/local/bin` (Homebrew on Intel)
+   - `/usr/local/bin` (older Homebrew installs on Intel)
    - `/opt/homebrew/bin` (Homebrew on Apple Silicon)
    - `/opt/local/bin` (MacPorts)
    - `C:\Program Files\Tesseract-OCR`
@@ -125,8 +133,9 @@ If it is not found, the "Suggest labels" button explains what is missing and lin
 
 | Problem | Fix |
 |---|---|
-| `command not found: brew` after installing Homebrew | Run the "Next steps" commands from step A.3, then open a new Terminal window. |
-| `command not found: tesseract` | Open a new Terminal window. Check with `ls "$(brew --prefix)/bin/tesseract"`. |
-| `Failed loading language 'san'` | The model is missing. Run step B again, and check that `tesseract --list-langs` shows it. |
+| *"Homebrew on macOS is only supported on Apple Silicon processors!"* | This is an Intel Mac. Use MacPorts (section A). |
+| `command not found: port` or `brew` | Open a new Terminal window. For Homebrew, run the "Next steps" from step B.3 first. |
+| `command not found: tesseract` | Open a new Terminal window. Check with `ls /opt/local/bin/tesseract` (MacPorts) or `ls /opt/homebrew/bin/tesseract` (Homebrew). |
+| `Failed loading language 'san'` | The model is missing. Run step A.5 or B.5 again, and check that `tesseract --list-langs` shows it. |
 | `curl: (22) ... 404` while downloading a model | The file name is case sensitive: `script/Devanagari.traineddata` has a capital D. |
 | Wrong letters on old typefaces | Expected for unusual letter forms. Try `-l san`, `-l hin`, `-l script/Devanagari` and compare. C10 measures which works best on our pages. |
