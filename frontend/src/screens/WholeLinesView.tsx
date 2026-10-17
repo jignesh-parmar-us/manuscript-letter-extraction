@@ -15,19 +15,20 @@
 // Downloads (C19): .txt, Word, PDF, a picture per page and the page images, of the ticked pages (Pages to
 // download: a tick box per page, Select all / none), or of every page when none is ticked. The ticks are kept
 // per book in the browser, the same in both views.
+//
+// Custom fonts (T2, T3): beside ગુજરાતી / देवनागरी, a tab per font of the library and + to add one (ScriptTabs);
+// the text, the PDF, the pictures and the Word file use the chosen font.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, Book, LineEngine, LineSearchState, Marker, PageInfo, TextSource, WholeAkshara, WholeLine, WholeLines } from "../api";
 import ErrorBox from "../components/ErrorBox";
 import LetterPalette from "../components/LetterPalette";
 import { PrintPages } from "../components/PageDownloads";
+import ScriptTabs, { Script, useTextFont } from "../components/ScriptTabs";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
 import LineCrop, { AlignedText, Strip } from "./LineCrop";
 import type { Layout, PageStyle } from "./TextView";
-
-type Script = "gujarati" | "devanagari";
-const FONT = `"Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif`;
 
 interface Props {
   book: Book;
@@ -70,19 +71,20 @@ function storedTicks(bookId: number): Set<number> {
   }
 }
 
-/** A page's text drawn by the browser (it joins Gujarati letters correctly), saved as `<file>.png`. */
-function savePicture(plain: string[], file: string) {
+/** A page's text drawn by the browser (it joins Gujarati letters correctly) in `font` (a CSS font-family),
+ *  saved as `<file>.png`. */
+function savePicture(plain: string[], file: string, font: string) {
   const size = 30;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.font = `${size}px ${FONT}`;
+  ctx.font = `${size}px ${font}`;
   canvas.width = Math.ceil(Math.max(200, ...plain.map((l) => ctx.measureText(l).width))) + 2 * size;
   canvas.height = plain.length * size * 1.7 + size;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#111";
-  ctx.font = `${size}px ${FONT}`;
+  ctx.font = `${size}px ${font}`;
   ctx.textBaseline = "top";
   plain.forEach((l, i) => ctx.fillText(l, size, size / 2 + i * size * 1.7));
   canvas.toBlob((blob) => {
@@ -125,7 +127,9 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   const [read, setRead] = useState<Map<number, number>>(new Map()); // page id -> lines read (by this engine)
   const [state, setState] = useState<LineSearchState | null>(null); // our reader: training and measure
   const [text, setText] = useState<WholeLines | null>(null);
-  const [script, setScript] = useState<Script>("gujarati");
+  const [error, setError] = useState<unknown>(null);
+  const tf = useTextFont(setError);
+  const script = tf.script;
   const [marker, setMarker] = useState<Marker>("none");
   const [lmChoice, setLm] = useState(storedLm);
   const lm = lmChoice && !ours; // our reader uses the language model in its search already
@@ -138,7 +142,6 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   const [printing, setPrinting] = useState<WholeLines[] | null>(null);
   const [ticked, setTicked] = useState<Set<number>>(() => storedTicks(book.id)); // pages to download
   const [ticking, setTicking] = useState(false); // the tick boxes shown
-  const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
   const input = useRef<HTMLInputElement>(null);
 
@@ -312,9 +315,10 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
 
   async function downloadPictures() {
     try {
+      await tf.ready();                // the chosen font loaded before drawing
       for (const id of exportRead) {   // one picture per page, in page order
         const t = id === pageId && text ? text : await api.wholeLines(id, engine);
-        savePicture(wholePlainLines(t, script, lm), pages.find((p) => p.id === id)?.file ?? `page ${id}`);
+        savePicture(wholePlainLines(t, script, lm), pages.find((p) => p.id === id)?.file ?? `page ${id}`, tf.family);
         if (exportRead.length > 1) await new Promise((r) => window.setTimeout(r, 300));
       }
     } catch (e) {
@@ -333,7 +337,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   function lineSpans(ln: WholeLine, i: number) {
     if (ln.edited_dev)
       return (
-        <span className="edited" title="Your correction">
+        <span className={`edited${tf.lacks(script === "gujarati" ? ln.edited_guj ?? "" : ln.edited_dev) ? " missing-glyph" : ""}`} title="Your correction">
           {script === "gujarati" ? ln.edited_guj : ln.edited_dev}
         </span>
       );
@@ -341,7 +345,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
       <span key={k}>
         {x.space && " "}
         <span
-          className={`text-letter${x.uncertain ? " uncertain" : ""}${lm && x.lm_dev ? " lm" : ""}${i === li && k === ai ? " selected" : ""}`}
+          className={`text-letter${x.uncertain ? " uncertain" : ""}${lm && x.lm_dev ? " lm" : ""}${i === li && k === ai ? " selected" : ""}${tf.lacks(aksharaText(x, script, lm)) ? " missing-glyph" : ""}`}
           onClick={(e) => {
             e.stopPropagation();
             setLi(i);
@@ -384,7 +388,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             key: k,
             box: x.box!,
             text: aksharaText(x, script, lm),
-            className: `${x.uncertain ? "uncertain " : ""}${lm && x.lm_dev ? "lm " : ""}${i === li && k === ai ? "selected" : ""}`.trim(),
+            className: `${x.uncertain ? "uncertain " : ""}${lm && x.lm_dev ? "lm " : ""}${i === li && k === ai ? "selected " : ""}${tf.lacks(aksharaText(x, script, lm)) ? "missing-glyph" : ""}`.trim(),
             onClick: () => {
               setLi(i);
               setAi(k);
@@ -456,7 +460,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
   );
 
   return (
-    <div className={`text-view ${layout}`}>
+    <div className={`text-view ${layout}`} style={tf.font ? { ["--text-font" as string]: tf.family } : undefined}>
       <ErrorBox error={error} onClose={() => setError(null)} />
       <div className="row text-tools">
         <button disabled={!prev} onClick={() => prev && go(`/books/${book.id}/text/${prev.id}`)} aria-label="Previous page">
@@ -512,14 +516,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
             With the language model
           </label>
         )}
-        <div className="row" role="group" aria-label="Script">
-          <button className={script === "gujarati" ? "tab active" : "tab"} onClick={() => setScript("gujarati")}>
-            ગુજરાતી
-          </button>
-          <button className={script === "devanagari" ? "tab active" : "tab"} onClick={() => setScript("devanagari")}>
-            देवनागरी
-          </button>
-        </div>
+        <ScriptTabs tf={tf} shown={lines.map((ln) => lineText(ln, script, lm))} onError={setError} />
       </div>
       {ours && (
         <div className="row our-reader small" aria-label="Our reader">
@@ -572,7 +569,8 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
               .txt
             </a>
             <a className={`button small${exportRead.length ? "" : " disabled"}`}
-              href={exportRead.length ? api.textUrl(book.id, "docx", script, marker, source, only) : undefined}>
+              href={exportRead.length ? api.textUrl(book.id, "docx", script, marker, source, only, tf.font?.id, tf.scale) : undefined}
+              title={tf.font ? (tf.font.embeddable ? `In ${tf.font.name}, embedded in the file` : `In ${tf.font.name}: shows only where that font is installed (it may not be embedded)`) : undefined}>
               Word
             </a>
             <button className="small" disabled={!exportRead.length} onClick={printPdf}>
@@ -774,6 +772,7 @@ export default function WholeLinesView({ book, pageId, onChanged, engine = "tess
         <PrintPages
           pages={printing.map((t) => ({ key: t.page_id, title: pages.find((p) => p.id === t.page_id)?.file,
             lines: wholePlainLines(t, script, lm) }))}
+          font={tf.font ? tf.family : undefined}
           onDone={() => setPrinting(null)}
         />
       )}

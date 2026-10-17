@@ -8,7 +8,8 @@ vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { ...real.api, pages: vi.fn(), bookWholeLines: vi.fn(), wholeLines: vi.fn(), convert: vi.fn(),
     job: vi.fn(), cancelJob: vi.fn(), bookTexts: vi.fn(), pageText: vi.fn(), proofreadStats: vi.fn(), saveWholeLine: vi.fn(),
-    lineSearch: vi.fn(), lineSearchReader: vi.fn(), lineSearchMeasure: vi.fn(), lineSearchTrain: vi.fn() } };
+    lineSearch: vi.fn(), lineSearchReader: vi.fn(), lineSearchMeasure: vi.fn(), lineSearchTrain: vi.fn(),
+    fonts: vi.fn(), uploadFont: vi.fn(), setFontSize: vi.fn(), fontMakerFonts: vi.fn(), addFontMakerFont: vi.fn(), removeFont: vi.fn() } };
 });
 
 const book = { id: 4, job: null } as unknown as Book;
@@ -40,6 +41,7 @@ describe("Whole lines", () => {
     vi.mocked(api.pages).mockResolvedValue(pages as never);
     vi.mocked(api.bookWholeLines).mockResolvedValue([{ page_id: 9, lines: 2 }]);
     vi.mocked(api.wholeLines).mockResolvedValue(text());
+    vi.mocked(api.fonts).mockResolvedValue([]);
   });
 
   it("shows Tesseract's reading with the language model's corrections and the clicked akshara on the page", async () => {
@@ -282,5 +284,85 @@ describe("Whole lines", () => {
     vi.mocked(api.bookWholeLines).mockResolvedValue([{ page_id: 9, lines: 2 }, { page_id: 10, lines: 1 }]);
     render(<TextView book={book} pageId={9} onChanged={() => {}} />);
     expect(await screen.findByRole("button", { name: "Read unread pages (0)" })).toBeDisabled();
+  });
+});
+
+const devFont = { id: "abc123abc123", name: "Book Six", source: "upload" as const, family: "Book Six",
+  scripts: ["devanagari" as const], chars: "नारायवभगजो", embeddable: true, joins: true, size: 1, added_at: null, version: 1 };
+
+describe("Custom fonts (T2, T3)", () => {
+  beforeEach(() => {
+    localStorage.removeItem("text-font");
+    localStorage.removeItem("text-mode");
+    localStorage.removeItem("text-layout");
+    localStorage.setItem("text-page-style", "image");
+    localStorage.removeItem("export-pages-4");
+    localStorage.setItem("whole-lines-lm", "off");
+    vi.mocked(api.pages).mockResolvedValue(pages as never);
+    vi.mocked(api.bookWholeLines).mockResolvedValue([{ page_id: 9, lines: 2 }]);
+    vi.mocked(api.wholeLines).mockResolvedValue(text());
+    vi.mocked(api.fonts).mockResolvedValue([devFont]);
+  });
+
+  it("shows the text in a font tab, in the font's script, with its missing letters and a Word file in it", async () => {
+    const t = text();
+    t.lines[1].aksharas = [ak("ण", "ણ", 10)];          // a letter the font lacks
+    vi.mocked(api.wholeLines).mockResolvedValue(t);
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^Book Six/ }));
+    const pane = await screen.findByLabelText("Text");
+    expect(within(pane).getByText("ना")).toBeInTheDocument();            // a Devanagari font: the Devanagari text
+    expect(within(pane).getByText("ण")).toHaveClass("missing-glyph");
+    expect(screen.getByText(/1 missing/)).toBeInTheDocument();
+    await waitFor(() => expect((document.querySelector(".text-view") as HTMLElement).style.getPropertyValue("--text-font"))
+      .toMatch(/display-font-abc123abc123-1-100/));
+    expect(screen.getByRole("link", { name: "Word" }).getAttribute("href")).toMatch(/format=docx.*&font=abc123abc123/);
+    expect(screen.getByRole("link", { name: ".txt" }).getAttribute("href")).not.toMatch(/font=/);
+    expect(localStorage.getItem("text-font")).toBe("abc123abc123");
+    // A+ twice: 10% larger, kept with the font; the face and the Word file follow; the percentage goes back
+    vi.mocked(api.setFontSize).mockImplementation(async (_id, size) => ({ ...devFont, size }));
+    await userEvent.click(screen.getByRole("button", { name: "Larger font" }));
+    await userEvent.click(screen.getByRole("button", { name: "Larger font" }));
+    expect(api.setFontSize).toHaveBeenLastCalledWith("abc123abc123", 1.1);
+    await waitFor(() => expect((document.querySelector(".text-view") as HTMLElement).style.getPropertyValue("--text-font"))
+      .toMatch(/display-font-abc123abc123-1-110/));
+    expect(screen.getByRole("link", { name: "Word" }).getAttribute("href")).toMatch(/&scale=1.1&/);
+    await userEvent.click(screen.getByRole("button", { name: "110%" }));
+    expect(api.setFontSize).toHaveBeenLastCalledWith("abc123abc123", 1);
+    expect(screen.queryByRole("button", { name: "110%" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "ગુજરાતી" }));        // back to the normal fonts
+    expect(within(pane).getByText("ના")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Word" }).getAttribute("href")).not.toMatch(/font=/);
+  });
+
+  it("adds a font from Font Maker or a file, and removes one", async () => {
+    vi.mocked(api.fonts).mockResolvedValue([]);
+    vi.mocked(api.fontMakerFonts).mockResolvedValue([{ project: "f0001", name: "Book Six", build: "BookSix-1.ttf",
+      built_at: "2026-10-01T10:00:00+00:00", added: false }]);
+    vi.mocked(api.addFontMakerFont).mockResolvedValue({ ...devFont, id: "fm-f0001", source: "fontmaker" });
+    render(<TextView book={book} pageId={9} onChanged={() => {}} />);
+    await screen.findByLabelText("Text");
+    expect(screen.queryByRole("button", { name: /^Book Six/ })).toBeNull();   // Font Maker fonts are not tabs by themselves
+    await userEvent.click(screen.getByRole("button", { name: "Add a font" }));
+    await userEvent.click(screen.getByRole("button", { name: "From Font Maker…" }));
+    vi.mocked(api.fonts).mockResolvedValue([{ ...devFont, id: "fm-f0001", source: "fontmaker" }]);
+    await userEvent.click(await screen.findByRole("button", { name: "Book Six" }));
+    expect(api.addFontMakerFont).toHaveBeenCalledWith("f0001");
+    expect(await screen.findByRole("button", { name: /^Book Six/ })).toHaveClass("active");
+
+    const file = new File(["font"], "saral.ttf", { type: "font/ttf" });
+    vi.mocked(api.uploadFont).mockResolvedValue({ ...devFont, id: "def456def456", name: "Saral" });
+    vi.mocked(api.fonts).mockResolvedValue([{ ...devFont, id: "fm-f0001", source: "fontmaker" }, { ...devFont, id: "def456def456", name: "Saral" }]);
+    await userEvent.click(screen.getByRole("button", { name: "Add a font" }));
+    await userEvent.upload(screen.getByLabelText("Font file"), file);
+    expect(api.uploadFont).toHaveBeenCalledWith(file);
+    expect(await screen.findByRole("button", { name: /^Saral/ })).toHaveClass("active");
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(api.removeFont).mockResolvedValue(undefined);
+    await userEvent.click(screen.getByRole("button", { name: "Remove the font Saral" }));
+    expect(api.removeFont).toHaveBeenCalledWith("def456def456");
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^Saral/ })).toBeNull());
+    expect(screen.getByRole("button", { name: "देवनागरी" })).toHaveClass("active");   // the script it showed
   });
 });

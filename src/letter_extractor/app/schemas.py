@@ -132,6 +132,14 @@ class FolderPath(BaseModel):
     path: str
 
 
+class FontMakerFont(BaseModel):
+    project: str = Field(pattern=r"^f\d{4}$")    # a Font Maker project, f0001 (T1)
+
+
+class FontSize(BaseModel):
+    size: float = Field(ge=0.5, le=2.0)            # A- / A+ on a font tab: times the matched size (T2)
+
+
 class ReadSource(BaseModel):
     """Read Book pages (C16a): a folder of images or a PDF file, replacing earlier ones if `force`."""
     path: str

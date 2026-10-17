@@ -595,6 +595,30 @@ export interface PageDetail {
   samples: Sample[];
 }
 
+/** One of the library's fonts to show the text in (custom fonts, T1): an upload or a Font Maker font. */
+export interface DisplayFont {
+  id: string;
+  name: string;
+  source: "upload" | "fontmaker";
+  family: string;              // the family name inside the font (used in Word files)
+  scripts: ("gujarati" | "devanagari")[];
+  chars: string;               // its Gujarati and Devanagari characters
+  embeddable: boolean;         // may be embedded in a Word file
+  joins: boolean;              // has OpenType rules to join conjuncts (some Apple fonts have only Apple's own)
+  size: number;                // your size (A- / A+), times the size matched to the normal fonts; 1 = as matched
+  added_at: string | null;
+  version: number;
+}
+
+/** A font built in Font Maker, to add as a tab. */
+export interface FontMakerFont {
+  project: string;
+  name: string;
+  build: string;
+  built_at: string;
+  added: boolean;
+}
+
 export interface NewSampleResult extends ActionResult {
   sample?: { id: number; page_id: number | null; box: number[]; source: string };
   samples?: { id: number }[];
@@ -702,10 +726,22 @@ export const api = {
   useWordList: (id: number, bookId: number, use: boolean) =>
     patch<WordListInfo>(`/api/wordlists/${id}`, { book_id: bookId, use }),
   deleteWordList: (id: number) => del<void>(`/api/wordlists/${id}`),
-  /** The text of one page, of some pages (the ticked ones, C19; none: every page) or of the whole part. */
+  /** The text of one page, of some pages (the ticked ones, C19; none: every page) or of the whole part.
+   *  `font`: one of the library's fonts (custom fonts, T3), set and embedded in a Word file; `scale`: its size
+   *  against the normal fonts', applied to the Word file's font size. */
   textUrl: (id: number, format: "txt" | "docx", script: "gujarati" | "devanagari", marker: Marker, readers: TextSource,
-    pages?: number | number[]) =>
-    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pagesQuery(pages)}&token=${encodeURIComponent(token())}`,
+    pages?: number | number[], font?: string | null, scale = 1) =>
+    `/files/texts/${id}?format=${format}&script=${script}&marker=${marker}&readers=${readers}${pagesQuery(pages)}${format === "docx" && font ? `&font=${encodeURIComponent(font)}${scale !== 1 ? `&scale=${scale}` : ""}` : ""}&token=${encodeURIComponent(token())}`,
+  // the library's fonts to show the text in (custom fonts, T1)
+  fonts: () => get<DisplayFont[]>("/api/fonts"),
+  uploadFont: (file: File) => post<DisplayFont>(`/api/fonts/upload?name=${encodeURIComponent(file.name)}`, file),
+  fontMakerFonts: () => get<FontMakerFont[]>("/api/fonts/fontmaker"),
+  addFontMakerFont: (project: string) => post<DisplayFont>("/api/fonts/fontmaker", { project }),
+  removeFont: (id: string) => del<void>(`/api/fonts/${encodeURIComponent(id)}`),
+  setFontSize: (id: string, size: number) => patch<DisplayFont>(`/api/fonts/${encodeURIComponent(id)}`, { size }),
+  /** The font file (`version` changes when a Font Maker font is built again, so the browser loads it anew). */
+  fontUrl: (id: string, version: number) =>
+    `/files/fonts/${encodeURIComponent(id)}?v=${version}&token=${encodeURIComponent(token())}`,
   /** The page images (not the text) of one page, of some pages or of every Read Book page, as one PDF. */
   pageImagesUrl: (id: number, pages?: number | number[]) =>
     `/files/page-images/${id}?part=read${pagesQuery(pages)}&token=${encodeURIComponent(token())}`,

@@ -1160,6 +1160,7 @@ a.button.disabled {
 .text-lines {
   font-size: 22px;
   line-height: 1.8;
+  font-family: var(--text-font); /* a custom font tab (T2); unset: the page's fonts */
 }
 .text-line {
   white-space: pre-wrap;
@@ -1426,6 +1427,7 @@ a.button.disabled {
   flex: 1 1 420px;
   min-width: 0;
   font: 22px/1.5 "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif;
+  font-family: var(--text-font, "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif);
   padding: 6px 8px;
 }
 .text-line .edited {
@@ -1455,6 +1457,7 @@ a.button.disabled {
   position: relative;
   height: calc(var(--fs, 2cqw) * 2.1);
   font: var(--fs, 2cqw) / 1.6 "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif;
+  font-family: var(--text-font, "Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
@@ -1588,4 +1591,55 @@ tr.excluded td {
 /* ---- Reading setup (C23) ---- */
 .reading-setup .setup-part {
   margin: 20px 0 4px;
+}
+
+/* Custom fonts (T2): a tab per font of the library beside the script tabs, ✕ to remove, + to add */
+.script-tabs {
+  flex-wrap: wrap;
+}
+.font-tab {
+  display: inline-flex;
+  align-items: center;
+}
+.font-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+.font-size button {
+  padding: 0 4px;
+}
+.font-remove {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.font-missing {
+  color: var(--warn, #b26a00);
+  font-size: 12px;
+}
+.font-add {
+  position: relative;
+}
+.font-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.font-maker-list {
+  margin: 0;
+  padding-left: 18px;
+}
+.text-letter.missing-glyph,
+.edited.missing-glyph,
+.aligned-akshara.missing-glyph {
+  outline: 1px dashed var(--warn, #b26a00);
+  outline-offset: 1px;
 }

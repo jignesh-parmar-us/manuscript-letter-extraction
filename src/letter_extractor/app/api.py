@@ -45,6 +45,10 @@ and {B} /api/books/{id}; the older lines say /api/books/{id} for both.
              their letters were made so; POST /api/books/{id}/actions/variants {"group_id"} (more letters for
              one group), POST /api/books/{id}/top-up (a job: every small group)
   export     POST /api/books/{id}/export (a job), POST /api/app/open-folder   (C5g)
+  fonts (T1) GET /api/fonts (the library's fonts for the text screens), POST /api/fonts/upload?name= (a .ttf/.otf
+             as the body; an old-style font is refused), GET /api/fonts/fontmaker (Font Maker's built fonts),
+             POST /api/fonts/fontmaker {"project"}, PATCH /api/fonts/{id} {"size"} (A- / A+), DELETE /api/fonts/{id}, GET /files/fonts/{id} (the font file);
+             GET /files/texts/{id}?format=docx&font={id} sets (and embeds) that font in the Word file
   app (C5d)  GET /api/app, POST /api/app/library, POST /api/app/pick-folder,
              PATCH /api/books/{id}/settings; GET / serves the built screen with the token in it;
              GET /help/<page> the help pages (no token), POST /api/app/open-help (window mode)
@@ -73,7 +77,7 @@ from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
 from .schemas import (DatasetChoice, PageExclude, PageFile, PageMove, AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
-                      GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
+                      FontMakerFont, FontSize, GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
 from .suggest import (group_suggestions, latest_runs, reference_books, sample_readings, samples_read_as,
                       suggestion_accuracy)
@@ -220,6 +224,48 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     def input_folder(book_id: int, body: FolderPath) -> Dict:
         library.set_input_folder(book_id, Path(body.path))
         return get_book(book_id)
+
+    # ---- fonts to show the text in (T1, docs/CUSTOM_FONT_PLAN.md) -----------------------------------------
+    from .fonts import FontError, FontNotFound, Fonts
+    fonts = Fonts(library.root)
+
+    def font_or_404(run):
+        try:
+            return run()
+        except FontNotFound:
+            raise HTTPException(404, "No such font.")
+        except FontError as e:
+            raise HTTPException(400, str(e))
+
+    @app.get("/api/fonts", dependencies=auth)
+    def list_fonts() -> List[Dict]:
+        return fonts.list()
+
+    @app.post("/api/fonts/upload", dependencies=auth)
+    async def upload_font(request: Request, name: str = Query(...)) -> Dict:
+        data = await request.body()
+        return font_or_404(lambda: fonts.add_upload(name, data))
+
+    @app.get("/api/fonts/fontmaker", dependencies=auth)
+    def fontmaker_fonts() -> List[Dict]:
+        return fonts.fontmaker_fonts()
+
+    @app.post("/api/fonts/fontmaker", dependencies=auth)
+    def add_fontmaker_font(body: FontMakerFont) -> Dict:
+        return font_or_404(lambda: fonts.add_fontmaker(body.project))
+
+    @app.patch("/api/fonts/{font_id}", dependencies=auth)
+    def set_font_size(font_id: str, body: FontSize) -> Dict:
+        return font_or_404(lambda: fonts.set_size(font_id, body.size))
+
+    @app.delete("/api/fonts/{font_id}", dependencies=auth, status_code=204)
+    def remove_font(font_id: str) -> None:
+        font_or_404(lambda: fonts.remove(font_id))
+
+    @app.get("/files/fonts/{font_id}", dependencies=auth)
+    def font_file(font_id: str):
+        path = font_or_404(lambda: fonts.path(font_id))
+        return FileResponse(path, media_type="font/otf" if path.suffix == ".otf" else "font/ttf")
 
     # ---- uploads (C21) -----------------------------------------------------------------------------------
     def uploads() -> Path:
@@ -470,9 +516,12 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                       part: str = Query("read", pattern="^(training|read)$"),
                       marker: Optional[str] = Query(None, pattern="^(mark|guess|none)$"),
                       readers: str = Query("both", pattern="^(both|tesseract|lines|lines_lm|search)$"),
-                      page_ids: Optional[str] = Query(None, pattern=r"^\d+(,\d+)*$")):
+                      page_ids: Optional[str] = Query(None, pattern=r"^\d+(,\d+)*$"),
+                      font: Optional[str] = None, scale: float = Query(1.0, ge=0.5, le=2.0)):
         """The text of one page, of the pages `page_ids` (the ticked pages, comma-separated; C19) or of every
-        converted page of a part, as .txt (UTF-8) or Word."""
+        converted page of a part, as .txt (UTF-8) or Word. `font` (T3): a Word file in that font of the
+        library's fonts, embedded when the font allows it (a .txt has no font); `scale`: that font's size against
+        the normal fonts' (measured by the screen), applied to the text's font size."""
         from urllib.parse import quote
         from ..mapping import mapping_for
         from ..ocr.docx import write_docx
@@ -512,7 +561,8 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                      for i, (p, t) in enumerate(rows, 1)]
         name = Path(rows[0][0].file).stem if page_id else book.name
         if format == "docx":
-            data = write_docx(pages)
+            family, embed = font_or_404(lambda: fonts.for_word(font)) if font else (None, None)
+            data = write_docx(pages, family, embed, scale if font else 1.0)
             media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         else:
             parts = [("" if not heading else f"=== {heading} ===\n") + "\n".join(lines) for heading, lines in pages]

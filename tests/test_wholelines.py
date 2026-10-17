@@ -1,6 +1,8 @@
 """Reading Read Book lines whole with Tesseract (no letter cutting), with the language model's correction."""
+import io
 import sys
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -344,6 +346,14 @@ class WholeLineTests(unittest.TestCase):
                                                                                          "quick_measure": None})
         self.assertEqual(c.get(f"/api/pages/{self.page}/whole-lines?engine=search", headers=h).status_code, 404)
         self.assertEqual(c.get(f"/api/books/{self.book}/whole-lines?part=training&engine=search", headers=h).json(), [])
+        # a Word file in one of the library's fonts, embedded (custom fonts, T3)
+        from test_fonts import GUJARATI, make_font
+        font = c.post("/api/fonts/upload", params={"name": "s.ttf"}, content=make_font(GUJARATI, "Saral"), headers=h).json()
+        url = f"/files/texts/{self.book}?format=docx&readers=lines&part=training&page_id={self.page}&token=t"
+        z = zipfile.ZipFile(io.BytesIO(c.get(f"{url}&font={font['id']}").content))
+        self.assertIn('w:cs="Saral"', z.read("word/document.xml").decode())
+        self.assertIn("word/fonts/font1.odttf", z.namelist())
+        self.assertEqual(c.get(f"{url}&font=000000000000").status_code, 404)
         c.close()
 
 

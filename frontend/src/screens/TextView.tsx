@@ -21,6 +21,7 @@ import { api, ActionResult, Book, Marker, PageInfo, PageText, ProofreadStats, Re
 import ErrorBox from "../components/ErrorBox";
 import LabelPicker from "../components/LabelPicker";
 import { PageImagesPdf, PrintPages } from "../components/PageDownloads";
+import ScriptTabs, { Script, useTextFont } from "../components/ScriptTabs";
 import { useJob } from "../components/useJob";
 import { go } from "../route";
 import { JobPanel } from "./Capture";
@@ -57,8 +58,6 @@ function storedLayout(): Layout {
     return "page";
   }
 }
-type Script = "gujarati" | "devanagari";
-const FONT = `"Noto Sans Gujarati", "Gujarati Sangam MN", "Shruti", "Noto Sans Devanagari", sans-serif`;
 
 interface Props {
   book: Book;
@@ -204,7 +203,6 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
   const [converted, setConverted] = useState<Map<number, TextSummary>>(new Map()); // converted pages
   const [stats, setStats] = useState<ProofreadStats | null>(null);
   const [text, setText] = useState<PageText | null>(null);
-  const [script, setScript] = useState<Script>("gujarati");
   const [marker, setMarker] = useState<Marker>("mark");
   const [readersChoice, setReadersChoice] = useState<Readers>(storedReaders);
   function chooseReaders(r: Readers) {
@@ -219,6 +217,8 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
   const [choosing, setChoosing] = useState(false);
   const [printing, setPrinting] = useState<PageText[] | null>(null); // texts to print as PDF
   const [error, setError] = useState<unknown>(null);
+  const tf = useTextFont(setError); // the script and the custom font (T2)
+  const script = tf.script;
   const [version, setVersion] = useState(0);
   const [splitting, setSplitting] = useState(false); // choosing where to cut the selected letter
   const [busy, setBusy] = useState(false);
@@ -309,21 +309,22 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
     other?.scrollIntoView?.({ block: "center", inline: "center" });
   }
 
-  function downloadPicture() {
+  async function downloadPicture() {
     if (!text || !page) return;
+    await tf.ready().catch(setError);
     const lines = plainLines(text, script, readers);
     const size = 30;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.font = `${size}px ${FONT}`;
+    ctx.font = `${size}px ${tf.family}`;
     const width = Math.ceil(Math.max(200, ...lines.map((l) => ctx.measureText(l).width))) + 2 * size;
     canvas.width = width;
     canvas.height = lines.length * size * 1.7 + size;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#111";
-    ctx.font = `${size}px ${FONT}`;
+    ctx.font = `${size}px ${tf.family}`;
     ctx.textBaseline = "top";
     lines.forEach((l, i) => ctx.fillText(l, size, size / 2 + i * size * 1.7));
     canvas.toBlob((blob) => {
@@ -568,7 +569,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
   );
 
   return (
-    <div className={`text-view ${layout}`}>
+    <div className={`text-view ${layout}`} style={tf.font ? { ["--text-font" as string]: tf.family } : undefined}>
       {choosing && (
         <PagePicker
           pages={pages}
@@ -616,14 +617,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
             </button>
           </div>
         )}
-        <div className="row" role="group" aria-label="Script">
-          <button className={script === "gujarati" ? "tab active" : "tab"} onClick={() => setScript("gujarati")}>
-            ગુજરાતી
-          </button>
-          <button className={script === "devanagari" ? "tab active" : "tab"} onClick={() => setScript("devanagari")}>
-            देवनागरी
-          </button>
-        </div>
+        <ScriptTabs tf={tf} shown={text ? plainLines(text, script, readers) : []} onError={setError} />
       </div>
       {job && <JobPanel job={job} onCancel={() => api.cancelJob(job.id).then(setJob, setError)} />}
       {!pages.length ? (
@@ -641,7 +635,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
             <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "txt", script, marker, readers, pageId) : undefined}>
               Page .txt
             </a>
-            <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "docx", script, marker, readers, pageId) : undefined}>
+            <a className={`button small${text ? "" : " disabled"}`} href={text && pageId ? api.textUrl(book.id, "docx", script, marker, readers, pageId, tf.font?.id, tf.scale) : undefined}>
               Page Word
             </a>
             <button className="small" disabled={!text} onClick={() => printPdf(false)}>
@@ -654,7 +648,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
             <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "txt", script, marker, readers) : undefined}>
               .txt
             </a>
-            <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "docx", script, marker, readers) : undefined}>
+            <a className={`button small${nConverted ? "" : " disabled"}`} href={nConverted ? api.textUrl(book.id, "docx", script, marker, readers, undefined, tf.font?.id, tf.scale) : undefined}>
               Word
             </a>
             <button className="small" disabled={!nConverted} onClick={() => printPdf(true)}>
@@ -754,6 +748,7 @@ function LettersView({ book, pageId, onChanged, layout, pageStyle, aligned }: Pr
         <PrintPages
           pages={printing.map((t) => ({ key: t.page_id, title: pages.find((p) => p.id === t.page_id)?.file,
             lines: plainLines(t, script, readers) }))}
+          font={tf.font ? tf.family : undefined}
           onDone={() => setPrinting(null)}
         />
       )}

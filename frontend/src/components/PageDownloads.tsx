@@ -23,7 +23,11 @@ export function PageImagesPdf({ bookId, pageId, nPages }: { bookId: number; page
 
 /** The text of some pages, printed (to PDF) by the browser: each page of the book on a new sheet.
  *  Drawn straight in <body>, outside the app's layout, so the page breaks are kept when printing. */
-export function PrintPages({ pages, onDone }: { pages: { key: number; title?: string; lines: string[] }[]; onDone: () => void }) {
+export function PrintPages({ pages, font, onDone }: {
+  pages: { key: number; title?: string; lines: string[] }[];
+  font?: string; // a CSS font-family (custom fonts, T3); the browser embeds it in the PDF
+  onDone: () => void;
+}) {
   useEffect(() => {
     window.addEventListener("afterprint", onDone, { once: true });
     const t = window.setTimeout(() => window.print(), 50); // after the print view is drawn
@@ -33,7 +37,7 @@ export function PrintPages({ pages, onDone }: { pages: { key: number; title?: st
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return createPortal(
-    <div className="print-text" lang="gu">
+    <div className="print-text" lang="gu" style={font ? { fontFamily: font } : undefined}>
       {pages.map((p) => (
         <section key={p.key}>
           {pages.length > 1 && p.title && <h3>{p.title}</h3>}
