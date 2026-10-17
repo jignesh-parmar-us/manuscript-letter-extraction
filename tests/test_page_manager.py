@@ -104,6 +104,19 @@ class BookPagesTests(PageManagerCase):
         move_page(self.lib, self.book, p1, -1)                              # already first: stays
         self.assertEqual(self.numbers()[0], ("p1.png", 1))
 
+    def test_a_page_moves_several_places_at_once_as_a_drag_does(self):
+        with self.lib.session() as s:                                      # rows only: no Prepare needed
+            ids = []
+            for i, f in enumerate(("p1.png", "p2.png", "p3.png"), 1):
+                page = Page(book_id=self.book, file=f, part="read", folder="read", number=i)
+                s.add(page)
+                s.flush()
+                ids.append(page.id)
+        self.assertEqual(move_page(self.lib, self.book, ids[0], 2)["number"], 3)   # C25: dragged after p3
+        self.assertEqual(self.numbers(), [("p2.png", 1), ("p3.png", 2), ("p1.png", 3)])
+        self.assertEqual(move_page(self.lib, self.book, ids[0], -9)["number"], 1)  # beyond the first: first
+        self.assertEqual(self.numbers(), [("p1.png", 1), ("p2.png", 2), ("p3.png", 3)])
+
     def test_deleting_a_page_in_a_folder_of_ones_own_keeps_the_file_excluded(self):
         self.lib.capture_read(self.book)
         r = delete_page(self.lib, self.book, "p2.png", self.uploads)

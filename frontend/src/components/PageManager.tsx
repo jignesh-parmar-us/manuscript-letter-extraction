@@ -1,8 +1,8 @@
 // The page manager (C22) of a book (in Prepare) and of a dataset (in Pages & capture): the pages in their order,
-// with a thumbnail and what is on each; ▲ / ▼ change the order, Exclude keeps a page but skips it (a book: Prepare,
+// with a thumbnail and what is on each; ▲ / ▼ or dragging a row by its handle ⠿ (C25) change the order, Exclude keeps a page but skips it (a book: Prepare,
 // reading, Measure, export; a dataset: capture, training, export), Delete removes it. Both ask first when a page has
 // checked lines, corrections or letters in reviewed groups (app/pages.py).
-import { ReactNode, useCallback, useEffect, useState } from "react";
+import { DragEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { api, ApiError, Kind, PageEntry, PageList } from "../api";
 import { useConfirm } from "./Confirm";
 
@@ -17,6 +17,15 @@ interface Props {
 }
 
 const THUMBS_KEY = "page-manager-thumbs";
+const DRAG_TYPE = "application/x-page-id";
+
+/** How many places a page at `from` moves when it is dropped before (or after) the page at `onto`, both places
+ *  among the pages with a row: the `by` of POST …/pages/{id}/move. */
+export function dropMove(from: number, onto: number, after: boolean): number {
+  let to = onto + (after ? 1 : 0);
+  if (from < to) to -= 1;
+  return to - from;
+}
 
 function readThumbs(): boolean {
   try {
@@ -30,6 +39,8 @@ export default function PageManager({ bookId, kind, busy = false, reload = 0, on
   const [list, setList] = useState<PageList | null>(null);
   const [thumbs, setThumbs] = useState(readThumbs);
   const [working, setWorking] = useState(false);
+  const [dragged, setDragged] = useState<number | null>(null);     // place of the page being dragged
+  const [target, setTarget] = useState<{ at: number; after: boolean } | null>(null);
   const [dialog, confirm] = useConfirm();
   const prepared = kind === "book" ? "Prepared" : "Captured";
 
@@ -76,6 +87,29 @@ export default function PageManager({ bookId, kind, busy = false, reload = 0, on
     await change((force) => api.deletePage(bookId, p.file, force), "Delete it anyway?", "Delete");
   }
 
+  /** Whether the pointer is in the lower half of the row (the page lands after it). */
+  function lowerHalf(e: DragEvent<HTMLTableRowElement>): boolean {
+    const box = e.currentTarget.getBoundingClientRect();
+    return (e.clientY ?? 0) > box.top + box.height / 2;
+  }
+
+  function dragOver(e: DragEvent<HTMLTableRowElement>, at: number) {
+    if (dragged === null || at < 0) return;
+    e.preventDefault();
+    const after = lowerHalf(e);
+    if (target?.at !== at || target.after !== after) setTarget({ at, after });
+  }
+
+  function drop(e: DragEvent<HTMLTableRowElement>, at: number) {
+    if (dragged === null || at < 0 || !list) return;
+    e.preventDefault();
+    const by = dropMove(dragged, at, lowerHalf(e));
+    const id = list.pages.filter((p) => p.id !== null)[dragged]?.id;
+    setDragged(null);
+    setTarget(null);
+    if (by && id != null) change(() => api.movePage(bookId, id, by), "", "");
+  }
+
   if (!list) return null;
   if (!list.pages.length) return <p className="muted small">No pages yet.</p>;
   const ordered = list.pages.filter((p) => p.id !== null);
@@ -113,7 +147,12 @@ export default function PageManager({ bookId, kind, busy = false, reload = 0, on
           {list.pages.map((p) => {
             const at = p.id === null ? -1 : ordered.findIndex((o) => o.id === p.id);
             return (
-              <tr key={p.file} className={p.excluded ? "excluded" : undefined}>
+              <tr key={p.file}
+                className={[p.excluded && "excluded", at === dragged && "dragged",
+                  target?.at === at && at !== dragged && (target.after ? "drop-after" : "drop-before")]
+                  .filter(Boolean).join(" ") || undefined}
+                onDragOver={(e) => dragOver(e, at)}
+                onDrop={(e) => drop(e, at)}>
                 <td className="num">{place.get(p.id) ?? ""}</td>
                 {thumbs && (
                   <td>
@@ -143,6 +182,19 @@ export default function PageManager({ bookId, kind, busy = false, reload = 0, on
                 <td className="actions">
                   {p.id !== null && (
                     <>
+                      <span className={`drag-handle${locked ? " off" : ""}`} draggable={!locked}
+                        aria-label={`Drag ${p.file} to another place`} title="Drag to another place"
+                        onDragStart={(e) => {
+                          e.dataTransfer?.setData(DRAG_TYPE, String(p.id));
+                          if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+                          setDragged(at);
+                        }}
+                        onDragEnd={() => {
+                          setDragged(null);
+                          setTarget(null);
+                        }}>
+                        ⠿
+                      </span>
                       <button aria-label={`Move ${p.file} up`} title="Up" disabled={locked || at === 0}
                         onClick={() => change(() => api.movePage(bookId, p.id!, -1), "", "")}>
                         ▲

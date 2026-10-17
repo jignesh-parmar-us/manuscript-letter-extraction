@@ -455,7 +455,8 @@ renamed files) and to several datasets. The gate measurement is still needed.
 
 ## 6. Later (left out of the lean scope)
 
-From the full plan, to build when wanted:
+From the full plan, to build when wanted. **Planned in detail in `docs/implementation_plan_phase3_later.md`
+(C25–C29); C25 (drag and drop) built 2026-10-17.**
 
 - **Existing files move into the uploads folder** automatically (copy, verify by hash, switch paths, keep the
   originals), and move again when the uploads folder is changed in settings (full plan, decisions 2 and 6).

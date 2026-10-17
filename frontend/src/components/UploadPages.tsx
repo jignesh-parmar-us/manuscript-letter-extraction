@@ -1,7 +1,7 @@
 // Uploading pages (C21): page images or one PDF, chosen with the file picker and sent one file at a time
 // into a dataset's or a book's upload folder (app/library.py, upload_target). A PDF answers with the job that
-// turns it into page images.
-import { useState } from "react";
+// turns it into page images. Files can also be dropped on the picker (C25).
+import { DragEvent, useState } from "react";
 import { api, Job, Kind } from "../api";
 
 const IMAGE = /\.(jpe?g|png|tiff?|bmp)$/i;
@@ -42,19 +42,58 @@ export async function uploadPages(kind: Kind, id: number, files: File[],
   return job;
 }
 
-/** The file picker: several page images, or one PDF. */
+/** Whether a drag carries files from outside the page (not a page row being dragged, C25). */
+function carriesFiles(e: DragEvent<HTMLElement>): boolean {
+  return [...(e.dataTransfer?.types ?? [])].includes("Files");
+}
+
+/** The dropped files, or null when a folder was dropped (C25: the images are dropped, not their folder; reading a
+ *  folder from a drop differs between browsers, and a dataset has *Copy a folder of page images*). */
+export function droppedFiles(data: DataTransfer | null): File[] | null {
+  if (!data) return [];
+  for (const item of [...(data.items ?? [])]) {
+    if (item.kind === "file" && item.webkitGetAsEntry?.()?.isDirectory) return null;
+  }
+  return [...(data.files ?? [])];
+}
+
+/** The file picker: several page images, or one PDF, chosen or dropped on it (C25). */
 export function PageFilePicker(props: { files: File[]; onChange: (files: File[]) => void; label?: string; disabled?: boolean }) {
-  const problem = filesProblem(props.files);
+  const [over, setOver] = useState(false);
+  const [folder, setFolder] = useState(false);
+  const problem = folder ? "Drop the page images, not their folder." : filesProblem(props.files);
+
+  function drop(e: DragEvent<HTMLElement>) {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    setOver(false);
+    if (props.disabled) return;
+    const files = droppedFiles(e.dataTransfer);
+    setFolder(files === null);
+    if (files !== null && files.length) props.onChange(files);
+  }
+
   return (
-    <label className="field">
+    <label className={`field drop-zone${over ? " over" : ""}`}
+      onDragOver={(e) => {
+        if (!carriesFiles(e) || props.disabled) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={drop}>
       <span>{props.label ?? "Page images or a PDF"}</span>
+      <span className="small muted">Drop them here, or choose files:</span>
       <input
         type="file"
         aria-label={props.label ?? "Page images or a PDF"}
         multiple
         accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,application/pdf,image/*"
         disabled={props.disabled}
-        onChange={(e) => props.onChange([...(e.target.files ?? [])])}
+        onChange={(e) => {
+          setFolder(false);
+          props.onChange([...(e.target.files ?? [])]);
+        }}
       />
       {props.files.length > 0 && !problem && <span className="small muted">{filesSummary(props.files)}</span>}
       {problem && (

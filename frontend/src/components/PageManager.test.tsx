@@ -1,8 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, PageEntry } from "../api";
-import PageManager from "./PageManager";
+import PageManager, { dropMove } from "./PageManager";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
@@ -65,5 +65,41 @@ describe("PageManager", () => {
     expect(dialog).toHaveTextContent("Its image stays in your folder");
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(api.deletePage).not.toHaveBeenCalled();
+  });
+
+  it("drags a page by its handle to another place (C25)", async () => {
+    vi.mocked(api.movePage).mockResolvedValue({ page: 1, number: 3 });
+    render(<PageManager bookId={4} kind="book" onChanged={() => {}} onError={() => {}} />);
+    const table = await screen.findByRole("table", { name: "Pages" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    fireEvent.dragStart(screen.getByLabelText("Drag p1.png to another place"));
+    // jsdom gives drag events no pointer place (0): a row box above it puts the pointer in its lower half
+    rows[2].getBoundingClientRect = () => ({ top: -20, height: 10 }) as DOMRect;
+    fireEvent.dragOver(rows[2]);
+    expect(rows[2]).toHaveClass("drop-after");
+    fireEvent.drop(rows[2]);
+    await waitFor(() => expect(api.movePage).toHaveBeenCalledWith(4, 1, 2));
+    expect(screen.queryByLabelText("Drag p4.png to another place")).not.toBeInTheDocument();   // not prepared yet
+  });
+
+  it("does not move a page dropped onto a file not prepared yet, or onto its own place", async () => {
+    render(<PageManager bookId={4} kind="book" onChanged={() => {}} onError={() => {}} />);
+    const table = await screen.findByRole("table", { name: "Pages" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    fireEvent.dragStart(screen.getByLabelText("Drag p1.png to another place"));
+    fireEvent.drop(rows[3]);
+    fireEvent.drop(rows[0]);
+    expect(api.movePage).not.toHaveBeenCalled();
+  });
+});
+
+describe("dropMove", () => {
+  it("counts the places a page moves, whether it lands before or after the row", () => {
+    expect(dropMove(0, 2, true)).toBe(2);     // first page after the third: third place
+    expect(dropMove(0, 2, false)).toBe(1);
+    expect(dropMove(3, 0, false)).toBe(-3);
+    expect(dropMove(3, 0, true)).toBe(-2);
+    expect(dropMove(1, 1, true)).toBe(0);
+    expect(dropMove(1, 2, false)).toBe(0);
   });
 });

@@ -1643,3 +1643,34 @@ tr.excluded td {
   outline: 1px dashed var(--warn, #b26a00);
   outline-offset: 1px;
 }
+
+/* ---- drag and drop (C25): files onto the picker, page rows to another place ---- */
+.drop-zone {
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
+.drop-zone.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.drag-handle {
+  display: inline-block;
+  padding: 0 4px;
+  color: var(--muted);
+  cursor: grab;
+  user-select: none;
+}
+.drag-handle.off {
+  cursor: default;
+  opacity: 0.4;
+}
+tr.dragged td {
+  opacity: 0.4;
+}
+tr.drop-before td {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+tr.drop-after td {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}

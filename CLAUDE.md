@@ -33,7 +33,8 @@ in `frontend/`, SQLite library at `~/Documents/Manuscript Letters`.
 - When the implementation differs from the plan, update the plan in the same commit:
   `docs/IMPLEMENTATION_PLAN.md` (Phase 1, C0–C9), `docs/implementation_plan_phase2.md` (C10+),
   `docs/implementation_plan_phase3_lean.md` (C19+, what is built; the full `implementation_plan_phase3.md`
-  is the reference for what was left for later), `docs/SPEED_PLAN.md` (S1–S4),
+  is the reference for what was left for later), `docs/implementation_plan_phase3_later.md`
+  (C25+, the lean plan's section 6), `docs/SPEED_PLAN.md` (S1–S4),
   `docs/SEGMENTATION_PLAN.md` (line search). Record what changed and why. Also update the chunks
   that come after it: status, files, settings.
 - Tuning numbers go in `docs/TUNING.md` / `docs/TUNING_PHASE2.md`.
