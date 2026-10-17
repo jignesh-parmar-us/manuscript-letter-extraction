@@ -71,8 +71,13 @@ export default function PageViewer({ book, pageId, sampleId = null, part = "trai
     api.pages(book.id, part).then(setPages, setError);
   }, [book.id, part, version]);
   useEffect(() => {
+    // a book's letters are never grouped, and groups are a dataset's (C20: /api/datasets/{id}/groups is 404 for a book)
+    if (reading) {
+      setGroups(new Map());
+      return;
+    }
     api.groups(book.id).then((gs) => setGroups(new Map(gs.map((g) => [g.id, g]))), setError);
-  }, [book.id, version]);
+  }, [book.id, reading, version]);
   useEffect(() => {
     if (pageId === null) {
       setPage(null);

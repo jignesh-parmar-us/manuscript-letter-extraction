@@ -246,6 +246,14 @@ describe("PageViewer", () => {
     expect(screen.queryByRole("button", { name: "Use for training" })).toBeNull();     // C20: a book only reads
   });
 
+  it("on a Read Book page: never asks for groups, which only a dataset has (404 for a book)", async () => {
+    vi.mocked(api.groups).mockRejectedValue(new Error("No dataset with id 1."));
+    render(<PageViewer book={book} pageId={3} part="read" onChanged={() => {}} />);
+    await screen.findByTestId("box-2");
+    expect(api.groups).not.toHaveBeenCalled();
+    expect(screen.queryByText(/No dataset with id/)).toBeNull();
+  });
+
   it("a dataset's page is not offered for reading", async () => {
     render(<PageViewer book={book} pageId={3} onChanged={() => {}} />);
     await screen.findByTestId("box-2");
