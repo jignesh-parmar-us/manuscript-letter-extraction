@@ -1,7 +1,8 @@
 // What the Books and Datasets screens (C21) share: renaming and deleting a row in its list, and the card with
-// the library and uploads folders.
-import { FormEvent, ReactNode, useState } from "react";
-import { api, AppInfo, BookSummary } from "../api";
+// the library and uploads folders, and the notice of the page images moved into the uploads folder (C26).
+import { FormEvent, ReactNode, useCallback, useState } from "react";
+import { api, AppInfo, BookSummary, Job, Kind } from "../api";
+import { useJob } from "./useJob";
 import { useConfirm } from "./Confirm";
 import FolderField from "./FolderField";
 import { go } from "../route";
@@ -93,12 +94,28 @@ export function DatasetLinks({ datasets, small = false }: { datasets: { id: numb
   );
 }
 
-/** The library folder and the uploads folder (where uploaded pages are kept), each changeable. */
+/** The library folder and the uploads folder (where uploaded pages are kept), each changeable. A new uploads
+ *  folder takes the pages uploaded before with it (C26, a job): the setting is kept only when that worked. */
 export function AppFolders(props: { info: AppInfo | null; onChanged: () => void; onError: (e: unknown) => void }) {
   const [open, setOpen] = useState<"" | "library" | "uploads">("");
   const [folder, setFolder] = useState("");
   const [message, setMessage] = useState("");
+  const { onChanged, onError } = props;
+  const ended = useCallback((j: Job) => {
+    if (j.status === "done") {
+      setMessage(`Saved. ${j.result?.files ?? 0} uploaded page files were moved there; the old folder ` +
+        `${j.result?.old ?? ""} was left as it is.`);
+      onChanged();
+    } else if (j.status === "failed") {
+      setMessage("");
+      onError(new Error(`The uploads folder was not changed: ${j.error}`));
+    } else {
+      setMessage("Cancelled: the uploads folder was not changed.");
+    }
+  }, [onChanged, onError]);
+  const [job, setJob] = useJob(null, ended);
   if (!props.info) return null;
+  const moving = job?.status === "running";
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -106,11 +123,17 @@ export function AppFolders(props: { info: AppInfo | null; onChanged: () => void;
       if (open === "library") {
         const r = await api.chooseLibrary(folder.trim());
         setMessage(r.restart_needed ? "Saved. Close and start the app again to use this library." : "Saved.");
+        props.onChanged();
       } else {
-        await api.chooseUploads(folder.trim());
-        setMessage("Saved. New uploads go there; pages uploaded before stay where they are.");
+        const r = await api.chooseUploads(folder.trim());
+        if (r.job) {
+          setMessage("");
+          setJob(r.job);
+        } else {
+          setMessage("Saved. Uploads go there from now on.");
+          props.onChanged();
+        }
       }
-      props.onChanged();
     } catch (err) {
       props.onError(err);
     }
@@ -138,16 +161,75 @@ export function AppFolders(props: { info: AppInfo | null; onChanged: () => void;
           <FolderField label={open === "library" ? "New library folder" : "New uploads folder"} value={folder}
             onChange={setFolder} info={props.info} />
           <div className="row">
-            <button type="submit" disabled={!folder.trim()}>
+            <button type="submit" disabled={!folder.trim() || moving}>
               Save
             </button>
-            <button type="button" onClick={() => setOpen("")}>
+            <button type="button" disabled={moving} onClick={() => setOpen("")}>
               Close
             </button>
+            {moving && (
+              <span className="small muted">
+                Moving the uploaded pages: {job.done} of {job.total} {job.current}
+              </span>
+            )}
           </div>
+          {open === "uploads" && !message && !moving && (
+            <p className="small muted">The pages uploaded before are copied there too, checked, and used from there; the old folder is left as it is.</p>
+          )}
           {message && <p className="small">{message}</p>}
         </form>
       )}
+    </div>
+  );
+}
+
+/** Once, after the app moved the page images of the older rows into the uploads folder at its start (C26): what was
+ *  moved, the database backup, the folders no row uses any more, and the rows that could not be moved. */
+const KIND_NAME: Record<Kind, string> = { dataset: "Dataset", book: "Book" };
+
+export function PageMoveNote(props: { info: AppInfo | null; onSeen: () => void }) {
+  const n = props.info?.page_move;
+  if (!n) return null;
+  const files = n.moved.reduce((t, m) => t + m.files, 0);
+  async function seen() {
+    try {
+      await api.pageMoveSeen();
+    } finally {
+      props.onSeen();
+    }
+  }
+  return (
+    <div className="card notice" role="status" aria-label="Page images moved">
+      {n.moved.length > 0 && (
+        <>
+          <p>
+            <strong>The page images now are in the uploads folder.</strong> {files} files of {n.moved.length}{" "}
+            {n.moved.length === 1 ? "row were" : "rows were"} copied there, each checked against its original; nothing
+            else changed. The originals were not touched.
+          </p>
+          <ul className="small">
+            {n.moved.map((m) => (
+              <li key={m.id}>
+                {KIND_NAME[m.kind]} {m.name}: {m.files} files from <code>{m.from}</code>
+              </li>
+            ))}
+          </ul>
+          {n.old_folders.length > 0 && (
+            <p className="small">
+              No dataset or book uses these folders any more; you can remove them when you like:{" "}
+              {n.old_folders.map((f) => <code key={f}>{f} </code>)}
+            </p>
+          )}
+          {n.backup && <p className="small muted">Backup of the database made first: <code>{n.backup}</code></p>}
+        </>
+      )}
+      {n.failed.length > 0 && (
+        <p className="small warn-text">
+          Not moved (they keep their folders and are tried again at the next start):{" "}
+          {n.failed.map((f) => `${f.name}: ${f.problem}`).join("; ")}
+        </p>
+      )}
+      <button onClick={seen}>OK</button>
     </div>
   );
 }

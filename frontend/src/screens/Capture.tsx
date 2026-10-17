@@ -27,6 +27,7 @@ export const JOB_NAMES: Record<Job["kind"], string> = {
   capture_read: "Preparing the book pages for reading",
   import_pdf: "Turning the PDF into page images",
   copy_pages: "Copying the page images into the app",
+  move_uploads: "Moving the uploaded pages into the new uploads folder",
   convert: "Converting pages into text",
   line_search: "Our reader (line search)",
   line_search_measure: "Measuring our reader on the checked lines",

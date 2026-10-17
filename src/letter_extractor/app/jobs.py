@@ -17,6 +17,8 @@ from typing import Callable, Dict, List, Optional
 
 from .library import BookHasReviewError, Cancelled, Library, LibraryError, NotFound
 
+APP = 0                                        # the "row" of a job of the whole library (C26: move_uploads)
+
 
 def _heavy(what: str, run: Callable[..., Dict]) -> Callable[..., Dict]:
     """`run` as one heavy job at a time (heavy.heavy_lock, docs/SPEED_PLAN.md S1): while another (a test run,
@@ -37,7 +39,7 @@ def _heavy(what: str, run: Callable[..., Dict]) -> Callable[..., Dict]:
 class Job:
     id: str
     book_id: int
-    kind: str                                  # capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | copy_pages | convert | line_search | line_search_train | line_search_measure | train | use_reader
+    kind: str                                  # move_uploads (C26, the whole library: book_id 0) | capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | copy_pages | convert | line_search | line_search_train | line_search_measure | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -73,13 +75,20 @@ class Jobs:
         return job
 
     def running_for(self, book_id: int) -> Optional[Job]:
-        return next((j for j in self._jobs.values() if j.book_id == book_id and j.status == "running"), None)
+        """The job running for the row, or a job of the whole library (`APP`, C26: it may change every row's folder),
+        or for `APP` any running job."""
+        return next((j for j in self._jobs.values() if j.status == "running"
+                     and (book_id == APP or j.book_id in (book_id, APP))), None)
 
     def start(self, book_id: int, kind: str, run: Callable[..., Dict], total: int = 0) -> Job:
         """`run(progress, cancel)` does the work and returns the result. `total` is the number of
         pages expected, so the screen can show "0 of 12" before the first page is done."""
         with self._lock:
-            if self.running_for(book_id):
+            other = self.running_for(book_id)
+            if other and (other.book_id == APP or book_id == APP):
+                raise LibraryError("Another job is running" + (": the page images are being moved into the new "
+                                   "uploads folder." if other.book_id == APP else "; wait until it ends, then try again."))
+            if other:
                 raise LibraryError("Another job (capture, export or suggestions) is already running for this book.")
             job = Job(id=uuid.uuid4().hex[:12], book_id=book_id, kind=kind, total=total)
             self._jobs[job.id] = job
@@ -205,6 +214,19 @@ class Jobs:
         except LibraryError:
             pdf.unlink(missing_ok=True)
             raise
+
+    def move_uploads(self, old, new, save: Callable[[], None]) -> Job:
+        """The uploads folder changes (C26): every row's upload folder is copied into the new one, checked, and the
+        rows switched (move.move_uploads); `save` then stores the setting. On a problem nothing changes."""
+        from .move import move_uploads
+
+        def run(progress, cancel):
+            from ..ocr.pdf import PageDone
+            out = move_uploads(self.lib, old, new, lambda i, n, name: progress(i, n, PageDone(name, "OK", "copied", 0.0)),
+                               cancel)
+            save()
+            return out
+        return self.start(APP, "move_uploads", run)
 
     def copy_pages(self, book_id: int, source: str, uploads) -> Job:
         """A dataset's page images copied from a folder into its upload folder (C21)."""

@@ -6,7 +6,7 @@ import { api, AppInfo, BookSummary, localTime, Writing } from "../api";
 import WritingChoice from "../components/WritingChoice";
 import ErrorBox from "../components/ErrorBox";
 import FolderField from "../components/FolderField";
-import { AppFolders, useRowEditing } from "../components/RowList";
+import { AppFolders, PageMoveNote, useRowEditing } from "../components/RowList";
 import { filesProblem, PageFilePicker, uploadPages } from "../components/UploadPages";
 import { go } from "../route";
 
@@ -30,6 +30,7 @@ export default function Datasets({ info, onLibraryChanged }: Props) {
       {dialog}
       <ErrorBox error={error} onClose={() => setError(null)} />
       <h1>Datasets</h1>
+      <PageMoveNote info={info} onSeen={onLibraryChanged} />
       <p className="muted small">Pages whose letters are cut, grouped, reviewed and labelled: what books learn from.</p>
       {datasets === null ? (
         <p className="muted">Loading…</p>

@@ -97,9 +97,18 @@
     <li><strong>The page images</strong> (JPG, PNG, TIFF or BMP) or a <strong>PDF</strong>, in page order by name
       (page2 comes before page10). When you make a dataset or a book you upload them (or, for a dataset, copy a
       folder): choose the files, or drag them from Finder onto the box (the images, not their folder). The app keeps
-      the copies in its <strong>uploads folder</strong> (shown at the bottom of the Books and
-      Datasets screens; <span class="ui">change…</span> sends new uploads elsewhere, uploads already there stay). Your
+      the copies in its <strong>uploads folder</strong> (shown at the bottom of the Books and Datasets screens;
+      <span class="ui">change…</span> moves it: the pages uploaded before are copied into the new folder, each copy
+      checked, and used from there; the old folder is left as it is, and nothing changes if a copy fails). Your
       originals are never changed. A folder can also be used where it is (Pages &amp; capture / Prepare).</li>
+    <li><strong>Datasets and books from before the uploads folder</strong> read their pages from a folder of your own.
+      The first time the app starts with this version, it copies those pages into the uploads folder (one copy per
+      dataset or book, also when several use the same folder; on a Mac the copies take no extra disk space), checks
+      every copy against its original, and then uses the copies. It backs up the library database first. A notice on
+      the Books and Datasets screens says what was moved, where the backup is, and which of your folders no dataset or
+      book uses any more: you can delete those when you like, because the app never deletes them. A dataset or book
+      whose folder or a page image is missing keeps its folder and is tried again at the next start. Your groups,
+      labels and line truth do not change.</li>
     <li><strong>Printed or handwritten?</strong> This decides how the letters are cut and who suggests labels:
       <span class="badge printed">printed</span> books are read by Tesseract;
       <span class="badge hand">handwritten</span> books learn from the books you have already labelled.</li>

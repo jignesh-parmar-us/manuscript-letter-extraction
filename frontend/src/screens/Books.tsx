@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api, AppInfo, BookSummary, localTime, Writing, WRITING_LABEL } from "../api";
 import WritingChoice from "../components/WritingChoice";
 import ErrorBox from "../components/ErrorBox";
-import { AppFolders, DatasetLinks, useRowEditing } from "../components/RowList";
+import { AppFolders, DatasetLinks, PageMoveNote, useRowEditing } from "../components/RowList";
 import { filesProblem, PageFilePicker, uploadPages } from "../components/UploadPages";
 import { go } from "../route";
 
@@ -31,6 +31,7 @@ export default function Books({ info, onLibraryChanged }: Props) {
       {dialog}
       <ErrorBox error={error} onClose={() => setError(null)} />
       <h1>Books</h1>
+      <PageMoveNote info={info} onSeen={onLibraryChanged} />
       <p className="muted small">
         What is read into text. A book learns from one or more datasets, chosen in its Reading setup (see{" "}
         <button className="link" onClick={() => go("/datasets")}>

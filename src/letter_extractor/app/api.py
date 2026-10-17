@@ -14,7 +14,9 @@ and {B} /api/books/{id}; the older lines say /api/books/{id} for both.
              GET/PATCH/DELETE {B} or {D}; a row carries `kind`, `datasets` (a book's, C23), `used_by` (a dataset's);
   setup(C23) GET /api/books/{id}/reading-setup (its reading model: datasets, other datasets, reader, measures),
              PUT /api/books/{id}/datasets {"dataset_ids"} (the datasets its reading model learns from);
-             POST /api/app/uploads (the uploads folder)
+             POST /api/app/uploads (the uploads folder; C26: the pages uploaded before move with it, a job)
+  moves(C26) GET /api/app carries `page_move` (the report of the page images moved into the uploads folder at the
+             start, until seen), POST /api/app/page-move/seen
   pages(C22) GET {B}/page-list (the page manager: order, excluded, not prepared yet, what is on each page),
              POST {B}/page-list/exclude {"file", "excluded", "force"}, POST {B}/page-list/delete {"file", "force"},
              POST {B}/pages/{page_id}/move {"by"}, GET /files/rows/{id}/thumb?name= (also under {D});
@@ -1066,18 +1068,35 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     # ---- the app itself (C5d) -------------------------------------------------------------------------
     @app.get("/api/app", dependencies=auth)
     def app_info() -> Dict:
+        from .move import notice
         return {"version": __version__, "library": str(library.root), "mode": context.mode,
                 "can_pick_folder": context.pick_folder is not None,
-                "uploads": str(uploads_dir(library.root, context.settings_file))}
+                "uploads": str(uploads_dir(library.root, context.settings_file)),
+                "page_move": notice(library)}
+
+    @app.post("/api/app/page-move/seen", dependencies=auth)
+    def page_move_seen() -> Dict:
+        """The notice of the page images moved into the uploads folder (C26) was read: not shown again."""
+        from .move import notice_seen
+        notice_seen(library)
+        return {"ok": True}
 
     @app.post("/api/app/uploads", dependencies=auth)
     def choose_uploads(body: FolderPath) -> Dict:
-        """The uploads folder (C20): where new uploads go from C21 on. Files already there are not moved."""
+        """The uploads folder (C20): where uploads go. Since C26 the pages uploaded before move with it (a job:
+        copied, checked, the rows switched; the setting is stored when that worked). `job` is None when there was
+        nothing to move."""
         path = Path(body.path).expanduser()
         if path.exists() and not path.is_dir():
             raise HTTPException(400, f"Not a folder: {path}")
-        save_settings({"uploads": str(path)}, context.settings_file)
-        return {"uploads": str(path)}
+        old = uploads_dir(library.root, context.settings_file)
+
+        def save() -> None:
+            save_settings({"uploads": str(path)}, context.settings_file)
+        if path.resolve() == old.resolve() or not any(p.is_dir() for p in (old / "datasets", old / "books")):
+            save()
+            return {"uploads": str(path), "job": None}
+        return {"uploads": str(path), "job": jobs.move_uploads(old, path, save).as_dict()}
 
     @app.post("/api/app/library", dependencies=auth)
     def choose_library(body: LibraryChoice) -> Dict:

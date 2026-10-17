@@ -1,13 +1,14 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api, AppInfo, BookSummary } from "../api";
+import { api, AppInfo, BookSummary, Job } from "../api";
 import Books from "./Books";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   return { ...real, api: { books: vi.fn(), datasets: vi.fn(), createBook: vi.fn(), renameBook: vi.fn(), deleteBook: vi.fn(),
-    uploadPage: vi.fn(), pickFolder: vi.fn(), chooseLibrary: vi.fn(), chooseUploads: vi.fn() } };
+    uploadPage: vi.fn(), pickFolder: vi.fn(), chooseLibrary: vi.fn(), chooseUploads: vi.fn(),
+    job: vi.fn(), pageMoveSeen: vi.fn() } };
 });
 
 const dataset: BookSummary = {
@@ -97,13 +98,45 @@ describe("Books", () => {
   });
 
   it("changes the uploads folder", async () => {
-    vi.mocked(api.chooseUploads).mockResolvedValue({ uploads: "/big/disk" });
+    vi.mocked(api.chooseUploads).mockResolvedValue({ uploads: "/big/disk", job: null });
     render(<Books info={info} onLibraryChanged={() => {}} />);
     const card = screen.getByText(/Uploaded pages are kept in/);
     await userEvent.click(within(card).getByRole("button", { name: "change…" }));
+    expect(screen.getByText(/pages uploaded before are copied there too/)).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("New uploads folder"), "/big/disk");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.chooseUploads).toHaveBeenCalledWith("/big/disk");
-    expect(await screen.findByText(/pages uploaded before stay where they are/)).toBeInTheDocument();
+    expect(await screen.findByText("Saved. Uploads go there from now on.")).toBeInTheDocument();
+  });
+
+  it("follows the move of the uploaded pages into the new uploads folder (C26)", async () => {
+    const job: Job = { id: "m1", book_id: 0, kind: "move_uploads", status: "running", done: 0, total: 2, current: "",
+      pages: [], result: null, error: "", seconds: 0 };
+    vi.mocked(api.chooseUploads).mockResolvedValue({ uploads: "/big/disk", job });
+    vi.mocked(api.job).mockResolvedValue({ ...job, status: "done", done: 2, result: { files: 2, old: "/lib/uploads" } });
+    const onLibraryChanged = vi.fn();
+    render(<Books info={info} onLibraryChanged={onLibraryChanged} />);
+    await userEvent.click(within(screen.getByText(/Uploaded pages are kept in/)).getByRole("button", { name: "change…" }));
+    await userEvent.type(screen.getByLabelText("New uploads folder"), "/big/disk");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/Moving the uploaded pages: 0 of 2/)).toBeInTheDocument();
+    expect(await screen.findByText(/2 uploaded page files were moved there/, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(onLibraryChanged).toHaveBeenCalled();
+  });
+
+  it("shows once what was moved into the uploads folder at the start (C26)", async () => {
+    vi.mocked(api.pageMoveSeen).mockResolvedValue({ ok: true });
+    const onLibraryChanged = vi.fn();
+    const moved: AppInfo = { ...info, page_move: { at: "", backup: "/lib backups/x/", old_folders: ["/Downloads/scans"],
+      moved: [{ id: 1, name: "Printed", kind: "dataset", from: "/Downloads/scans", to: "/lib/uploads/datasets/x", files: 23 }],
+      failed: [{ id: 5, name: "Handwritten", problem: "its folder /gone is not there" }] } };
+    render(<Books info={moved} onLibraryChanged={onLibraryChanged} />);
+    const note = screen.getByRole("status", { name: "Page images moved" });
+    expect(note).toHaveTextContent("23 files of 1 row were copied there");
+    expect(note).toHaveTextContent("/Downloads/scans");
+    expect(note).toHaveTextContent("Handwritten: its folder /gone is not there");
+    await userEvent.click(within(note).getByRole("button", { name: "OK" }));
+    expect(api.pageMoveSeen).toHaveBeenCalled();
+    await waitFor(() => expect(onLibraryChanged).toHaveBeenCalled());
   });
 });

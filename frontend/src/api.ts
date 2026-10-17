@@ -78,6 +78,16 @@ export interface AppInfo {
   mode: "window" | "browser";
   can_pick_folder: boolean;
   uploads?: string; // where uploaded pages are kept (C20, C21)
+  page_move?: PageMoveNotice | null; // the page images moved into the uploads folder at the start (C26), until seen
+}
+
+/** What moving the older rows' page images into the uploads folder did (C26): shown once. */
+export interface PageMoveNotice {
+  moved: { id: number; name: string; kind: Kind; from: string; to: string; files: number }[];
+  failed: { id: number; name: string; problem: string }[];
+  backup: string;          // the database backup made first ("" when nothing was copied)
+  old_folders: string[];   // folders no row uses any more (nothing was deleted)
+  at: string;
 }
 
 /** How a book is written. Printed books can be read by Tesseract to suggest labels (Phase 2);
@@ -137,7 +147,7 @@ export interface Job {
   id: string;
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
-    | "copy_pages"
+    | "copy_pages" | "move_uploads"
     | "convert" | "line_search" | "line_search_train" | "line_search_measure" | "train" | "use_reader" | "generate_letters"
     | "top_up";
   status: "running" | "done" | "failed" | "cancelled";
@@ -631,7 +641,9 @@ export const api = {
   app: () => get<AppInfo>("/api/app"),
   chooseLibrary: (path: string) => post<{ library: string; restart_needed: boolean }>("/api/app/library", { path }),
   pickFolder: () => post<{ path: string | null }>("/api/app/pick-folder"),
-  chooseUploads: (path: string) => post<{ uploads: string }>("/api/app/uploads", { path }),
+  /** A new uploads folder; the pages uploaded before move with it (C26): `job` follows that, null when nothing moves. */
+  chooseUploads: (path: string) => post<{ uploads: string; job: Job | null }>("/api/app/uploads", { path }),
+  pageMoveSeen: () => post<{ ok: boolean }>("/api/app/page-move/seen"),
   openHelp: (page: string) => post<{ opened: string }>("/api/app/open-help", { page }),
 
   books: () => get<BookSummary[]>("/api/books"),

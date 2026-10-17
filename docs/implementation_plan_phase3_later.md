@@ -3,8 +3,9 @@
 The plan for section 6 of `docs/implementation_plan_phase3_lean.md`: the things left out of the lean scope.
 It starts after C19–C24. Chunk names go on from there (C25–C29).
 
-**Status:** written 2026-10-17. Questions 1 and 2 answered the same day (section 3). **C25 built
-2026-10-17.** C26–C29 not started; questions 3–6 still open.
+**Status:** written 2026-10-17. Questions 1 and 2 answered the same day (section 3). **C25 and C26 built
+2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
+started; questions 3–6 still open.
 
 ## 0. What is where today (checked in the code and, read-only, in your library on 2026-10-17)
 
@@ -101,7 +102,71 @@ Screen only (`frontend/`). The same for printed and handwritten.
   `test_page_manager.py` that `by = 5` moves 5 places, if one is missing).
 - **Docs:** `docs/help/new-book.html`, `workflow.html` (pages), README.
 
-### C26. Page images move into the uploads folder, 4–5 h
+### C26. Page images move into the uploads folder, 4–5 h — built and run on your library 2026-10-17
+
+As built (what differs from the points below, and why):
+
+- **`app/move.py`** (new): `row_plan` / `move_plan` (what a row would move and why it cannot), `move_row` (copy,
+  check, switch one row), `move_existing` (all rows from before C26, once per library), `move_uploads` (the setting
+  changes), `backup_db`, `notice` / `notice_seen`, and the command (`python -m letter_extractor.app.move --library DIR
+  [--run] [--no-backup]`).
+- **Automatic at the start, before the screen opens** (your answer 1): `main.main` calls `move_existing` after the
+  split check and before serving, not as a job. Then nothing else can run against a row while its folder changes,
+  and the console says what it does. If it stops halfway, the rows already moved stay moved (each row is complete
+  on its own), and the next start goes on.
+- **Once per library, existing rows only** (your answer 1, "automatic for the existing"): `<library>/page-moves.json`
+  keeps `existing: {done, pending}`. The first start puts every row that needs a move in it; later starts only try
+  the rows still pending (those that failed). Rows made later with *Use this folder* are never moved.
+- **Each row gets its own copy** (your answer 2), as clones (`cp -c`; a normal copy across disks), through a hidden
+  `.part` file. A file of the same name and content already in the upload folder is used as it is; one with other
+  content stops that row.
+- **Checked against the original as it is now** (its SHA-256 computed at the move), not against `Page.sha256`: the
+  copy must be the same bytes as what the row reads today. A page changed since capture is reported by *page
+  problems* as before, in the new folder too. The plan said "against the page's stored hash"; that would have kept a
+  row whose original was edited after capture from ever moving.
+- **Problems found before copying** (folder not there, a page image missing) keep the row on its folder without
+  copying anything. If no row can be tried, **no backup is made**. A failure that repeats at every start becomes a
+  notice only once.
+- **The backup is `library.db` only**, made with SQLite's backup into `<library> backups/<date time> before moving
+  pages/` (beside your existing `2026-10-14-before-recut-failed-pages`). It is not the whole library: no file in the
+  library is changed, and cloning about 150,000 letter pictures would take minutes at every first start.
+- **`updated_at` is not changed** by the move, so the lists keep their order (the move is meant to be invisible).
+- **The notice:** `GET /api/app` carries `page_move` (moved rows with their file counts and old folders, rows not
+  moved and why, the backup, the folders no row uses any more) until **OK** (`POST /api/app/page-move/seen`).
+  `components/RowList.tsx` → `PageMoveNote`, at the top of Books and Datasets.
+- **Uploads setting:** `POST /api/app/uploads` answers `{uploads, job}`: `job` is `null` (saved at once) when the old
+  uploads folder has nothing in it, else a job `move_uploads` of the whole library (`Jobs`, `book_id` = `APP` = 0).
+  While it runs no row's job can start, and it does not start while any job runs. It copies **every file** of each
+  row's upload folder (also a book's PDF), switches the rows that read from there, then saves the setting. All or
+  nothing. A new folder inside the old one is refused. The folders card shows its progress and the result.
+- **Not built:** moving a book's PDF pages (in the book folder already, as planned) and a separate
+  `POST /api/app/move-pages` (the start does it; the command does it on a copy).
+- **Tests:** `tests/test_move_pages.py` (new, 12 tests, no capture: three rows sharing a folder get three checked
+  copies, the originals stay, the folder is listed as unused, a backup is made, a second run does nothing; pages,
+  lines and line truth unchanged; a copy that does not match keeps its row and is moved at the next try; a missing
+  page image keeps the row, no backup, the notice once; a PDF book, a row in its upload folder and a row made later
+  are not moved; the command without `--run`; the setting change through the API moves and switches, a clash moves
+  nothing and keeps the setting, nothing uploaded saves at once, a folder inside the old one is refused, the notice
+  until seen; a job of the whole library blocks row jobs and waits for them). `screens/Books.test.tsx` (the setting
+  change follows the job; the notice and OK).
+- **Files:** `app/move.py` (new), `app/main.py`, `app/jobs.py`, `app/api.py`; `frontend/src/api.ts`,
+  `components/RowList.tsx`, `screens/{Books,Datasets,Capture}.tsx`, `styles.css`; help (`new-book`, `workflow`),
+  README.
+- **Dry run on a copy** (2026-10-17, the database copied into the scratchpad, about 5 s): the listing showed rows
+  1, 3, 4, 5, 6 and 8, not book 7 (a PDF); `--run` on the copy took 19 s (backup included). All 202 pages were found
+  in their new folders with their stored SHA-256; page problems 0 missing, 0 changed (the "new" files, 84 / 68 / 68 /
+  68, are the shared folder's other images, as before); the counts of pages, lines, letters, groups, labels, line
+  truth, whole lines and model datasets were the same as in the real database (208 / 2,649 / 129,755 / 2,400 /
+  1,030 / 119 / 1,270 / 1); the originals unchanged (names, sizes, dates, hashes compared before and after); a second
+  run said "moved already". Datasets 1, 3, 4 and 6 get all 91 images of the shared folder, not only their own 7–23
+  pages, so their page lists stay the same.
+- **On your library** (2026-10-17 21:34, at the first start of the app with this code): the same six rows moved into
+  `~/Documents/Manuscript Letters/uploads/`; checked read-only afterwards: all 202 pages there with their stored
+  hashes, the same counts as above. Backup: `~/Documents/Manuscript Letters backups/2026-10-17 213448 before moving
+  pages/library.db`. No row uses `~/Downloads/black and white` or `~/Documents/GujTypingApp/inputs/handwritten_samples`
+  any more (nothing was deleted).
+
+The plan as written:
 
 This builds full-plan decisions 2 and 6 (*copy, verify by hash, switch paths, keep the originals*). How it starts
 (automatic or a button) is question 1.

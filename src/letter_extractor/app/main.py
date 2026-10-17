@@ -57,8 +57,8 @@ def save_settings(values: dict, path: Optional[Path] = None) -> None:
 
 
 def uploads_dir(library: Path, settings: Optional[Path] = None) -> Path:
-    """Where new datasets' and books' uploaded pages go (C20, used from C21): the app setting `uploads`, else
-    `<library>/uploads`. Changing it does not move files that are there already (lean plan, decision 5)."""
+    """Where datasets' and books' uploaded pages go (C20, used from C21): the app setting `uploads`, else
+    `<library>/uploads`. Changing it in the app moves the pages there (C26, `move.move_uploads`)."""
     chosen = load_settings(settings).get("uploads")
     return Path(chosen).expanduser() if chosen else Path(library) / "uploads"
 
@@ -185,6 +185,12 @@ def main(argv=None) -> int:
         print(refused, file=sys.stderr)
         lib.close()
         return 3
+    from .move import move_existing
+    try:                                               # once per library, before the screen opens (C26)
+        move_existing(lib, uploads_dir(lib_path), say=lambda m: print(m, flush=True))
+    except Exception as e:                             # the rows keep their folders; tried again next start
+        print(f"Moving the page images into the uploads folder stopped ({type(e).__name__}: {e}); the rows not "
+              "moved keep their folders and are tried again at the next start.", file=sys.stderr)
     server, thread = _serve(app, port, args.host)
     print(f"Library: {lib_path}\nApp: {url}", flush=True)
     other = network_url(args.host, port)
