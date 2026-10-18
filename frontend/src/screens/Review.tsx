@@ -27,6 +27,10 @@ type Filter = "all" | "unlabelled" | "labelled" | "reviewed" | "unreviewed" | "m
   | "generated" | "empty";
 type Sort = "code" | "label" | "size" | "spread" | "share";
 
+// The "Show" and "Sort" choices of each book, kept while the app is open: going to the Pages tab
+// (double-click on a letter) and back, or to another tab, keeps them. A reload starts afresh.
+const listChoice = new Map<number, { filter: Filter; sort: Sort }>();
+
 interface Props {
   book: Book;
   view: string | undefined; // group id, "unsure", "deleted" or "letters" (the letter overview)
@@ -50,8 +54,11 @@ export default function Review({ book, view, onChanged }: Props) {
   const [counts, setCounts] = useState({ undo: book.undo, redo: book.redo });
   const [error, setError] = useState<unknown>(null);
   const [selection, setSelection] = useState<Selection>(emptySelection);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("label");
+  const [filter, setFilter] = useState<Filter>(() => listChoice.get(book.id)?.filter ?? "all");
+  const [sort, setSort] = useState<Sort>(() => listChoice.get(book.id)?.sort ?? "label");
+  useEffect(() => {
+    listChoice.set(book.id, { filter, sort });
+  }, [book.id, filter, sort]);
   const sidebar = useRef<HTMLElement>(null);
   useFitHeight(sidebar); // the group list scrolls by itself, the window does not
 

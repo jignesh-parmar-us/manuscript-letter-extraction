@@ -62,6 +62,21 @@ describe("Review", () => {
     expect(list).not.toHaveTextContent("g0002");
   });
 
+  it("keeps the Show and Sort choices when the tab is left and opened again (Pages tab and Back)", async () => {
+    const other = { ...book, id: 9 };
+    const first = render(<Review book={other} view={undefined} onChanged={() => {}} />);
+    await screen.findByText("ક");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Show" }), "unlabelled");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sort" }), "size");
+    first.unmount();
+    render(<Review book={other} view={undefined} onChanged={() => {}} />);
+    expect(screen.getByRole("combobox", { name: "Show" })).toHaveValue("unlabelled");
+    expect(screen.getByRole("combobox", { name: "Sort" })).toHaveValue("size");
+    const list = screen.getByLabelText("Groups");
+    await waitFor(() => expect(list).toHaveTextContent("g0002"));
+    expect(list).not.toHaveTextContent("ક");
+  });
+
   it("filters and sorts groups", () => {
     expect(filterGroups(groups, "all").map((g) => g.id)).toEqual([1, 2]);
     expect(filterGroups(groups, "empty").map((g) => g.id)).toEqual([3]);
