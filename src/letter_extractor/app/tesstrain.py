@@ -187,6 +187,7 @@ def train_model(gt_dir: Path, work: Path, name: str, tools: Path, start: Path, e
         run(["unicharset_extractor", "--output_unicharset", out / "my.unicharset", "--norm_mode", "2",
              out / "all-gt"], env, log)
         run(["merge_unicharsets", f"{unpacked}.lstm-unicharset", out / "my.unicharset", out / "unicharset"], env, log)
+        (out / "proto" / name).mkdir(parents=True, exist_ok=True)       # it writes there but does not make it
         run(["combine_lang_model", "--input_unicharset", out / "unicharset", "--script_dir", tools / "langdata",
              "--output_dir", out / "proto", *(["--pass_through_recoder"] if indic else []), "--lang", name], env, log)
         proto = out / "proto" / name / f"{name}.traineddata"

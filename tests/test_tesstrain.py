@@ -104,6 +104,7 @@ class TesstrainTests(unittest.TestCase):
         self.assertEqual(train[train.index("--max_iterations") + 1], "-12")         # 12 epochs
         self.assertEqual(train[train.index("--old_traineddata") + 1], str(start))
         self.assertIn("--stop_training", calls[-1])
+        self.assertTrue((self.out / "work" / "fold0" / "proto" / "fold0").is_dir())     # combine_lang_model writes there
         box = next((self.out / "work" / "fold0" / "lines").glob("*.box")).read_text(encoding="utf-8")
         self.assertTrue(box.endswith("\t 0 0 " + box.splitlines()[0].split(" ", 3)[3] + "\n"))
 
