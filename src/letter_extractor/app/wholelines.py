@@ -23,6 +23,8 @@ this script they are never text (a danda is "।", "॥").
 
 A line can be corrected (`edited_dev`, shown and downloaded instead of the reading) and marked reviewed;
 a reviewed line is also kept as a checked line (Line truth), so every reviewed line joins the test set.
+The other way too: a line checked in Line truth is corrected and reviewed here (`truth.sync_whole_line`), also
+when it is read whole only later. The latest check holds everywhere.
 Each akshara keeps its box on the page (Tesseract's character boxes), so the Text view can show it.
 """
 from __future__ import annotations
@@ -39,7 +41,7 @@ from .. import io_utils
 from ..mapping import mapping_for
 from ..ocr.aksharas import group_chars
 from ..ocr.language import correct_line, tesseract_options
-from .db import Book, Line, Page, WholeLine, now
+from .db import Book, Line, LineTruth, Page, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
 from .linesearch import disagreements
 from .suggest import LineDone, _workers, tesseract_reader
@@ -96,6 +98,9 @@ def read_page_lines(lib: Library, page_id: int, reader: Callable) -> Dict:
             if row is None:
                 row = WholeLine(line_id=line_id)
                 s.add(row)
+                checked = s.scalar(select(LineTruth.text_dev).where(LineTruth.line_id == line_id))
+                if checked:                                  # checked before it was read: the check holds here too
+                    row.edited_dev, row.reviewed, row.edited_at = checked, True, now()
             row.engine = "tesseract"
             row.text_dev = unicodedata.normalize("NFC", "".join((" " if a[2] else "") + a[0] for a in aks))
             row.aksharas, row.read_at = json.dumps(aks, ensure_ascii=False), now()
@@ -283,6 +288,6 @@ def set_whole_line(lib: Library, line_id: int, text: Optional[str] = None, revie
             row.reviewed = bool(reviewed)
         edited, is_reviewed = row.edited_dev, row.reviewed
     if reviewed is not None or (text is not None and is_reviewed):
-        save_truth(lib, line_id, (edited or shown or "") if is_reviewed else "")
+        save_truth(lib, line_id, (edited or shown or "") if is_reviewed else "", sync=False)
     return {"line_id": line_id, "edited_dev": edited, "edited_guj": mapping.gujarati(edited) if edited else "",
             "reviewed": is_reviewed}

@@ -307,7 +307,8 @@
       line as its strip of the page with its text under it); <span class="ui">Line by line</span> shows one line at a time
       (◀ ▶). <span class="ui">Aligned text</span> puts each akshara under its letter (untick it for plain text). Click an akshara to see it on the page; ← → move between aksharas,
       ↑ ↓ between lines. <span class="ui">✎ Correct</span> a line and <span class="ui">Save</span>; <span class="ui">✓</span>
-      marks it reviewed (a reviewed line is also a checked line in Line truth). <strong>Whole lines (our reader)</strong>
+      marks it reviewed (a reviewed line is also a checked line in Line truth, and a line checked in Line truth is
+      corrected and ✓ here: the latest check holds everywhere). <strong>Whole lines (our reader)</strong>
       (it needs only the prepared pages; Tesseract need not have read them): <span class="ui">Read all pages</span>: our reader (the line search) reads the
       same lines without Tesseract, from this book's reviewed letters (the first time it learns them, a few minutes; then
       about 7 s per line). Its text is shown in the same views; the aksharas where the two readers differ (the <em>second opinion</em>: the places most likely to be wrong) are
@@ -340,7 +341,8 @@
       measure how many characters the conversion gets wrong.</li>
     <li><span class="ui">Line truth</span>: type what a few lines really say (Tesseract's reading of the whole
       line is filled in: correct it and press Enter). 30 to 50 lines from a few pages are the test set every way of
-      reading is measured on, independent of how the letters were cut.</li>
+      reading is measured on, independent of how the letters were cut. Saving a line here also corrects it in Whole
+      lines and marks it ✓ there; removing its text here takes the ✓ away (the correction stays).</li>
     <li><span class="ui">Reading setup</span> (the Dictionary tab before; its old address opens here) has three parts.
       <strong>1. Datasets used:</strong> the datasets whose reviewed letters our reader learns and whose labels the
       language model learns, one or several: <span class="ui">Add dataset</span> (one of another writing is allowed,

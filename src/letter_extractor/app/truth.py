@@ -4,6 +4,12 @@ The user sees a line image with Tesseract's reading of the whole line (no cuttin
 on its own) and corrects it to what the line really says, in Gujarati or Devanagari. The text is kept as
 Devanagari NFC with single spaces. These lines are the test set every way of reading is compared on, so
 they never depend on how the letters were cut.
+
+**The latest check holds everywhere** (2026-10-20): a line has one checked text. Reviewing a line in Whole lines
+(Tesseract's or our reader's view: they share one correction) saves it here (`wholelines.set_whole_line`), and
+saving it here sets the line's correction in Whole lines and marks it reviewed (`sync_whole_line`). Removing
+the checked text here un-reviews the line there, keeping its correction. `sync_existing` does the same once for
+lines checked before this rule.
 """
 from __future__ import annotations
 
@@ -14,7 +20,7 @@ from sqlalchemy import func, select
 
 from .. import io_utils
 from ..mapping import mapping_for
-from .db import Book, Line, LineTruth, Page, now
+from .db import Book, Line, LineTruth, Page, WholeLine, now
 from .library import Library, LibraryError, NotFound
 
 _tesseract: Dict[tuple, str] = {}                       # (library, line id, line image) -> Tesseract's text
@@ -73,8 +79,26 @@ def tesseract_text(lib: Library, line_id: int, reader: Callable) -> Dict:
     return {"line_id": line_id, "text_dev": text, "text_guj": mapping.gujarati(text)}
 
 
-def save_truth(lib: Library, line_id: int, text: str, tesseract_dev: str = "") -> Optional[Dict]:
-    """Store the line's checked text (empty: remove it)."""
+def sync_whole_line(s, line_id: int, dev: str) -> bool:
+    """The line read whole gets the checked text `dev` as its correction, reviewed ("" un-reviews it, keeping its
+    correction). False if the line is not read whole yet, or nothing changes."""
+    row = s.scalar(select(WholeLine).where(WholeLine.line_id == line_id))
+    if row is None:
+        return False
+    if not dev:
+        changed, row.reviewed = bool(row.reviewed), False
+        return changed
+    if row.edited_dev == dev and row.reviewed:
+        return False
+    if row.edited_dev != dev:
+        row.edited_dev, row.edited_at = dev, now()
+    row.reviewed = True
+    return True
+
+
+def save_truth(lib: Library, line_id: int, text: str, tesseract_dev: str = "", sync: bool = True) -> Optional[Dict]:
+    """Store the line's checked text (empty: remove it). `sync`: also in Whole lines (see the module notes);
+    False when Whole lines itself saves it."""
     with lib.session() as s:
         line, page, book = _line(s, line_id)
         mapping = mapping_for(lib.book_config(book))
@@ -83,6 +107,8 @@ def save_truth(lib: Library, line_id: int, text: str, tesseract_dev: str = "") -
         if not dev:
             if row is not None:
                 s.delete(row)
+            if sync:
+                sync_whole_line(s, line_id, "")
             return None
         if not any("ऀ" <= ch <= "ॿ" for ch in dev):
             raise LibraryError("Type the line in Gujarati or Devanagari.")
@@ -91,4 +117,29 @@ def save_truth(lib: Library, line_id: int, text: str, tesseract_dev: str = "") -
             s.add(row)
         row.text_dev, row.updated_at = dev, now()
         row.tesseract_dev = unicodedata.normalize("NFC", tesseract_dev) or row.tesseract_dev
+        if sync:
+            sync_whole_line(s, line_id, dev)
         return {"line_id": line_id, "truth_dev": dev, "truth_guj": mapping.gujarati(dev)}
+
+
+def sync_existing(lib: Library, book_id: Optional[int] = None, apply: bool = False) -> List[Dict]:
+    """Lines checked before the latest check held everywhere: those whose line read whole lacks the checked text
+    as its correction or is not reviewed. Every review saves the checked text, so it is the latest; it goes to
+    Whole lines. Lists them (book, page, line, before, after); `apply` changes them."""
+    out = []
+    with lib.session() as s:
+        q = (select(LineTruth.line_id, LineTruth.text_dev, WholeLine.edited_dev, WholeLine.reviewed, Page.book_id,
+                    Page.file, Line.number)
+             .join(Line, LineTruth.line_id == Line.id).join(Page, Line.page_id == Page.id)
+             .join(WholeLine, WholeLine.line_id == Line.id)
+             .where(LineTruth.text_dev != "")
+             .where((WholeLine.edited_dev != LineTruth.text_dev) | WholeLine.reviewed.is_not(True)))
+        if book_id is not None:
+            q = q.where(Page.book_id == book_id)
+        for line_id, dev, edited, reviewed, book, file, number in s.execute(q.order_by(Page.book_id, Page.number,
+                                                                                         Page.id, Line.number)).all():
+            out.append({"book": book, "page": file, "line": number, "line_id": line_id, "edited_dev": edited,
+                        "reviewed": bool(reviewed), "truth_dev": dev})
+            if apply:
+                sync_whole_line(s, line_id, dev)
+    return out
