@@ -6,7 +6,8 @@ It starts after C19–C24. Chunk names go on from there (C25–C29).
 **Status:** written 2026-10-17. Questions 1 and 2 answered the same day (section 3). **C25 and C26 built
 2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
 started; questions 3–6 still open. **C30 (Tesseract learns the book from its checked lines) and C31 (backup:
-glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a being built.
+glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a built, fold 1 trained;
+**next: section "C30a: start here next session"**.
 
 ## 0. What is where today (checked in the code and, read-only, in your library on 2026-10-17)
 
@@ -412,6 +413,65 @@ the trained models' folder gets a copy of the `configs/` that reading with `hocr
   (`tessdata_dir`), `tools/tesstrain/{setup.sh,export.py,train.py,score.py}` (new), `docs/INSTALL_TESSERACT.md`;
   tests `tests/test_tesstrain.py` (fold split the same as Measure's; exported image is the one Tesseract gets;
   ground truth cleaned; `--tessdata-dir` passed; scoring with a fake reader).
+
+#### C30a: start here next session (written 2026-10-20)
+
+**Done:**
+- Training programs: built in `~/tesstrain`. They don't need building again, unless Tesseract is upgraded; then
+  run `tools/tesstrain/setup.sh` again.
+- Library copy: `~/harness/libcopy`, taken 2026-10-20 before the Line truth sync. The checked texts are the same,
+  so it is still good for C30a.
+- Export: book 8's 119 checked lines in `~/tesstrain/book8` (`meta.json` lists the folds).
+- **Fold 1 trained:** `~/tesstrain/book8/models/fold0.traineddata`, in 18 minutes. Training error was 1.3% on its own
+  training lines; that only shows training worked and is not a result.
+- Check page for proofreading the checked text against the picture: `~/tesstrain/book8/check.html`. Green is what was
+  changed from Tesseract's reading.
+
+**Folds are numbered from 0 in the tools:** fold 1 = `--fold 0` (done), fold 2 = `--fold 1`, fold 3 = `--fold 2`,
+fold 4 = `--fold 3`.
+
+| Fold | `--fold` | Pages | Test lines | Training lines | Status |
+|---|---|---|---|---|---|
+| 1 | 0 | Untitled-15, -27, -41, WhatsApp 8.31.19 PM | 35 | 84 | trained |
+| 2 | 1 | 1, 4, Untitled-51, WhatsApp 8.30.59 PM | 13 | 106 | to do |
+| 3 | 2 | Untitled-16, -28, -52, 37 | 40 | 79 | to do |
+| 4 | 3 | Untitled-26, -33, -53 | 31 | 88 | to do |
+
+**Next steps** (heavy, one at a time, only when the user says so; from the repo folder):
+
+```zsh
+# 1. the remaining folds, about 15-25 minutes each (more training lines take longer)
+for k in 1 2 3; do
+  PYTHONPATH=src .venv/bin/python tools/tesstrain/train.py --data ~/tesstrain/book8 --fold $k \
+    > ~/tesstrain/book8/train$k.out 2>&1 || break
+done
+tail -3 ~/tesstrain/book8/train*.out     # each ends "fold<k>: …traineddata in N s"
+
+# 2. score all four folds: stock vs trained Tesseract, each with and without the language model (fold-fair)
+PYTHONPATH=src .venv/bin/python tools/tesstrain/score.py --library ~/harness/libcopy --book 8 \
+  --data ~/tesstrain/book8 > ~/tesstrain/book8/score.out 2>&1
+tail -30 ~/tesstrain/book8/score.out      # characters wrong per reader, overall and per fold
+open ~/tesstrain/book8/score.html         # every line, differences from the checked text marked
+```
+
+- If a fold fails, its log is `~/tesstrain/book8/work/fold<k>/training.log`. Delete `work/fold<k>` before you try
+  again.
+- To score fold 1 alone first, for an early signal: add `--folds 0 --name score-fold1` to step 2.
+- **Then:**
+  1. Write the numbers in `docs/TUNING_PHASE2.md` and here: stock, stock + LM, tuned, tuned + LM, per fold and in
+     all, with the time per fold.
+  2. Judge them against the pass mark above: tuned + LM at least 1 point better than stock + LM, and no fold worse by
+     more than 1 point.
+  3. Make the list of likely wrong checked texts (agreed with the user, not built yet): the places where a fold's
+     model reads differently from the checked text, sorted by the model's confidence, with the picture beside each.
+     The user fixes the real mistakes in the app.
+  4. Take a new copy and export again (`rm -rf ~/tesstrain/book8` first, or use a new `--out`), then retrain and
+     score again.
+- **Still open:** questions 7–8 (section 3); C30c only if C30a passes.
+- **Line truth sync, built the same day as this chunk** (not part of C30): a line has one checked text, and the latest
+  check holds everywhere (`truth.sync_whole_line`, help, README). The 71 book 8 lines checked earlier were synced on
+  the real library after a backup (`~/Documents/Manuscript Letters backup 2026-10-20 222221/library.db`). The user
+  commits it. The app must be restarted to use it.
 
 #### C30b. Synthetic lines (only if needed)
 
