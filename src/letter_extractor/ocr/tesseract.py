@@ -40,6 +40,10 @@ class Engine:
     path: str
     version: str
     langs: List[str]
+    tessdata_dir: str = ""                   # a folder of models instead of the installed ones (C30); "" = installed
+
+    def model_args(self) -> List[str]:
+        return ["--tessdata-dir", self.tessdata_dir] if self.tessdata_dir else []
 
     def check_langs(self, langs: str) -> None:
         missing = [lang for lang in langs.split("+") if lang not in self.langs]
@@ -89,9 +93,9 @@ def _run(args: Sequence[str], timeout: float, env: Optional[Dict[str, str]] = No
     return subprocess.run(list(args), capture_output=True, timeout=timeout, creationflags=flags, env=full_env)
 
 
-def find_tesseract(setting: str = "") -> Engine:
+def find_tesseract(setting: str = "", tessdata_dir: str = "") -> Engine:
     """The program from the app setting, else from the PATH, else from the usual install folders,
-    with its version and installed languages."""
+    with its version and installed languages (those in `tessdata_dir` when given: a trained model, C30)."""
     candidates: List[str] = []
     if setting:
         candidates.append(setting)
@@ -106,13 +110,13 @@ def find_tesseract(setting: str = "") -> Engine:
         raise TesseractError(f"Tesseract is not installed{where}. {INSTALL_HELP}")
     try:
         ver = _run([path, "--version"], 30)
-        lst = _run([path, "--list-langs"], 30)
+        lst = _run([path, *(["--tessdata-dir", tessdata_dir] if tessdata_dir else []), "--list-langs"], 30)
     except (OSError, subprocess.SubprocessError) as e:
         raise TesseractError(f"Cannot run Tesseract at {path}: {e}. {INSTALL_HELP}") from e
     out = (ver.stdout or ver.stderr).decode("utf-8", "replace")
     m = re.search(r"tesseract\s+v?(\S+)", out)
     langs = [s.strip() for s in lst.stdout.decode("utf-8", "replace").splitlines()[1:] if s.strip()]
-    return Engine(path=path, version=m.group(1) if m else "?", langs=sorted(langs))
+    return Engine(path=path, version=m.group(1) if m else "?", langs=sorted(langs), tessdata_dir=tessdata_dir)
 
 
 # ---- image preparation ------------------------------------------------------------------------
@@ -268,7 +272,7 @@ def run_hocr(engine: Engine, image: np.ndarray, langs: str, psm: int, timeout: f
     os.close(fd)
     try:
         Image.fromarray(image).save(tmp, format="PNG", dpi=(300, 300))
-        args = [engine.path, tmp, "-", "-l", langs, "--psm", str(psm),
+        args = [engine.path, tmp, "-", *engine.model_args(), "-l", langs, "--psm", str(psm),
                 "-c", "hocr_char_boxes=1", "-c", "lstm_choice_mode=2", "hocr"]
         try:
             r = _run(args, timeout, env)

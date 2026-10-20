@@ -5,7 +5,8 @@ It starts after C19–C24. Chunk names go on from there (C25–C29).
 
 **Status:** written 2026-10-17. Questions 1 and 2 answered the same day (section 3). **C25 and C26 built
 2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
-started; questions 3–6 still open.
+started; questions 3–6 still open. **C30 (Tesseract learns the book from its checked lines) and C31 (backup:
+glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a being built.
 
 ## 0. What is where today (checked in the code and, read-only, in your library on 2026-10-17)
 
@@ -56,6 +57,8 @@ started; questions 3–6 still open.
 | C28a | Line ink from the line, not the cut letters: build it and **measure** | 3–4 h | line masks for book 8 on a copy, two Measures | none (a copy) |
 | C28b | Prepare stops cutting letters (**only if C28a passes**) | 3–4 h | Prepare of one book, timed | new pages only |
 | C29 | Reading models shared between books (**optional**, see question 5) | 4–5 h | one training | model rows |
+| C30 | Tesseract learns the book from its checked lines (a: tools + measure, b: synthetic lines, c: in the app) | 4–6 h (a), 3–4 h (b), 5–7 h (c) | training programs built once; 4 fold trainings + scoring on a copy | none until C30c |
+| C31 | Backup: glyphs placed along the line (Ocular-style), printed | 3–4 h (a) | one harness run | none |
 | — | Old API routes as redirects | **not built** (question 6) | | |
 
 About **14–19 hours** with C29, 10–14 without. Order: C25 is small and on its own. **C26 comes before C27**,
@@ -338,6 +341,118 @@ book 8 from dataset 6.
   tests `tests/test_reading_setup.py`, `tests/test_fold_fair.py`; help (`our-reader`, `new-book`), README.
 - **Not run while building:** the one training (Retrain when two books share), only when you ask.
 
+### C30. Tesseract learns the book from its checked lines (line reader, plan A), 2026-10-20
+
+From `docs/LINE_READER_RESEARCH.md` (options A and section 6). **The goal:** a new book is taught from typed
+lines, not from labelled letters. Tesseract is already a line reader (CNN-LSTM-CTC); it can be **fine-tuned** on
+pairs `line.png` + `line.gt.txt`. The Whole lines (Tesseract) route stays the same; only the model file changes.
+
+**What is there today (checked 2026-10-20):**
+- Checked lines: **book 8** (Vachnamrut Printed 1944) **119 lines on 15 pages**; **book 9** (Pothi 1939,
+  handwritten) **38 lines on 4 pages**.
+- Tesseract 5.5.3 from MacPorts with `hin`, `mar`, `san` (4.1.0 ports) and `script/Devanagari`. **No training
+  programs** (`lstmtraining`, `combine_tessdata`, …): the MacPorts port has no training variant. Fine-tuning must
+  start from a **float** model (`tessdata_best`); the ports' models may be the integer ones.
+- Pillow here has no `raqm` (no shaping of conjuncts), so synthetic Devanagari lines cannot be drawn with Pillow;
+  `text2image` needs Pango, which is not installed. Synthetic lines are therefore C30b, not C30a.
+- Last Measure of book 8 (S5, 2026-10-16): ours 8.03%, Tesseract 5.38%, Tesseract + language model 4.45%
+  characters wrong. Note: Measure's Tesseract + language model uses a language model that knows **every** page,
+  so it is not fold-fair; C30a measures both Tesseracts fold-fair.
+
+**The parts:**
+
+| Part | What | My work | Heavy runs (only when you ask) | Data change |
+|---|---|---|---|---|
+| C30a | Tools and a fold-fair measurement; no app change | 4–6 h | build the training programs once (~15 min), 4 fold trainings + scoring on a copy | none (a copy) |
+| C30b | Synthetic lines (only if C30a is short, or to balance rare letters) | 3–4 h | one training per fold | none |
+| C30c | In the app: train a book's Tesseract model, choose it in Reading setup (**only if C30a passes**) | 5–7 h | one training of book 8 | a model file per book |
+
+#### C30a. Tools and a fold-fair measurement (no app change)
+
+**As built (2026-10-20):** as below, with one change. **The training steps are driven from Python
+(`tesstrain.train_model`), not through tesstrain's Makefile.** That Makefile needs GNU make 4 (macOS has 3.81),
+bash and wget. The steps and their settings are tesstrain's: line boxes as in `generate_line_box.py`, `.lstmf` with
+`lstm.train`, unicharset merged with the start model's, `combine_lang_model` (Indic: `--pass_through_recoder`,
+norm mode 2), `lstmtraining --continue_from` with learning rate 0.0001, a 90/10 learn/evaluate split, then
+`--stop_training`. The `.lstmf` step passes `--tessdata-dir` and `-l Devanagari` (no `eng` model is installed), and
+the trained models' folder gets a copy of the `configs/` that reading with `hocr` needs. Training uses **PSM 13**
+(PSM 7 writes no `.lstmf`). Setup builds without Pango by switching off `text2image` in its copy of the source
+(Tesseract's CMake otherwise requires Pango whenever pkg-config is found). The default is
+**20 epochs** (`--epochs`). The numbers are still to come (the heavy runs, only when you ask).
+
+- **Setup, once** (`tools/tesstrain/setup.sh`, documented in `docs/INSTALL_TESSERACT.md`, "Training Tesseract"):
+  in `~/tesstrain/` (outside the repo and the library; no `sudo`): CMake and pkgconf from PyPI in a small venv, Tesseract's
+  source at the **same version as the installed program** (5.5.x) built with its training programs against
+  MacPorts' Leptonica and ICU (`text2image` is skipped without Pango), the langdata files `combine_lang_model`
+  needs, and `tessdata_best/script/Devanagari.traineddata` as the start model. The app's own Tesseract is not touched.
+- **Fold split = Measure's:** the pages with checked lines sorted, dealt into 4 folds (`pages[k::4]`).
+  `linesearch.checked_pages` / `fold_pages` are taken out of `measure` so both use the same code (an equality test).
+- **Export** (`app/tesstrain.py: export_lines`, called by `tools/tesstrain/export.py --library <copy> --book 8
+  --out <dir>`): per checked line, the line image **exactly as the Whole-lines route gives it to Tesseract**
+  (`prepare_line` with the book's `ocr_letter_height`, black on white, border) as `<page>_L01.png`, and the
+  checked text as `<page>_L01.gt.txt` (NFC; ZWJ / ZWNJ and the border `|` left out, as scored). Folders:
+  `fold<k>/train/` (the other folds' lines) and `fold<k>/test.txt` (its lines), plus `all/` (every line, for C30c).
+- **Train** (`tools/tesstrain/train.py --data <dir> --fold k`): tesstrain's steps (see "As built") from the
+  start model `Devanagari`, PSM 13 (a raw line, tesstrain's default; with PSM 7 `lstm.train` silently writes
+  no `.lstmf`, seen in a smoke test; reading stays at PSM 7), `--epochs` passes over the lines (default 20), then the
+  float model as `<dir>/models/fold<k>.traineddata`. Takes the heavy-job lock, lower priority.
+- **Score** (`tools/tesstrain/score.py --library <copy> --book 8 --data <dir>`): for each fold, the fold's checked
+  lines read through the app's own route (`wholelines._aksharas`, `trim_edges`, the language model
+  `book_model_without` the fold's pages: fold-fair) with **stock** Tesseract and with the **fold's model**; scored
+  with Measure's `_chars` / `_distance`. Prints CER for stock, stock + LM, tuned, tuned + LM, per fold and in all;
+  writes `score.json` and `score.html` (every line: checked text, stock and tuned reading, differences marked).
+- **Tesseract with a model folder:** `find_tesseract(…, tessdata_dir=…)` and `Engine.tessdata_dir` pass
+  `--tessdata-dir` to `--list-langs` and to each read. Empty (the default) changes nothing.
+- **Pass:** tuned + LM at least **1 point** better than stock + LM (fold-fair), and no fold worse by more than
+  1 point. The numbers, per fold, and the line-by-line page go into `docs/TUNING_PHASE2.md` and here.
+- **Handwritten (book 9):** the same run, but 38 lines on 4 pages (about 28 lines to learn from per fold) is a weak
+  signal. Recommended: check about 100 lines of book 9 first (Line truth). Printed only until then.
+- **Fairness rule (question 7):** a line reader sees common letters more often. C30a measures it as it is.
+- **Files:** `app/tesstrain.py` (new), `app/linesearch.py` (fold split taken out), `ocr/tesseract.py`
+  (`tessdata_dir`), `tools/tesstrain/{setup.sh,export.py,train.py,score.py}` (new), `docs/INSTALL_TESSERACT.md`;
+  tests `tests/test_tesstrain.py` (fold split the same as Measure's; exported image is the one Tesseract gets;
+  ground truth cleaned; `--tessdata-dir` passed; scoring with a fake reader).
+
+#### C30b. Synthetic lines (only if needed)
+
+- Text: the book's proofread lines and word lists, **plus lines rich in rare aksharas** (from the labels of the
+  datasets that are rare in the checked lines): that is the answer to the fairness rule for a line reader.
+- Drawing: `text2image` (needs `sudo port install pango`, then the setup builds it) with Devanagari fonts close
+  to the book's (Font Maker's font when it exists), plus noise, blur, slant and faded ink.
+- Measured as C30a: real lines only vs real + synthetic, same folds.
+
+#### C30c. In the app (only if C30a passes)
+
+- Reading setup → **Tesseract model:** *Standard* (today) | *Trained on this book* (with its date and lines).
+  **Train Tesseract on the checked lines**: a heavy job (lock, cancel, progress) that exports the book's checked
+  lines and trains `models/<book folder>/tesseract/book.traineddata` from the start model. Out of date when
+  checked lines change, like the reader.
+- Reading with it: `tesseract_reader` passes the book's model folder (`tessdata_dir`) and its name as language.
+- Settings: `ocr_model` (`standard` | `book`), `tesstrain_iterations`; the training programs' folder in the app
+  settings (empty: the C30a folder `~/tesstrain`).
+- **Training Data for a new book** changes from "label letters" to "correct lines" (help `new-book`, README).
+- **Files:** `app/tesstrain.py`, `app/suggest.py`, `app/jobs.py`, `app/api.py`, `config.py`,
+  `frontend/src/screens/ReadingSetup.tsx`; tests; help, README.
+
+### C31. Backup: glyphs placed along the line (Ocular-style), printed books
+
+Only if C30 fails on printed books, or later as a further check for our reader
+(`docs/LINE_READER_RESEARCH.md`, section 7). It does **not** remove the glyph work by itself.
+
+- **C31a, a fourth check in today's search** (3–4 h + one harness run): for each akshara the search places in a
+  window, the glyph of its group (the mean of the reviewed samples, at full size, on the headline) is laid on
+  the line's ink. Score: glyph ink with no page ink under it + page ink that no glyph of the line covers (so `व`
+  cannot win where `वा` stands). Added to the search's score with a weight (`glyph_fit_weight`, 0 = today).
+  Measured with the harness (no cache rebuild for the windows; the glyphs per fold leave out the tested pages),
+  fold-fair, on book 8's checked lines, a few seeds. **Pass:** ours better by more than the ±1 point between
+  trainings.
+- **C31b, the Ocular loop** (only if C31a passes): start from Font Maker's glyphs or a Devanagari font, read the
+  book, redraw each glyph from where it was read, read again; repeat 3–5 times. Then the glyphs come from the book
+  without labelling. Measured the same way.
+- **Handwritten:** expected to help little (every letter differs); measured only when book 9 has enough checked lines.
+- **Files:** `app/linesearch.py`, `ocr/segment.py`, `config.py`, `tools/harness/run.py`; tests on a drawn line
+  (`वा` beats `व` + uncovered ink; weight 0 gives today's result exactly).
+
 ### Not built: old API routes as redirects
 
 C20–C24 changed the routes and the screens in the same commits. Only the app calls them, and nothing outside uses
@@ -367,6 +482,11 @@ drop this item for good.**
    If you build it: "share the reader, not the language model; a shared reader learns every sharing book's checked
    lines". OK?
 6. **Old API redirects: drop for good?** (Recommended.)
+7. **C30: fairness rule for a line reader.** Tesseract learns from real lines, so it sees common letters more
+   often. (a) Accept it for this reader (C30a measures it as it is), or (b) balance with synthetic lines rich in
+   rare aksharas (C30b). *Recommended: (a) for the measurement, (b) only if rare letters come out worse.*
+8. **C30: handwritten.** Book 9 has 38 checked lines. Check about 100 lines of it so C30 can be judged on
+   handwriting too?
 
 ## 4. Working rule (as in the lean plan)
 

@@ -27,7 +27,7 @@ import json
 import time
 import unicodedata
 from collections import Counter, defaultdict
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -674,6 +674,27 @@ def last_measure(lib: Library, book_id: int, quick: bool = False) -> Optional[Di
     return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
 
 
+def checked_rows(lib: Library, book_id: int) -> list:
+    """The checked lines (Line truth) of a book's Read Book pages that Measure scores, in page and line order:
+    (page id, file, number, line spacing, line id, line number, checked text, Tesseract's aksharas)."""
+    from .db import LineTruth
+    with lib.session() as s:
+        return s.execute(select(Page.id, Page.file, Page.number, Page.line_spacing, Line.id, Line.number,
+                                LineTruth.text_dev, WholeLine.aksharas)
+                         .join(Line, Line.page_id == Page.id).join(LineTruth, LineTruth.line_id == Line.id)
+                         .join(WholeLine, WholeLine.line_id == Line.id)
+                         .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "",
+                                WholeLine.engine != "search", Page.excluded.is_not(True))
+                         .order_by(Page.number, Page.id, Line.number)).all()
+
+
+def fold_pages(rows: Sequence, folds: int) -> Tuple[list, int]:
+    """The pages of `checked_rows` as (number, id, file, line spacing), sorted, and the number of folds: fold k
+    is `pages[k::n]`. Measure and the Tesseract training (C30) split the same way."""
+    pages = sorted({(r[2], r[0], r[1], r[3]) for r in rows})
+    return pages, max(1, min(folds, len(pages)))
+
+
 def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: Optional[Callable[[], bool]] = None,
             settings: SearchSettings = SearchSettings(), quick: bool = False) -> Dict:
     """Score the line search on the checked lines (Line truth) of the Read Book pages, fold-fair: the pages
@@ -688,26 +709,17 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     once to be read (docs/SPEED_PLAN.md, S3). `quick`: only the first half of the folds (2 of 4) are read (about
     half the time):
     for screening ideas only, never a result to quote."""
-    from .db import LineTruth
     from .dictionary import book_model_without
     from .wholelines import trim_edges
     t0 = time.time()
     book = lib.get_book(book_id)
     cfg = lib.book_config(book)
     use_lm = cfg.language_model
-    with lib.session() as s:
-        rows = s.execute(select(Page.id, Page.file, Page.number, Page.line_spacing, Line.id, Line.number,
-                                LineTruth.text_dev, WholeLine.aksharas)
-                         .join(Line, Line.page_id == Page.id).join(LineTruth, LineTruth.line_id == Line.id)
-                         .join(WholeLine, WholeLine.line_id == Line.id)
-                         .where(Page.book_id == book_id, Page.part == "read", LineTruth.text_dev != "",
-                                WholeLine.engine != "search", Page.excluded.is_not(True))
-                         .order_by(Page.number, Page.id, Line.number)).all()
+    rows = checked_rows(lib, book_id)
     if not rows:
         raise LibraryError("No checked lines yet: correct lines in Whole lines and mark them reviewed (✓), "
                            "or check lines in Line truth.")
-    pages = sorted({(r[2], r[0], r[1], r[3]) for r in rows})
-    n_folds = max(1, min(folds, len(pages)))
+    pages, n_folds = fold_pages(rows, folds)
     tested = list(range(max(1, n_folds // 2) if quick else n_folds))
     files = {k: [p[2] for p in pages[k::n_folds]] for k in tested}
     # C24: a fold leaves out its pages and the datasets' pages with the same content (sha256), not the same name

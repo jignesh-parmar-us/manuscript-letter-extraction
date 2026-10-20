@@ -129,6 +129,35 @@ In this order:
 
 If it is not found, the "Suggest labels" button explains what is missing and links to this file. The rest of the app works without Tesseract.
 
+## Training Tesseract on a book's checked lines (C30, macOS)
+
+Only for trying Tesseract fine-tuned on a book's checked lines (`docs/implementation_plan_phase3_later.md`, C30).
+Reading does not need it. The MacPorts port has no training programs, so a script builds them from source
+**at the same version** as the installed `tesseract`, into a folder of their own (default `~/tesstrain`), with no
+`sudo`. CMake and pkgconf come from PyPI into `~/tesstrain/venv`. It also downloads the float start model
+`tessdata_best/script/Devanagari` (the installed models cannot be fine-tuned) and the langdata files training needs.
+The build takes about 15 minutes.
+
+```zsh
+tools/tesstrain/setup.sh                 # or: tools/tesstrain/setup.sh <folder>
+```
+
+Then, on a **copy** of the library (`tools/harness/copy_library.sh ~/harness/libcopy`):
+
+```zsh
+PYTHONPATH=src .venv/bin/python tools/tesstrain/export.py --library ~/harness/libcopy --book 8 --out ~/tesstrain/book8
+for k in 0 1 2 3; do
+  PYTHONPATH=src .venv/bin/python tools/tesstrain/train.py --data ~/tesstrain/book8 --fold $k
+done
+PYTHONPATH=src .venv/bin/python tools/tesstrain/score.py --library ~/harness/libcopy --book 8 --data ~/tesstrain/book8
+```
+
+`export.py` writes the checked lines as training pairs in Measure's four folds. `train.py` trains one model per
+fold, without that fold's pages. `score.py` reads each fold's lines with the installed model and with the fold's
+model, the same way the Whole lines route does. It prints the characters wrong and writes `score.html`, which lists
+every line. Training and scoring are heavy jobs: they take the heavy-job lock (`docs/SPEED_PLAN.md`, S1).
+To remove everything: delete `~/tesstrain`.
+
 ## Troubleshooting
 
 | Problem | Fix |

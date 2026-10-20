@@ -126,6 +126,9 @@ These times are usual reports, not measured here; the first trial on one book gi
 Expected gain in effort: from about a week of glyph labelling to about **1–2 days of correcting lines**
 per new book, less for a printed book that synthetic lines cover well.
 
+**Planned 2026-10-20:** step 1 is chunk **C30** and the glyph idea of section 7 is the backup **C31**, both in
+`docs/implementation_plan_phase3_later.md`. The 1933 book's checked lines are now book 8's (119 lines).
+
 ## 7. Idea: place the glyphs along the line (template matching)
 
 Instead of asking "what letter is this window?", ask **"does the glyph `वा` fit here?"**: slide each
