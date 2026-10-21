@@ -7,7 +7,7 @@ It starts after C19–C24. Chunk names go on from there (C25–C29).
 2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
 started; questions 3–6 still open. **C30 (Tesseract learns the book from its checked lines) and C31 (backup:
 glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a built, all 4 folds trained and scored
-2026-10-20 (passes at PSM 7 with PSM 13 for lines read empty: 2.94% against 4.69%; to confirm in one run); **next: section "C30a: start here
+2026-10-20 (passes at PSM 7 with PSM 13 for lines read empty: 2.94% against 4.69%; confirmed in one run 2026-10-21); **next: section "C30a: start here
 next session"**.
 
 ## 0. What is where today (checked in the code and, read-only, in your library on 2026-10-17)
@@ -446,8 +446,9 @@ Without those 4 lines, tuned + LM is 2.83% against 4.56%, better on every fold. 
 **Scored again the same day:** everything at PSM 13 (`--psm 13`, added: `model_reader(…, psm=)`) reads worse for
 both (tuned + LM 4.34%, folds 1 and 2 worse than today's 4.69%): fails. **PSM 7, with a line read empty read again
 at PSM 13, passes:** tuned + LM 2.94% against 4.69%, every fold better (put together from the two runs). The
-fallback is built (`model_reader(…, fallback_psm=)`, `score.py --fallback-psm 13`). **Next:** confirm it in one run,
-which also gives the list of likely wrong checked texts for this reading:
+fallback is built (`model_reader(…, fallback_psm=)`, `score.py --fallback-psm 13`). **Confirmed in one run
+2026-10-21:** the same 2.94% against 4.69%, every fold the same; 343 places on 108 lines in
+`~/tesstrain/book8/score-fallback-suspects.html`. The commands it took (done):
 
 ```zsh
 PYTHONPATH=src .venv/bin/python tools/tesstrain/score.py --library ~/harness/libcopy --book 8 \

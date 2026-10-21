@@ -545,8 +545,9 @@ fold-fair language model. Characters wrong:
 | All | 5.38% | 4.69% | 3.33% | **2.94%** |
 
   **Passes:** tuned + LM 1.75 points better than stock + LM, every fold better (the least: fold 2, 1.0 point). The
-  rule was chosen after seeing the numbers; to confirm it in one run: `score.py --fallback-psm 13` (built:
-  `model_reader(…, fallback_psm=)`).
+  rule was chosen after seeing the numbers. **Confirmed in one run 2026-10-21** (`score.py --fallback-psm 13
+  --name score-fallback`, 238 s): the same numbers to the hundredth, every fold. Pages: `score-fallback.html`, and
+  the likely wrong checked texts `score-fallback-suspects.html` (343 places on 108 lines).
 - Stock + LM here is 4.69%, against Measure's 4.45%: here the lines are read again; Measure uses the stored readings.
 - Printed only (book 8). Handwritten (book 9) is not measured: too few checked lines.
 - Pages: `~/tesstrain/book8/score.html` (every line, PSM 7), `score-psm13.html` (PSM 13), and the likely wrong
