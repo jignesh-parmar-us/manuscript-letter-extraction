@@ -506,3 +506,49 @@ Spotlight; load 4–18), and every job had one thread (S1), so the times are hig
   Not done (the user stopped here).
 - Not done (stopped by the user): the warm Measure, batch 512, base epochs 5 and 8, Retrain before and after.
   Analysis of why the plan missed its target: `docs/SPEED_PLAN.md`, S5.
+
+## C30a: Tesseract trained on book 8's checked lines (2026-10-20)
+
+Four folds (Measure's), 20 epochs from `tessdata_best` Devanagari, trained at PSM 13. Library copy
+`~/harness/libcopy`, 119 checked lines, 10,820 characters. Read through the Whole-lines route at the book's PSM 7,
+fold-fair language model. Characters wrong:
+
+| Fold | Training lines | Training time | Stock | Stock + LM | Tuned | Tuned + LM |
+|---|---|---|---|---|---|---|
+| 1 | 84 | 1097 s | 5.06% | 4.56% | 8.53% | 8.21% |
+| 2 | 106 | 830 s | 9.04% | 7.78% | 21.59% | 21.76% |
+| 3 | 79 | 508 s | 4.70% | 4.32% | 2.90% | 2.38% |
+| 4 | 88 | 513 s | 5.07% | 3.98% | 2.64% | 2.13% |
+| All | | | 5.38% | 4.69% | 6.56% | 6.18% |
+
+- **Fails the pass mark as read, for one reason:** at PSM 7 the trained models read 4 of the 119 lines as **empty**
+  (Untitled-27 line 1, Untitled-41 line 6 in fold 1; 4.jpg line 4, the 8.30.59 PM photo line 2 in fold 2). Stock
+  Tesseract reads none empty. At PSM 13, the mode the models learnt in, the same 4 lines read almost right (checked
+  by hand, one line each).
+- **Without those 4 lines** (115 lines): stock 5.20%, stock + LM 4.56%, tuned 3.23%, **tuned + LM 2.83%**: 1.7
+  points better than stock + LM, and better on every fold (fold 1 4.60 → 2.81, fold 2 6.90 → 6.50, fold 3 4.32 →
+  2.38, fold 4 3.98 → 2.13).
+- **Everything at PSM 13** (`--psm 13`, same day): stock 7.50%, stock + LM 6.68%, tuned 4.57%, tuned + LM 4.34%;
+  per fold tuned + LM / stock + LM: 5.31 / 7.96, 10.13 / 13.64, 2.41 / 4.40, 3.29 / 5.21. PSM 13 reads worse than
+  PSM 7 for both (stock mostly on the 8.30.59 PM photo +49 characters wrong, Untitled-53 +27). Against today's
+  reading (stock + LM at PSM 7, 4.69%), tuned at 13 is only 0.35 points better, and folds 1 and 2 are worse
+  (5.31 vs 4.56, 10.13 vs 7.78): fails.
+- **PSM 7, and a line read empty read again at PSM 13** (put together from the two runs; nothing about a line
+  but its empty reading decides the fallback, so it stays fold-fair):
+
+| Fold | Stock | Stock + LM | Tuned | Tuned + LM |
+|---|---|---|---|---|
+| 1 | 5.06% | 4.56% | 3.19% | 2.84% |
+| 2 | 9.04% | 7.78% | 6.61% | 6.78% |
+| 3 | 4.70% | 4.32% | 2.90% | 2.38% |
+| 4 | 5.07% | 3.98% | 2.64% | 2.13% |
+| All | 5.38% | 4.69% | 3.33% | **2.94%** |
+
+  **Passes:** tuned + LM 1.75 points better than stock + LM, every fold better (the least: fold 2, 1.0 point). The
+  rule was chosen after seeing the numbers; to confirm it in one run: `score.py --fallback-psm 13` (built:
+  `model_reader(…, fallback_psm=)`).
+- Stock + LM here is 4.69%, against Measure's 4.45%: here the lines are read again; Measure uses the stored readings.
+- Printed only (book 8). Handwritten (book 9) is not measured: too few checked lines.
+- Pages: `~/tesstrain/book8/score.html` (every line, PSM 7), `score-psm13.html` (PSM 13), and the likely wrong
+  checked texts `score-suspects.html` (332 places on 108 lines; the 4 empty lines are in it at confidence 0) and
+  `score-psm13-suspects.html` (405 places on 110 lines), all in `~/tesstrain/book8/`.

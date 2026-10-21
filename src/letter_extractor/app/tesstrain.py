@@ -204,14 +204,27 @@ def train_model(gt_dir: Path, work: Path, name: str, tools: Path, start: Path, e
 
 # ---- scoring ----------------------------------------------------------------------------------------
 
-def model_reader(cfg, tessdata_dir: str, lang: str, tesseract_path: str = "") -> Callable:
+def model_reader(cfg, tessdata_dir: str, lang: str, tesseract_path: str = "", psm: Optional[int] = None,
+                 fallback_psm: Optional[int] = None) -> Callable:
     """A line reader like the Whole-lines route's (`suggest.tesseract_reader`), with the model `lang` of the
-    folder `tessdata_dir` ("" = the installed models and the book's `ocr_langs`)."""
+    folder `tessdata_dir` ("" = the installed models and the book's `ocr_langs`), at page segmentation mode `psm`
+    (None = the book's `ocr_psm`). A line read empty is read again at `fallback_psm` (None = not): a trained model
+    reads some lines empty at 7 but not at 13, the mode it learnt in (book 8: 4 of 119 lines)."""
     engine = find_tesseract(tesseract_path, tessdata_dir)
     langs = lang or cfg.ocr_langs
     engine.check_langs(langs)
-    return lambda rgb: read_line(rgb, engine, langs=langs, psm=cfg.ocr_psm, target_height=cfg.ocr_letter_height,
-                                 border=BORDER, env={"OMP_THREAD_LIMIT": "1"})
+    psm = cfg.ocr_psm if psm is None else psm
+
+    def read(rgb, mode):
+        return read_line(rgb, engine, langs=langs, psm=mode, target_height=cfg.ocr_letter_height, border=BORDER,
+                         env={"OMP_THREAD_LIMIT": "1"})
+
+    def reader(rgb):
+        reading = read(rgb, psm)
+        if fallback_psm is not None and fallback_psm != psm and not reading.text.strip():
+            reading = read(rgb, fallback_psm)
+        return reading
+    return reader
 
 
 def score(lib: Library, book_id: int, readers: Callable[[int], Dict[str, Callable]], folds: int = 4,
@@ -241,10 +254,11 @@ def score(lib: Library, book_id: int, readers: Callable[[int], Dict[str, Callabl
         by_name = readers(k)
         for r in (r for r in rows if r[0] in tested):
             rgb, _ = io_utils.load_image(folder / images[r[4]])
-            line = {"fold": k, "page": r[1], "line": r[5], "truth": r[6], "chars": len(_chars(r[6])),
-                    "read": {}, "wrong": {}}
+            line = {"fold": k, "page": r[1], "line": r[5], "stem": _stem(r[0], r[5]), "truth": r[6],
+                    "chars": len(_chars(r[6])), "read": {}, "wrong": {}, "aks": {}}
             for name, reader in by_name.items():
                 aks = trim_edges(_aksharas(reader(rgb), lm, cfg))
+                line["aks"][name] = [[a[0], a[1], a[2]] for a in aks]         # text, confidence, space before
                 line["read"][name] = "".join((" " if a[2] else "") + a[0] for a in aks)
                 if lm is not None:
                     line["read"][f"{name}_lm"] = "".join((" " if a[2] else "") + (a[3] or a[0]) for a in aks)
@@ -291,3 +305,56 @@ mark{{background:#ffd27a}}.n{{text-align:right}}</style>
 <h1>{html.escape(title)}</h1><p>Characters wrong ({result['lines']} lines, {result['chars']} characters): {html.escape(total)}</p>
 <ul>{folds}</ul><p>Each line: the checked text (bold), then each reading; what differs from the checked text is marked.</p>
 <table><tr><th>Page · line</th><th>Text</th>{head}</tr>{"".join(rows)}</table>"""
+
+
+# ---- likely wrong checked texts ----------------------------------------------------------------------
+
+def suspects(result: Dict, name: str = "tuned") -> List[Dict]:
+    """The places where the reader `name` reads a line differently from its checked text, the most confident
+    first. A fold's model never saw its fold's lines, so where it is sure and disagrees, the checked text may be
+    wrong. Confidence: the lowest of the aksharas read in the place, or, where the reading leaves something out,
+    of the two beside it. Each: fold, page, line, stem, the checked text and the reading with the place in each
+    (`at` = [start, end] in `truth` and in `read`), and the confidence."""
+    out = []
+    for x in result["line_results"]:
+        aks = x.get("aks", {}).get(name)
+        if aks is None:
+            continue
+        read, owner = "", []                                      # owner: the akshara of each character read
+        for i, (text, _, space) in enumerate(aks):
+            if space:
+                read, owner = read + " ", owner + [None]
+            read, owner = read + text, owner + [i] * len(text)
+        truth = gt_text(x["truth"])
+        sm = difflib.SequenceMatcher(None, truth, read, autojunk=False)
+        for op, i1, i2, j1, j2 in sm.get_opcodes():
+            if op == "equal":
+                continue
+            near = owner[j1:j2] if j2 > j1 else owner[max(0, j1 - 1):j1 + 1]
+            confs = [aks[o][1] for o in near if o is not None]
+            out.append({"fold": x["fold"], "page": x["page"], "line": x["line"], "stem": x.get("stem", ""),
+                        "truth": truth, "read": read, "at": [[i1, i2], [j1, j2]],
+                        "conf": min(confs) if confs else 0.0})
+    return sorted(out, key=lambda s: (-s["conf"], s["page"], s["line"]))
+
+
+def _span(text: str, i: int, j: int) -> str:
+    return f"{html.escape(text[:i])}<mark>{html.escape(text[i:j]) or '·'}</mark>{html.escape(text[j:])}"
+
+
+def suspects_page(found: List[Dict], title: str, images: str = "all") -> str:
+    """The places of `suspects`, each with the line's picture (`<images>/<stem>.png`, the export's) to fix the
+    checked text by eye in the app (Read Book → Line truth)."""
+    rows = "".join(
+        f"<tr><td class=n>{s['conf']:.0f}</td><td>{html.escape(s['page'])} · {s['line']}<br>"
+        f"<small>fold {s['fold'] + 1}</small></td><td><img src=\"{html.escape(images)}/{html.escape(s['stem'])}.png\">"
+        f"<div class=t><span class=e>checked</span> {_span(s['truth'], *s['at'][0])}</div>"
+        f"<div class=t><span class=e>model</span> {_span(s['read'], *s['at'][1])}</div></td></tr>" for s in found)
+    return f"""<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>
+<style>body{{font:15px system-ui;margin:16px}}td{{border-bottom:1px solid #ddd;padding:6px 8px;vertical-align:top}}
+.t{{font:19px/1.5 "Noto Sans Devanagari",sans-serif}}.e{{font:12px system-ui;color:#777}}img{{max-width:100%}}
+mark{{background:#ffd27a}}.n{{text-align:right}}</style>
+<h1>{html.escape(title)}</h1><p>{len(found)} places where the fold's model, which never saw the line, reads differently
+from the checked text. The model's confidence first: high means it was sure, so the checked text is worth a look.
+Fix real mistakes in the app (Read Book → Line truth).</p>
+<table><tr><th>Sure</th><th>Page · line</th><th>Picture, checked text, model's reading</th></tr>{rows}</table>"""

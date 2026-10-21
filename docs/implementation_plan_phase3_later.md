@@ -6,8 +6,9 @@ It starts after C19–C24. Chunk names go on from there (C25–C29).
 **Status:** written 2026-10-17. Questions 1 and 2 answered the same day (section 3). **C25 and C26 built
 2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
 started; questions 3–6 still open. **C30 (Tesseract learns the book from its checked lines) and C31 (backup:
-glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a built, fold 1 trained;
-**next: section "C30a: start here next session"**.
+glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a built, all 4 folds trained and scored
+2026-10-20 (passes at PSM 7 with PSM 13 for lines read empty: 2.94% against 4.69%; to confirm in one run); **next: section "C30a: start here
+next session"**.
 
 ## 0. What is where today (checked in the code and, read-only, in your library on 2026-10-17)
 
@@ -410,9 +411,9 @@ the trained models' folder gets a copy of the `configs/` that reading with `hocr
   signal. Recommended: check about 100 lines of book 9 first (Line truth). Printed only until then.
 - **Fairness rule (question 7):** a line reader sees common letters more often. C30a measures it as it is.
 - **Files:** `app/tesstrain.py` (new), `app/linesearch.py` (fold split taken out), `ocr/tesseract.py`
-  (`tessdata_dir`), `tools/tesstrain/{setup.sh,export.py,train.py,score.py}` (new), `docs/INSTALL_TESSERACT.md`;
+  (`tessdata_dir`), `tools/tesstrain/{setup.sh,export.py,train.py,score.py,suspects.py}` (new), `docs/INSTALL_TESSERACT.md`;
   tests `tests/test_tesstrain.py` (fold split the same as Measure's; exported image is the one Tesseract gets;
-  ground truth cleaned; `--tessdata-dir` passed; scoring with a fake reader).
+  ground truth cleaned; `--tessdata-dir` passed; scoring with a fake reader; likely wrong checked texts, most sure first).
 
 #### C30a: start here next session (written 2026-10-20)
 
@@ -433,11 +434,32 @@ fold 4 = `--fold 3`.
 | Fold | `--fold` | Pages | Test lines | Training lines | Status |
 |---|---|---|---|---|---|
 | 1 | 0 | Untitled-15, -27, -41, WhatsApp 8.31.19 PM | 35 | 84 | trained |
-| 2 | 1 | 1, 4, Untitled-51, WhatsApp 8.30.59 PM | 13 | 106 | to do |
-| 3 | 2 | Untitled-16, -28, -52, 37 | 40 | 79 | to do |
-| 4 | 3 | Untitled-26, -33, -53 | 31 | 88 | to do |
+| 2 | 1 | 1, 4, Untitled-51, WhatsApp 8.30.59 PM | 13 | 106 | trained (830 s) |
+| 3 | 2 | Untitled-16, -28, -52, 37 | 40 | 79 | trained (508 s) |
+| 4 | 3 | Untitled-26, -33, -53 | 31 | 88 | trained (513 s) |
 
-**Next steps** (heavy, one at a time, only when the user says so; from the repo folder):
+**Scored 2026-10-20 (at the book's PSM 7):** stock + LM 4.69%, tuned + LM 6.18%: fails the pass mark, **only because
+the trained models read 4 lines as empty at PSM 7**. They read them well at PSM 13, the mode they learnt in.
+Without those 4 lines, tuned + LM is 2.83% against 4.56%, better on every fold. The numbers are in
+`docs/TUNING_PHASE2.md`, "C30a".
+
+**Scored again the same day:** everything at PSM 13 (`--psm 13`, added: `model_reader(…, psm=)`) reads worse for
+both (tuned + LM 4.34%, folds 1 and 2 worse than today's 4.69%): fails. **PSM 7, with a line read empty read again
+at PSM 13, passes:** tuned + LM 2.94% against 4.69%, every fold better (put together from the two runs). The
+fallback is built (`model_reader(…, fallback_psm=)`, `score.py --fallback-psm 13`). **Next:** confirm it in one run,
+which also gives the list of likely wrong checked texts for this reading:
+
+```zsh
+PYTHONPATH=src .venv/bin/python tools/tesstrain/score.py --library ~/harness/libcopy --book 8 \
+  --data ~/tesstrain/book8 --fallback-psm 13 --name score-fallback > ~/tesstrain/book8/score-fallback.out 2>&1
+PYTHONPATH=src .venv/bin/python tools/tesstrain/suspects.py --data ~/tesstrain/book8 --name score-fallback
+```
+
+Then the user fixes the checked texts from `score-fallback-suspects.html`, and we export, train and score again
+(steps 3 and 4 below). C30c then reads with the book's model at the book's `ocr_psm`, falling back to PSM 13 for an
+empty line.
+
+**Next steps as first written** (steps 1 and 2 done 2026-10-20; heavy, one at a time, only when the user says so):
 
 ```zsh
 # 1. the remaining folds, about 15-25 minutes each (more training lines take longer)
@@ -462,9 +484,14 @@ open ~/tesstrain/book8/score.html         # every line, differences from the che
      all, with the time per fold.
   2. Judge them against the pass mark above: tuned + LM at least 1 point better than stock + LM, and no fold worse by
      more than 1 point.
-  3. Make the list of likely wrong checked texts (agreed with the user, not built yet): the places where a fold's
-     model reads differently from the checked text, sorted by the model's confidence, with the picture beside each.
-     The user fixes the real mistakes in the app.
+  3. The list of likely wrong checked texts (**built 2026-10-20**, light, no reading):
+     `PYTHONPATH=src .venv/bin/python tools/tesstrain/suspects.py --data ~/tesstrain/book8`, then
+     `open ~/tesstrain/book8/score-suspects.html`. It shows every place where a fold's model reads a line differently
+     from the checked text. The fold's model never saw that line. The places where the model was most confident
+     come first; its confidence is that of the lowest akshara read in the place. Each place has the line's picture
+     from the export's `all/` folder. `score` now keeps each reading's aksharas and their confidence (`aks`) and the
+     line's export name (`stem`) in `score.json` (`tesstrain.suspects`, `suspects_page`). The user fixes the real
+     mistakes in the app.
   4. Take a new copy and export again (`rm -rf ~/tesstrain/book8` first, or use a new `--out`), then retrain and
      score again.
 - **Still open:** questions 7–8 (section 3); C30c only if C30a passes.
@@ -487,7 +514,7 @@ open ~/tesstrain/book8/score.html         # every line, differences from the che
   **Train Tesseract on the checked lines**: a heavy job (lock, cancel, progress) that exports the book's checked
   lines and trains `models/<book folder>/tesseract/book.traineddata` from the start model. Out of date when
   checked lines change, like the reader.
-- Reading with it: `tesseract_reader` passes the book's model folder (`tessdata_dir`) and its name as language.
+- Reading with it: `tesseract_reader` passes the book's model folder (`tessdata_dir`) and its name as language, and reads a line it read empty again at PSM 13 (C30a: the trained models read 4 of 119 lines empty at PSM 7).
 - Settings: `ocr_model` (`standard` | `book`), `tesstrain_iterations`; the training programs' folder in the app
   settings (empty: the C30a folder `~/tesstrain`).
 - **Training Data for a new book** changes from "label letters" to "correct lines" (help `new-book`, README).

@@ -123,6 +123,27 @@ class TesstrainTests(unittest.TestCase):
         self.assertEqual(args[args.index("--tessdata-dir") + 1], "/m")
         self.assertEqual(T.Engine("tesseract", "5", []).model_args(), [])          # default: the installed models
 
+    def test_a_reader_reads_in_the_given_mode_or_the_books(self):
+        engine = T.Engine("tesseract", "5", ["fold0"], tessdata_dir="/m")
+        cfg = Config(ocr_psm=7)
+        with mock.patch.object(tesstrain, "find_tesseract", return_value=engine), \
+                mock.patch.object(tesstrain, "read_line") as read:
+            tesstrain.model_reader(cfg, "/m", "fold0")(None)
+            tesstrain.model_reader(cfg, "/m", "fold0", psm=13)(None)
+        self.assertEqual([c.kwargs["psm"] for c in read.call_args_list], [7, 13])
+
+    def test_a_line_read_empty_is_read_again_in_the_fallback_mode(self):
+        engine = T.Engine("tesseract", "5", ["fold0"], tessdata_dir="/m")
+        empty = T.LineReading(words=[], hocr="", scale=1.0)
+        by_mode = {7: empty, 13: RIGHT}
+        with mock.patch.object(tesstrain, "find_tesseract", return_value=engine), \
+                mock.patch.object(tesstrain, "read_line", side_effect=lambda *a, **kw: by_mode[kw["psm"]]) as read:
+            self.assertIs(tesstrain.model_reader(Config(ocr_psm=7), "/m", "fold0", fallback_psm=13)(None), RIGHT)
+            self.assertIs(tesstrain.model_reader(Config(ocr_psm=7), "/m", "fold0")(None), empty)   # default: not
+            by_mode[7] = READ
+            self.assertIs(tesstrain.model_reader(Config(ocr_psm=7), "/m", "fold0", fallback_psm=13)(None), READ)
+        self.assertEqual([c.kwargs["psm"] for c in read.call_args_list], [7, 13, 7, 7])   # read again only if empty
+
     def test_scoring_is_fold_fair_and_per_reader(self):
         self.lib.set_book_config(self.book, Config(language_model=True))
         lm = LanguageModel().add_all(["नारायण भगवान"] * 20)
@@ -136,6 +157,22 @@ class TesstrainTests(unittest.TestCase):
         self.assertEqual((first["wrong"]["stock"], first["wrong"]["tuned"]), (1, 0))   # व for ण
         self.assertEqual(first["read"]["stock_lm"], "नारायण भग")                    # the language model's fix
         self.assertIn("<mark>", tesstrain.score_page(r, "t"))
+
+    def test_suspects_are_where_the_model_disagrees_most_sure_first(self):
+        r = tesstrain.score(self.lib, self.book, lambda k: {"stock": lambda rgb: READ, "tuned": lambda rgb: RIGHT},
+                            folds=4)
+        found = tesstrain.suspects(r, "stock")
+        first = [s for s in found if s["truth"] == "नारायण भग"]
+        self.assertEqual(len(first), 1)                                             # व for ण, nothing else
+        s = first[0]
+        self.assertEqual((s["truth"][slice(*s["at"][0])], s["read"][slice(*s["at"][1])]), ("ण", "व"))
+        conf = next(a[1] for x in r["line_results"] if x["truth"] == "नारायण भग" for a in x["aks"]["stock"]
+                    if a[0] == "व")
+        self.assertEqual(s["conf"], conf)                                           # the akshara read there
+        self.assertEqual([x["conf"] for x in found], sorted((x["conf"] for x in found), reverse=True))
+        self.assertTrue(s["stem"].startswith(f"p{self.pages[0]}_L"))                # the export's picture
+        self.assertNotIn("नारायण भग", [x["truth"] for x in tesstrain.suspects(r, "tuned")])   # reads it right
+        self.assertIn(f"all/{s['stem']}.png", tesstrain.suspects_page(found, "t"))
 
 
 if __name__ == "__main__":
