@@ -1,5 +1,5 @@
 """The sample pages (samples/page1.jpg, page2.jpg) cut once per test process and shared by the sample-page tests
-(lines, pieces, letters, grouping; docs/SPEED_PLAN.md S2). tools/test_parallel.py runs those tests in one
+(lines, pieces, letters, grouping; docs/plans/done/SPEED_PLAN.md S2). tools/test_parallel.py runs those tests in one
 process, so each page is cut once per test run."""
 import sys
 from functools import lru_cache

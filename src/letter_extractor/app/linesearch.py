@@ -1,5 +1,5 @@
 """A second opinion on lines read whole: the line search (`ocr.segment`) reads each line again without
-Tesseract, and the aksharas where the two readings differ are marked uncertain (docs/SEGMENTATION_PLAN.md,
+Tesseract, and the aksharas where the two readings differ are marked uncertain (docs/plans/done/SEGMENTATION_PLAN.md,
 stages 4 and 5). Measured on 73 hand-checked lines of the printed 1933 book (2026-10-11): the marks fall
 on 19.4% of the aksharas and on 88% of the aksharas still wrong after Tesseract + language model
 (Tesseract's own confidence marks 0.2%). The text itself stays Tesseract's.
@@ -252,7 +252,7 @@ def _learn_folds(lib: Library, book_id: int, folds: Dict[int, tuple], progress=N
     names or a LeftOut)}):
     each checked line is cut into windows once, with the widest range of window widths of the folds that learn
     from it, and each fold takes its own windows from them (`segment.narrow`): the same windows and rows as one
-    fold at a time (docs/SPEED_PLAN.md, S3b)."""
+    fold at a time (docs/plans/done/SPEED_PLAN.md, S3b)."""
     book = lib.get_book(book_id)
     out = {k: {"lines": 0, "X": [], "labels": [], "widths": defaultdict(list)} for k in folds}
     skips = {k: lib.left_out(book_id, skip) for k, (_, _, skip) in folds.items()}
@@ -350,7 +350,7 @@ def _line_signature(smps, masks: MaskPack) -> str:
 
 def _letter_rows(L: Dict, seed: int) -> Entry:
     """A letter's rows, from its own random numbers (seed, sample id, which copy): the same in every fold and
-    every run (docs/SPEED_PLAN.md, S3a). Varied copies are added by `_varied_rows`."""
+    every run (docs/plans/done/SPEED_PLAN.md, S3a). Varied copies are added by `_varied_rows`."""
     sp, mask = L["sp"], L["mask"]
     if L["c"] is None:                                      # on no line: its picture (and varied copies)
         return Entry(L["key"], [features(mask, sp)], [], [])
@@ -708,7 +708,7 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
 
     The letters' rows come from the feature store (each computed once, kept); the base readers of all folds
     are trained first, so that each checked line is cut into windows once for learning from corrections and
-    once to be read (docs/SPEED_PLAN.md, S3). `quick`: only the first half of the folds (2 of 4) are read (about
+    once to be read (docs/plans/done/SPEED_PLAN.md, S3). `quick`: only the first half of the folds (2 of 4) are read (about
     half the time):
     for screening ideas only, never a result to quote."""
     from .dictionary import book_model_without

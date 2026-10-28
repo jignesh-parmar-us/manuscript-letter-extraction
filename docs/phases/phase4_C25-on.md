@@ -1,12 +1,14 @@
-# Manuscript Letter Extraction: Implementation Plan, Phase 3 "later" (C25+)
+# Manuscript Letter Extraction: Implementation Plan, Phase 4 (C25+; the active plan)
 
-The plan for section 6 of `docs/implementation_plan_phase3_lean.md`: the things left out of the lean scope.
+Called "Phase 3 later" until 2026-10-28 (`implementation_plan_phase3_later.md`).
+
+The plan for section 6 of `docs/phases/phase3_C19-C24.md`: the things left out of the lean scope.
 It starts after C19–C24. Chunk names go on from there (C25–C29).
 
 **Status:** written 2026-10-17. Questions 1 and 2 answered the same day (section 3). **C25 and C26 built
 2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
 started; questions 3–6 still open. **C30 (Tesseract learns the book from its checked lines) and C31 (backup:
-glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a built, all 4 folds trained and scored
+glyphs along the line) added 2026-10-20** from `docs/research/line_reader.md`; C30a built, all 4 folds trained and scored
 2026-10-20 (passes at PSM 7 with PSM 13 for lines read empty: 2.94% against 4.69%; confirmed in one run 2026-10-21; after the user's proofreading, exported, retrained and scored again
 2026-10-28: 2.51% against 4.57%, every fold better); C30c built 2026-10-28 (not yet trained in the app); **next: train book 8's model in the app, then check
 30-40 Vadtal lines and try book 8's model on them (section C30c)**.
@@ -346,7 +348,7 @@ book 8 from dataset 6.
 
 ### C30. Tesseract learns the book from its checked lines (line reader, plan A), 2026-10-20
 
-From `docs/LINE_READER_RESEARCH.md` (options A and section 6). **The goal:** a new book is taught from typed
+From `docs/research/line_reader.md` (options A and section 6). **The goal:** a new book is taught from typed
 lines, not from labelled letters. Tesseract is already a line reader (CNN-LSTM-CTC); it can be **fine-tuned** on
 pairs `line.png` + `line.gt.txt`. The Whole lines (Tesseract) route stays the same; only the model file changes.
 
@@ -574,7 +576,7 @@ trained model**, and training can **start from another book's model** instead of
 ### C31. Backup: glyphs placed along the line (Ocular-style), printed books
 
 Only if C30 fails on printed books, or later as a further check for our reader
-(`docs/LINE_READER_RESEARCH.md`, section 7). It does **not** remove the glyph work by itself.
+(`docs/research/line_reader.md`, section 7). It does **not** remove the glyph work by itself.
 
 - **C31a, a fourth check in today's search** (3–4 h + one harness run): for each akshara the search places in a
   window, the glyph of its group (the mean of the reviewed samples, at full size, on the headline) is laid on

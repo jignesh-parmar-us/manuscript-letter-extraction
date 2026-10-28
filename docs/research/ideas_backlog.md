@@ -1,6 +1,10 @@
-# Manuscript Letter Extraction: Implementation Plan, Phase 3
+# Ideas backlog: the full Phase 3 plan (reference only)
 
-Phase 1 (`docs/IMPLEMENTATION_PLAN.md`) cuts, groups and labels letters. Phase 2 (`docs/implementation_plan_phase2.md`) reads books. Since C16a one **book** holds two parts, **Training Data** and **Read Book**, and the app mixes the two: "Cut", "Reader", "Dictionary" and "Text" each mean something different depending on the part. **Phase 3 separates them.**
+Written as the full Phase 3 plan (`implementation_plan_phase3.md` until 2026-10-28). What was built from it is
+`docs/phases/phase3_C19-C24.md` (C19–C24), what came next `docs/phases/phase4_C25-on.md`. Not a to-do list: the
+ideas here are picked up only when a phase plan takes them.
+
+Phase 1 (`docs/phases/phase1_C0-C9.md`) cuts, groups and labels letters. Phase 2 (`docs/phases/phase2_C10-C18.md`) reads books. Since C16a one **book** holds two parts, **Training Data** and **Read Book**, and the app mixes the two: "Cut", "Reader", "Dictionary" and "Text" each mean something different depending on the part. **Phase 3 separates them.**
 
 **Status:** a plan, not built. Written 2026-10-14; the questions were answered the same day (section 5) and the plan updated. Next: C19 (needs only your go-ahead).
 

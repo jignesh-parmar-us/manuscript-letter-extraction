@@ -1,6 +1,6 @@
 # Tuning notes, Phase 2
 
-Measured numbers behind the Phase 2 defaults (`docs/implementation_plan_phase2.md`), per chunk, like `TUNING.md` for Phase 1.
+Measured numbers behind the Phase 2 defaults (`docs/phases/phase2_C10-C18.md`), per chunk, like `TUNING.md` for Phase 1.
 
 ## C10. Tesseract languages and image preparation (2026-10-04)
 
@@ -154,7 +154,7 @@ By eye on Untitled-41 L08: the Tesseract cut keeps the vowel bars on their lette
 
 ## Segmentation plan, stage 1: the reader on real windows (2026-10-11)
 
-`docs/SEGMENTATION_PLAN.md`. Book 6, the 8,946 reviewed single-akshara letters of the 23 Training Data pages, each read by a reader trained without its page (4 folds by page, labels with 1 or more letters). A window is the letter box's columns of the whole line's ink (every sample of the line pasted together), so neighbours' overhanging marks are included.
+`docs/plans/done/SEGMENTATION_PLAN.md`. Book 6, the 8,946 reviewed single-akshara letters of the 23 Training Data pages, each read by a reader trained without its page (4 folds by page, labels with 1 or more letters). A window is the letter box's columns of the whole line's ink (every sample of the line pasted together), so neighbours' overhanging marks are included.
 
 | Training | Clean mask | Window, exact | Window shifted ≤ 10% | Window: common / middle / rare |
 |---|---|---|---|---|
@@ -434,7 +434,7 @@ Same harness and lines as above (fold-fair, 99 checked lines), the reader learni
 | linear + close-ups (top 35% and bottom 30% of the window at 16 × 8, its right 35% at 8 × 16: 384 more numbers), language model 0.25 / 0.5 | 8.43 / 7.96% | 5.55 / 5.15% |
 | Tesseract | 4.69% | 3.80% |
 
-The language model is needed (off: 16%) but overrules clear letters above 0.5; the curve between 0.25 and 0.5 is uneven (one character in 2,200 on the new pages separates 3.76% from 3.80%), so 0.35 is to be confirmed with more lines. The network and the close-ups do not help. The remaining errors are vowel signs: `SPLIT_READING_PLAN.md` (parked) describes reading the base and the marks separately.
+The language model is needed (off: 16%) but overrules clear letters above 0.5; the curve between 0.25 and 0.5 is uneven (one character in 2,200 on the new pages separates 3.76% from 3.80%), so 0.35 is to be confirmed with more lines. The network and the close-ups do not help. The remaining errors are vowel signs: `docs/research/split_reading.md` (parked) describes reading the base and the marks separately.
 
 ## Pages at another scale: photos of cards (2026-10-13)
 
@@ -505,7 +505,7 @@ Spotlight; load 4–18), and every job had one thread (S1), so the times are hig
   averages; if after is clearly worse, return to the old way of drawing shifts and copies and keep the store.
   Not done (the user stopped here).
 - Not done (stopped by the user): the warm Measure, batch 512, base epochs 5 and 8, Retrain before and after.
-  Analysis of why the plan missed its target: `docs/SPEED_PLAN.md`, S5.
+  Analysis of why the plan missed its target: `docs/plans/done/SPEED_PLAN.md`, S5.
 
 ## C30a: Tesseract trained on book 8's checked lines (2026-10-20)
 

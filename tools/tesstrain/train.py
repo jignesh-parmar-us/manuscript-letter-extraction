@@ -4,7 +4,7 @@ Usage: PYTHONPATH=src .venv/bin/python tools/tesstrain/train.py --data <dir> --f
 
 <dir> is export.py's output. Uses the training programs and the start model of tools/tesstrain/setup.sh
 (--tools, default ~/tesstrain). Writes <dir>/models/fold<k>.traineddata (work files and training.log in
-<dir>/work/fold<k>/). A heavy job: takes the heavy-job lock, lower priority (docs/SPEED_PLAN.md, S1).
+<dir>/work/fold<k>/). A heavy job: takes the heavy-job lock, lower priority (docs/plans/done/SPEED_PLAN.md, S1).
 """
 import argparse
 import shutil

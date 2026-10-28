@@ -1,4 +1,4 @@
-"""Heavy jobs (the full test suite, Measure, Retrain, the harness) without CPU fights (docs/SPEED_PLAN.md, S1).
+"""Heavy jobs (the full test suite, Measure, Retrain, the harness) without CPU fights (docs/plans/done/SPEED_PLAN.md, S1).
 
 - **One thread per process:** NumPy (Accelerate) and OpenCV would each use every core; four jobs then make
   32 threads fighting for 8 cores. `limit_threads` (called when the package is imported, before NumPy is)

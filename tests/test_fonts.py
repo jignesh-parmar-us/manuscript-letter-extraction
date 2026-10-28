@@ -1,4 +1,4 @@
-"""Custom fonts for the text screens (T1, T3; docs/CUSTOM_FONT_PLAN.md): the library's font store, its API and
+"""Custom fonts for the text screens (T1, T3; docs/plans/done/CUSTOM_FONT_PLAN.md): the library's font store, its API and
 the font in Word files."""
 import io
 import json

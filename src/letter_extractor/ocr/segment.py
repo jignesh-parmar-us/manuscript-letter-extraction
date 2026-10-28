@@ -1,6 +1,6 @@
 """Reading a line without Tesseract, by searching along it (segmentation by recognition).
 
-Plan: `docs/SEGMENTATION_PLAN.md`. Measured on the 73 checked lines of the printed 1933 book (stage 3,
+Plan: `docs/plans/done/SEGMENTATION_PLAN.md`. Measured on the 73 checked lines of the printed 1933 book (stage 3,
 2026-10-11): 11.1% of the characters wrong; as a second opinion beside Tesseract its disagreements mark
 19.4% of the aksharas and 88% of the remaining mistakes (stage 4). With the defaults below (a boundary every
 9 px, unlikely windows dropped; stage 5): 10.2% wrong, about 7 s per line.
@@ -179,7 +179,7 @@ def line_windows(mask: np.ndarray, spacing: float, typical_width: float,
 def line_windows_range(mask: np.ndarray, spacing: float, lo: float, hi: float,
                        s: SearchSettings = SearchSettings()) -> Optional[Windows]:
     """The windows of every typical width from `lo` to `hi` at once (the folds of a Measure differ a little):
-    `narrow` gives those of one width, the same as `line_windows` with it (docs/SPEED_PLAN.md, S3b)."""
+    `narrow` gives those of one width, the same as `line_windows` with it (docs/plans/done/SPEED_PLAN.md, S3b)."""
     cand = candidates(mask, s.step)
     n = len(cand)
     if n < 2:
@@ -225,7 +225,7 @@ def read_line(mask: np.ndarray, spacing: float, reader, typical_width: float, wi
                   widths, lm, s)
 
 
-# ---- lines in parallel (docs/SPEED_PLAN.md, S4b) ---------------------------------------------------------
+# ---- lines in parallel (docs/plans/done/SPEED_PLAN.md, S4b) ---------------------------------------------------------
 _MODEL: tuple = (None, None)                         # in a worker: the reader and language model it reads with
 MIN_PARALLEL_LINES = 8                               # fewer lines at once are cut in this process
 

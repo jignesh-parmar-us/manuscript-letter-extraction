@@ -1,4 +1,4 @@
-"""Teaching Tesseract a book from its checked lines (C30a, docs/implementation_plan_phase3_later.md).
+"""Teaching Tesseract a book from its checked lines (C30a, docs/phases/phase4_C25-on.md).
 
 Tesseract is a line reader (CNN-LSTM-CTC): it can be fine-tuned on pairs of a line image and its text, with no
 letter boxes. Here:

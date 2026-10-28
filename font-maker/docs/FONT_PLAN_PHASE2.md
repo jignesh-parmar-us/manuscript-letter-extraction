@@ -356,7 +356,7 @@ Tests: । from a made-up ॥; an uploaded image becomes a glyph at the font's h
 - One glyph per label over all sources: the group with the most copies (as F5 does for duplicates), or one
   source first, the others only for labels it lacks (a setting).
 - Metrics (F3) per source, scaled to one line height, so letters from two scans of different size match.
-- Waits for `docs/implementation_plan_phase3_lean.md` C19 (datasets).
+- Waits for `docs/phases/phase3_C19-C24.md` C19 (datasets).
 
 ## 8. F13: A font for a book printed in Gujarati shapes (≈ 3 h)
 

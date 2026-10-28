@@ -1,4 +1,4 @@
-# Manuscript Letter Extraction: Implementation Plan
+# Manuscript Letter Extraction: Implementation Plan, Phase 1 (C0–C9)
 
 Desktop app that reads scanned manuscript pages, cuts out every letter (akshara) with its matras, groups identical letters, lets a person review the groups and map each one to its Unicode letter, and writes a labeled dataset with CSV and HTML reports. The image processing is Python; the review app has a Python backend, a React screen and a SQLite database, with one library of **books**.
 
@@ -6,7 +6,7 @@ This plan implements **Phase 1** of `requirements-fetch-text.md` (FR-1 to FR-10)
 
 The work is split into **small chunks (C0 to C9, with C5 in seven parts)**. Each chunk ends with something you can run on the sample pages and check by eye (the CLI for C0-C4; tests, the API or the app screens for C5), before the next chunk starts.
 
-**Status:** C0 to C5 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling), C5f (fixing cuts and adding samples) and C5g (export) are done. Still to be checked by the user: the app window on macOS, and a first review of the sample book (C5e, C5f). C7 (packaging) and C8 (GitHub Actions) are still open; C6 was merged into C5, and C9 moved to **Phase 2** (`docs/implementation_plan_phase2.md`, started 2026-10-04 with Tesseract label suggestions; since 2026-10-10 organised around the two parts of a book, Training Data and Read Book). Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
+**Status:** C0 to C5 are done (letter cutting: 92% of letters correct on the counted sample lines; grouping: 854 samples of the two sample pages in 54 groups and 28% unsure; see `docs/TUNING.md`). C5 was redesigned before it started (2026-10-04): instead of labeling through a `labels.csv` file, it is now a **review app** (React screen, Python backend, SQLite database, books), which also takes over C6 (GUI) and most of C9 (review screen). C5a (library and database), C5b (Unicode mapping), C5c (backend API), C5d (app shell, Books and Capture screens), C5e (group review and labeling), C5f (fixing cuts and adding samples) and C5g (export) are done. Still to be checked by the user: the app window on macOS, and a first review of the sample book (C5e, C5f). C7 (packaging) and C8 (GitHub Actions) are still open; C6 was merged into C5, and C9 moved to **Phase 2** (`docs/phases/phase2_C10-C18.md`, started 2026-10-04 with Tesseract label suggestions; since 2026-10-10 organised around the two parts of a book, Training Data and Read Book). Where the implementation differs from the original plan, the chunk has a **Changes from the original plan** note that says what changed and why.
 
 ---
 
@@ -198,7 +198,7 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
   - black ink: lightness below 0.62 x the local paper lightness, and not red.
 - **Ruled lines:** straight ink runs longer than 15% of the page height or width are border rules and are removed from the ink masks, except a horizontal run with letters hanging from it (ink in the 22 px below it in at least half of its columns): that is the headline of a long printed word.
 - **Text block:** the main run of ink-dense columns, then of rows; folio numbers cover only a few lines, so they fall outside it.
-- **Side borders (added later, `docs/BORDER_PLAN.md`):** the block is narrowed to lie between the left and right border lines.
+- **Side borders (added later, `docs/plans/BORDER_PLAN.md`):** the block is narrowed to lie between the left and right border lines.
 - Remove specks smaller than `min_speck_px` (separately for red and black).
 
 **Output:** `debug/<page>_ink.png` (black ink in black, red ink in red, removed rules in blue, outside the block greyed out, block outlined in green).
@@ -209,7 +209,7 @@ Each chunk is one branch and one PR. A chunk is closed when its "done when" is m
 - **The median window is 151 px, not 51.** With 51 px the window is about one letter wide; inside dense red text the "paper" estimate was pulled towards red (`a*` 150 instead of 134), so the red headlines and light strokes were lost. With 151 px paper and red ink separate cleanly (paper at 0, red ink at about +40 in `a*` difference).
 - **Ruled lines are removed by shape**, which the plan did not mention. On raw scans the red rules are red ink too; removing them is what lets the text block exclude them. Letters that cross a rule lose the crossing pixels, so pages cleaned by the border remover are still preferred.
 - **Headlines are not rules (added later).** On printed pages a long word's headline is as straight as a rule and often longer than 15% of the width, so it was erased and its letters were cut without it (about 6% of the samples of the printed books, on 14 of 23 pages). A horizontal run is now a rule only if nothing hangs from it: headlines measured 0.73-1.0 of their columns with ink just below, rules about 0. On every page of the seven books only headlines came back; vertical borders and the handwritten book's border frames are still removed. Samples already cut are given their headline back by `app/headlines.py` (list, fix, undo, with a backup), not by cutting again, so the review is kept. The cached page ink (`cache/<page>_ink.npz`) carries a version and is computed again after such a change.
-- **Cut only between the side borders (added 2026-10-15, `docs/BORDER_PLAN.md`).** Faint, broken borders (the 1944 printed book: a thin and a thick grey line in dashes of 10-230 px) were not removed as rules, and the text block took them in: 49 of 85 Read Book pages had a sliver of border cut as a letter at the end or start of most lines. A border is now found as a column whose ink, in a lighter mask (0.8 × paper) with breaks up to 6 px bridged, runs for 12% of the page height (text: at most 7%); the innermost one on each side, outside the block or up to 150 px inside it, limits the block. Pages without such a border keep their block. The raw sample pages and the handwritten book's pages now stop at the inner red rule instead of 20-30 px beyond it (rule remains were inside). Setting `border_clip` (off: the old block).
+- **Cut only between the side borders (added 2026-10-15, `docs/plans/BORDER_PLAN.md`).** Faint, broken borders (the 1944 printed book: a thin and a thick grey line in dashes of 10-230 px) were not removed as rules, and the text block took them in: 49 of 85 Read Book pages had a sliver of border cut as a letter at the end or start of most lines. A border is now found as a column whose ink, in a lighter mask (0.8 × paper) with breaks up to 6 px bridged, runs for 12% of the page height (text: at most 7%); the innermost one on each side, outside the block or up to 150 px inside it, limits the block. Pages without such a border keep their block. The raw sample pages and the handwritten book's pages now stop at the inner red rule instead of 20-30 px beyond it (rule remains were inside). Setting `border_clip` (off: the old block).
 
 ### C2. Line detection (FR-3)
 
@@ -619,7 +619,7 @@ The planned Tkinter window (folders, Run, progress, open the output) is the C5d 
 
 ### C9. Label suggestions: moved to Phase 2
 
-Most of the original C9 (review screen, fixing cuts, decisions kept across runs) is now C5e and C5f. The rest, **label suggestions** (from Tesseract for printed books, from other labelled books, and from a trained recognizer), is now Phase 2, chunks C10 to C14 in `docs/implementation_plan_phase2.md` (decided 2026-10-04). AI services stay an opt-in only.
+Most of the original C9 (review screen, fixing cuts, decisions kept across runs) is now C5e and C5f. The rest, **label suggestions** (from Tesseract for printed books, from other labelled books, and from a trained recognizer), is now Phase 2, chunks C10 to C14 in `docs/phases/phase2_C10-C18.md` (decided 2026-10-04). AI services stay an opt-in only.
 
 ### Chunk summary
 
@@ -641,7 +641,7 @@ Most of the original C9 (review screen, fixing cuts, decisions kept across runs)
 | C6 | GUI | merged into C5d | - | Section 7 |
 | C7 | Packaging | planned (timing: Phase 2 decision 6) | `.app`, `.exe` with the React screen | Section 7 |
 | C8 | GitHub Actions | planned | CI (Python, API, React), builds, releases | Section 7 |
-| C9 | Label suggestions | moved to Phase 2 (C10-C14) | see `implementation_plan_phase2.md` | FR-7 |
+| C9 | Label suggestions | moved to Phase 2 (C10-C14) | see `docs/phases/phase2_C10-C18.md` | FR-7 |
 
 ---
 

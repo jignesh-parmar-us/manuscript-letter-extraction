@@ -2,7 +2,7 @@
 
 The app's own reader: **Read Book → Text → Whole lines (our reader)**. Code: `ocr/segment.py` (the line
 search), `ocr/reader.py` (the letter reader), `ocr/language.py` (the language model). The full help page is
-`docs/help/our-reader.html`; the measurements are in `docs/SEGMENTATION_PLAN.md` and `docs/TUNING_PHASE2.md`.
+`docs/help/our-reader.html`; the measurements are in `docs/plans/done/SEGMENTATION_PLAN.md` and `docs/TUNING_PHASE2.md`.
 
 ## 1. The three ways the app reads a page
 
@@ -128,7 +128,7 @@ better. On new pages the two are about equal. Where the two disagree, the app ma
 | Works with handwriting too (it follows the book's ink and sizes) | Only knows letters it has seen; a missing group means a `?` |
 | A good second opinion beside Tesseract | Letter frequency enters only through the language model, by design |
 
-## 7. How it compares with a line reader (see `LINE_READER_RESEARCH.md`)
+## 7. How it compares with a line reader (see `docs/research/line_reader.md`)
 
 | | Our reader | Line reader (Tesseract fine-tune, Kraken) |
 |---|---|---|

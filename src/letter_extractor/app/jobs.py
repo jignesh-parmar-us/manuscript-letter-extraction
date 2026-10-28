@@ -21,7 +21,7 @@ APP = 0                                        # the "row" of a job of the whole
 
 
 def _heavy(what: str, run: Callable[..., Dict]) -> Callable[..., Dict]:
-    """`run` as one heavy job at a time (heavy.heavy_lock, docs/SPEED_PLAN.md S1): while another (a test run,
+    """`run` as one heavy job at a time (heavy.heavy_lock, docs/plans/done/SPEED_PLAN.md S1): while another (a test run,
     the harness, a Measure) holds the lock, the job says so and waits; cancelling stops the wait."""
     from ..heavy import heavy_lock
     from .suggest import LineDone

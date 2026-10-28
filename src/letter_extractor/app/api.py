@@ -227,7 +227,7 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
         library.set_input_folder(book_id, Path(body.path))
         return get_book(book_id)
 
-    # ---- fonts to show the text in (T1, docs/CUSTOM_FONT_PLAN.md) -----------------------------------------
+    # ---- fonts to show the text in (T1, docs/plans/done/CUSTOM_FONT_PLAN.md) -----------------------------------------
     from .fonts import FontError, FontNotFound, Fonts
     fonts = Fonts(library.root)
 

@@ -1,4 +1,4 @@
-"""The backend tests in 4 processes at once (docs/SPEED_PLAN.md, S2). No new package: unittest and multiprocessing.
+"""The backend tests in 4 processes at once (docs/plans/done/SPEED_PLAN.md, S2). No new package: unittest and multiprocessing.
 
 Usage: PYTHONPATH=src .venv/bin/python tools/test_parallel.py [fast|full] [-j 4] [test_module ...]
 

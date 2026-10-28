@@ -1,4 +1,4 @@
-"""S3 (docs/SPEED_PLAN.md): the Measure cache. Each letter's rows computed once and kept, the same in every fold;
+"""S3 (docs/plans/done/SPEED_PLAN.md): the Measure cache. Each letter's rows computed once and kept, the same in every fold;
 the checked lines cut into windows once for all folds; letter masks from one file. Logic and equality tests
 on the synthetic test book, no heavy runs."""
 import sys

@@ -1014,7 +1014,7 @@ class Library:
     def set_page_part(self, page_id: int, part: str, force: bool = False) -> Dict:
         """Moving a page between Training Data and Read Book (C16a) is refused since C20: the two parts are
         two rows, a dataset (it only trains) and a book (it only reads). Copying a book's page into a
-        dataset is for later (docs/implementation_plan_phase3_lean.md, section 6)."""
+        dataset is for later (docs/phases/phase3_C19-C24.md, section 6)."""
         if part not in ("training", "read"):
             raise LibraryError("A page is used for training or for reading.")
         with self.session() as s:

@@ -1,4 +1,4 @@
-"""S2 (docs/SPEED_PLAN.md): tools/test_parallel.py runs the same tests as `unittest discover`, `fast` without
+"""S2 (docs/plans/done/SPEED_PLAN.md): tools/test_parallel.py runs the same tests as `unittest discover`, `fast` without
 the sample-page and end-to-end classes, the sample-page tests together in one task."""
 import importlib.util
 import sys

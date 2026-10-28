@@ -1,4 +1,4 @@
-"""S4 (docs/SPEED_PLAN.md): faster reading and retraining, the same numbers. Window features without searching a
+"""S4 (docs/plans/done/SPEED_PLAN.md): faster reading and retraining, the same numbers. Window features without searching a
 window's ink three times and HOG without Python loops (a); lines in parallel, results in line order (b); Adam in
 place (c); the batch and the base reader's epochs as settings (d, e)."""
 import os

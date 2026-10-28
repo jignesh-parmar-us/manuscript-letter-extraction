@@ -1,6 +1,6 @@
 # Speed plan: tests, Measure and the reader in minutes, not hours
 
-Comes **before Phase 3** (built from `docs/implementation_plan_phase3_lean.md`): every Phase 3 chunk is checked with the
+Comes **before Phase 3** (built from `docs/phases/phase3_C19-C24.md`): every Phase 3 chunk is checked with the
 tests and with Measure, so they must be fast first.
 
 **Status:** S1–S4 are built (2026-10-16); S2 missed its `fast` target. S5 was stopped early by the user on

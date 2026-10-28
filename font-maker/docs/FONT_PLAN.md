@@ -69,7 +69,7 @@ Rules:
 - **One-way imports.** `font_maker` may import `letter_extractor.app.db` (the tables),
   `letter_extractor.ocr.aksharas` (akshara splitting). Nothing in `letter_extractor` or `tests/` imports `font_maker`. A small test in
   `font-maker/tests/` checks this. (Loosened 2026-10-17: the reading app may use `fontTools` itself, for the
-  fonts it shows text in; `docs/CUSTOM_FONT_PLAN.md`.)
+  fonts it shows text in; `docs/plans/done/CUSTOM_FONT_PLAN.md`.)
 - **Library schema.** `store.SCHEMA` is `0019` (Phase 3): sources are `kind = 'dataset'` rows, and the
   hand-checked lines come from those datasets and from the books whose reading model learns from them.
 - **Read-only database.** Font Maker opens `library.db` as `file:…?mode=ro` with its own engine. It does
@@ -99,7 +99,7 @@ Rules:
 ```
 
 `font.json` keeps **`sources: [book ids]`** as a list from the start. Phase 1 shows a single book choice.
-After Phase 3 a source becomes a dataset (see `docs/implementation_plan_phase3_lean.md`), and a font can draw
+After Phase 3 a source becomes a dataset (see `docs/phases/phase3_C19-C24.md`), and a font can draw
 from several.
 
 **No database tables (decided 2026-10-15).** Font Maker's data stays in these files, not in new tables:

@@ -41,7 +41,7 @@ class Config:
     block_row_frac: float = 0.05      # same for rows (low: gaps between lines must not split the block)
     block_gap_px: int = 60            # gaps up to this wide do not split the text block
     block_pad_px: int = 15            # margin added around the text block (matras at the edges)
-    border_clip: bool = True          # cut only between the left and right page borders (BORDER_PLAN.md)
+    border_clip: bool = True          # cut only between the left and right page borders (docs/plans/BORDER_PLAN.md)
     border_max_rel_l: float = 0.8     # lighter ink mask used only to find borders (grey, broken border lines)
     border_max_break_px: int = 6      # breaks up to this tall in a border column are bridged
     border_min_run_frac: float = 0.12 # a column is a border if its ink runs this x page height (text: < 0.07)
@@ -161,7 +161,7 @@ class Config:
     recut_min_width: float = 0.45         # a new sample must be at least this x a letter width wide...
     recut_min_group: int = 5              # ...and near the centre of a group with at least this many samples
 
-    # ---- our reader (the line search; docs/SPEED_PLAN.md, S4) -------------------------------------------
+    # ---- our reader (the line search; docs/plans/done/SPEED_PLAN.md, S4) -------------------------------------------
     line_batch: int = 128                 # training batch (S4d: 512 is tried in S5; the numbers change)
     line_base_epochs: int = 15            # epochs of the reader that cuts the checked lines (S4e: 5 and 8 tried in S5)
     line_workers: int = 2                 # lines read / cut into windows in this many processes (S4b); 1: in the app's

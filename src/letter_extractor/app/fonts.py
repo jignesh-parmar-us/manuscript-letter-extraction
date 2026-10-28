@@ -1,4 +1,4 @@
-"""Fonts to show and download a book's text in (custom fonts, T1; docs/CUSTOM_FONT_PLAN.md).
+"""Fonts to show and download a book's text in (custom fonts, T1; docs/plans/done/CUSTOM_FONT_PLAN.md).
 
 The fonts are the library's, not a book's: `<library>/display_fonts/<id>.json` describes each, next to the font
 file for an upload (`<id>.ttf` or `<id>.otf`). An upload's id is the first 12 hex digits of its SHA-256, so the

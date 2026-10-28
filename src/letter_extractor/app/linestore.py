@@ -1,4 +1,4 @@
-"""What the line-search reader's training keeps between trainings (docs/SPEED_PLAN.md, S3), in the reader's
+"""What the line-search reader's training keeps between trainings (docs/plans/done/SPEED_PLAN.md, S3), in the reader's
 `features/` folder (a book's reading model folder since C23, `line-search/` in a row's folder before; `features`). A cache: deleting the folder is always safe, it is built again; it holds no labels.
 
 - **MaskPack** (S3c): every letter mask the training opens, from one file instead of a PNG per letter. A mask is

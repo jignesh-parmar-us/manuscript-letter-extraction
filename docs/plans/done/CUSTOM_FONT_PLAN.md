@@ -1,5 +1,7 @@
 # Custom fonts in Read Book → Text (T1–T4)
 
+**Status:** T1–T4 built (2026-10-17): the font store, the font tabs and +, downloads in the font, help and README.
+
 Show and download a book's text in a font of your choice. Next to the script tabs ગુજરાતી / देवनागरी, a **+**
 adds a font: upload a `.ttf` / `.otf` / `.ttc`, or pick one built in Font Maker. Each added font is a tab; clicking it
 shows the text in that font, and the downloads (PDF, picture, Word) use it.

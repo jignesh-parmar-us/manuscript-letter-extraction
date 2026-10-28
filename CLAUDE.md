@@ -27,15 +27,15 @@ in `frontend/`, SQLite library at `~/Documents/Manuscript Letters`.
   (backend `full` ≈ 2 min, `fast` ≈ 2 min, screen ≈ 1.5 min). Add a test with every fix.
 - **No heavy runs while implementing:** no Measure, no harness, no full backend suite. Run only the
   tests of the changed modules; prove "same numbers" changes with small equality tests. Heavy runs only
-  when I ask, one at a time (`docs/SPEED_PLAN.md`).
+  when I ask, one at a time (`docs/plans/done/SPEED_PLAN.md`).
 
 ## Plans and docs
-- When the implementation differs from the plan, update the plan in the same commit:
-  `docs/IMPLEMENTATION_PLAN.md` (Phase 1, C0–C9), `docs/implementation_plan_phase2.md` (C10+),
-  `docs/implementation_plan_phase3_lean.md` (C19+, what is built; the full `implementation_plan_phase3.md`
-  is the reference for what was left for later), `docs/implementation_plan_phase3_later.md`
-  (C25+, the lean plan's section 6), `docs/SPEED_PLAN.md` (S1–S4),
-  `docs/SEGMENTATION_PLAN.md` (line search). Record what changed and why. Also update the chunks
+- **The active plan is `docs/phases/phase4_C25-on.md`** (`docs/phases/README.md` lists the phases). Done
+  phases: `docs/phases/phase1_C0-C9.md`, `phase2_C10-C18.md`, `phase3_C19-C24.md`. Research and ideas not
+  planned yet: `docs/research/` (`ideas_backlog.md` is the full Phase 3 plan, a reference only).
+- When the implementation differs from the plan, update the plan in the same commit: the phase file of
+  the chunk, `docs/plans/done/SPEED_PLAN.md` (S1–S4),
+  `docs/plans/done/SEGMENTATION_PLAN.md` (line search). Record what changed and why. Also update the chunks
   that come after it: status, files, settings.
 - Tuning numbers go in `docs/TUNING.md` / `docs/TUNING_PHASE2.md`.
 - When the UI changes, update the help pages in `docs/help/` and the README.

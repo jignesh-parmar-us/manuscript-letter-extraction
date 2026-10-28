@@ -1,5 +1,5 @@
 """An index on sample.line_id: "the letters of this line" (the line search's training, Measure, reading) read the
-whole sample table without it, about 130,000 rows on the development library (docs/SPEED_PLAN.md, S5).
+whole sample table without it, about 130,000 rows on the development library (docs/plans/done/SPEED_PLAN.md, S5).
 
 Revision ID: 0016
 Revises: 0015

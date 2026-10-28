@@ -134,7 +134,7 @@ separate question to ask.
 - `src/letter_extractor/prepare.py`: `vertical_borders`, clipping in `prepare_page`, overlay colour.
 - `src/letter_extractor/config.py`: the settings above.
 - `tests/test_prepare.py` (or `test_letters.py`), `tests/synthetic.py`: the border page.
-- `docs/IMPLEMENTATION_PLAN.md` (C1): record the change; `docs/TUNING.md`: the numbers.
+- `docs/phases/phase1_C0-C9.md` (C1): record the change; `docs/TUNING.md`: the numbers.
 - `docs/help/tech-cutting.html`: how the cut area is found.
 
 ## 7. Out of scope (answered 2026-10-14)

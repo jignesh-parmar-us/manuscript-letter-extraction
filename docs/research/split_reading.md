@@ -1,6 +1,6 @@
 # Reading the letter and its vowel sign separately (idea 4)
 
-A plan, not built. Our reader (Text → Whole lines (our reader), `docs/SEGMENTATION_PLAN.md`) recognises every akshara as one whole picture: नी, नो, ना and ने are four unrelated classes. This plan reads an akshara as its **base** (consonant, conjunct or vowel) **plus its marks** (vowel signs, anusvara, halant, reph), each judged on its own, and combines them.
+A plan, not built. Our reader (Text → Whole lines (our reader), `docs/plans/done/SEGMENTATION_PLAN.md`) recognises every akshara as one whole picture: नी, नो, ना and ने are four unrelated classes. This plan reads an akshara as its **base** (consonant, conjunct or vowel) **plus its marks** (vowel signs, anusvara, halant, reph), each judged on its own, and combines them.
 
 Status: **parked** (2026-10-13). Proposed by Claude when the remaining errors turned out to be mostly vowel signs; kept so it is not lost. Pick it up if the cheaper improvements stall (see section 2).
 

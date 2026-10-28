@@ -1,6 +1,6 @@
 # Harness: trying changes to our reader quickly and fairly
 
-Our reader (Text → Whole lines (our reader), `docs/SEGMENTATION_PLAN.md`) is measured fold-fair on the
+Our reader (Text → Whole lines (our reader), `docs/plans/done/SEGMENTATION_PLAN.md`) is measured fold-fair on the
 checked lines: for each of 4 groups of pages, a reader trained without those pages reads them. Done
 from scratch that takes about two hours per idea. Most of the time goes into the features of the
 training letters and of every window of every checked line, which are the same for every idea about
@@ -31,7 +31,7 @@ PYTHONPATH=src .venv/bin/python tools/harness/run.py --library ~/harness/libcopy
 confusions, and writes `<cache>/<name>_lm<weight>.html`: every checked line with its checked text, our
 reader's and Tesseract's reading, the differences marked, to check by eye.
 
-**One heavy job at a time** (`docs/SPEED_PLAN.md`, S1): `build.py` and `run.py` take the heavy-job lock
+**One heavy job at a time** (`docs/plans/done/SPEED_PLAN.md`, S1): `build.py` and `run.py` take the heavy-job lock
 (`~/.manuscript-letters-heavy.lock`), as do the full test suite and the app's Measure and Retrain. A second
 one started meanwhile says what is running and waits. They run with one thread and at lower priority.
 `tools/cleanup.sh` shows left-over runs, workers, copies and caches, and stops / deletes them when you say yes.
@@ -42,7 +42,7 @@ linear reader), `--epochs`, `--seed` (to see how much a result moves by chance),
 line, System generated), `--unreviewed-generated` (with `--unlined`: also unreviewed generated letters).
 
 `build.py` takes the training rows from the app's feature store in the copy's book folder
-(`line-search/features/`, `docs/SPEED_PLAN.md` S3): after the first fold, the other folds compute almost nothing.
+(`line-search/features/`, `docs/plans/done/SPEED_PLAN.md` S3): after the first fold, the other folds compute almost nothing.
 
 ## Rebuild the cache when
 

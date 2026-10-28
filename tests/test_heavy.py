@@ -1,4 +1,4 @@
-"""S1 (docs/SPEED_PLAN.md): heavy jobs one at a time, one thread each, no workers left when their run is killed."""
+"""S1 (docs/plans/done/SPEED_PLAN.md): heavy jobs one at a time, one thread each, no workers left when their run is killed."""
 import json
 import os
 import signal

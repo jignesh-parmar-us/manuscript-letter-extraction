@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Left-overs of heavy jobs (docs/SPEED_PLAN.md, S1): shows them, then stops / deletes them only when you say yes.
+# Left-overs of heavy jobs (docs/plans/done/SPEED_PLAN.md, S1): shows them, then stops / deletes them only when you say yes.
 #  1. worker processes whose run is gone (their parent died: adopted by launchd, process 1);
 #  2. runs still going: tests, the harness (Measure runs inside the app: see the lock);
 #  3. the heavy-job lock (~/.manuscript-letters-heavy.lock) and who holds it;

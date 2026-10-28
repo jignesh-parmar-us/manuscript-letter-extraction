@@ -55,7 +55,7 @@
     choose. On the 73 checked lines: 5.06% of the characters wrong, 4.45% with the language model, against 6.1% for the
     cut-letter text (Tesseract only) and 7.5% with the reader and language model.</p>
   <p><strong>The line search and its second opinion</strong> (<code>app/linesearch.py</code>, <code>ocr/segment.py</code>,
-    <code>docs/SEGMENTATION_PLAN.md</code>): each line's ink (its cut samples' masks pasted together) is read again
+    <code>docs/plans/done/SEGMENTATION_PLAN.md</code>): each line's ink (its cut samples' masks pasted together) is read again
     without Tesseract. Candidate boundaries every 9 px plus empty columns and thin points below the headline; every
     stretch 0.2–2.4 × the typical letter width is a window, read by a linear reader with a <em>not a letter</em> class
     (trained per book on the reviewed letters as their windows in the line, shifted 3–10% and varied as the letter,

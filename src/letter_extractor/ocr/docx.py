@@ -5,7 +5,7 @@ a new page, after a small heading with its name. The text is set in a Gujarati f
 Windows has; Word substitutes a Gujarati font where it is missing) at 14 pt; Word joins the letters
 itself (conjuncts and vowel signs), as browsers do.
 
-A custom font (T3, docs/CUSTOM_FONT_PLAN.md): the runs ask for its family name, and when its bytes are given
+A custom font (T3, docs/plans/done/CUSTOM_FONT_PLAN.md): the runs ask for its family name, and when its bytes are given
 the font is embedded in the file (`word/fonts/font1.odttf`, obfuscated as ECMA-376 Part 1 §17.8.1 says), so
 the text looks the same on a computer without that font.
 """

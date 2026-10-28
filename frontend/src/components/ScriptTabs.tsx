@@ -1,5 +1,5 @@
 // The script tabs of the text views (ગુજરાતી / देवनागरी) and the library's own fonts beside them (custom fonts,
-// T2; docs/CUSTOM_FONT_PLAN.md). + adds a font: a .ttf / .otf uploaded, or one built in Font Maker (picked from a
+// T2; docs/plans/done/CUSTOM_FONT_PLAN.md). + adds a font: a .ttf / .otf uploaded, or one built in Font Maker (picked from a
 // list, so not every Font Maker font becomes a tab). A font tab shows the text in that font, in the script the
 // font has (a font with both keeps the script last chosen); its downloads (PDF, picture, Word) use it. Characters
 // of the shown text that the font lacks are counted on its tab and highlighted in the text.

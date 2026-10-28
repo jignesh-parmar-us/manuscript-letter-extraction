@@ -55,7 +55,7 @@ class SyntheticPrepareTests(unittest.TestCase):
 
 
 class BorderTests(unittest.TestCase):
-    """Faint, broken side borders close to the text (BORDER_PLAN.md): the cut stays between them."""
+    """Faint, broken side borders close to the text (docs/plans/BORDER_PLAN.md): the cut stays between them."""
 
     @classmethod
     def setUpClass(cls):
@@ -133,7 +133,7 @@ class SamplePageTests(unittest.TestCase):
     def _check_block(self, page):
         x, y, w, h = page.block
         # text spans about x 430-3215, y 250-1520, between the inner red rules (about x 428 and 3225 on
-        # the raw scans: the block stops there, BORDER_PLAN.md); folio numbers lie left of x 390 and right of x 3290
+        # the raw scans: the block stops there, docs/plans/BORDER_PLAN.md); folio numbers lie left of x 390 and right of x 3290
         self.assertTrue(370 <= x <= 435 and 3215 <= x + w <= 3290, page.block)
         self.assertTrue(220 <= y <= 270 and 1500 <= y + h <= 1560, page.block)
 

@@ -1,6 +1,6 @@
 # Manuscript Letter Extraction: Implementation Plan, Phase 3 (lean scope)
 
-The plan to **build**. It is the full Phase 3 plan (`docs/implementation_plan_phase3.md`, kept unchanged as
+The plan to **build**. It is the full Phase 3 plan (`docs/research/ideas_backlog.md`, kept unchanged as
 the reference) cut down to what is needed to separate datasets from books. Everything left out is listed in
 section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two plans can be read side by side.
 
@@ -8,7 +8,7 @@ section 6 (later), so nothing is lost. Same chunk names (C19–C24), so the two 
 library done the same day (all counts equal; book 6 → dataset 6 + book 8, book 7 a book; backup
 `~/Documents/Manuscript Letters backup 2026-10-16 225329`). Stop 2 passed (2026-10-16). C21, C22, C23 and C24 built (2026-10-16/17); C24's gate Measure not run yet (heavy: when you ask). Stop 3 next.
 Written 2026-10-15 from the full plan of 2026-10-14 and its answered decisions. Comes **after the speed plan**
-(`docs/SPEED_PLAN.md`, S1–S4). Next: Stop 3 (and the gate Measure).
+(`docs/plans/done/SPEED_PLAN.md`, S1–S4). Next: Stop 3 (and the gate Measure).
 
 **Building time:** about **16–20 hours** (the full plan: about 25–32).
 
@@ -123,7 +123,7 @@ The tab "Dictionary" disappears; its help page points to Reading setup.
 ## 4. Working rule
 
 - **No heavy runs while implementing:** no Measure, no harness, no full test suite (CLAUDE.md). The tests of
-  the changed modules, `fast` (`docs/SPEED_PLAN.md` S2), and `npm test` when `frontend/` changed. Heavy runs
+  the changed modules, `fast` (`docs/plans/done/SPEED_PLAN.md` S2), and `npm test` when `frontend/` changed. Heavy runs
   only when you ask: the C20 dry run and migration, one training in C23, the C24 gate, `full` before merging.
 - **Three stops for your check:** after C19, after C20 (it moves your reviewed data between rows), and at the
   end (C21–C24 together).
@@ -428,7 +428,7 @@ As built (what differs from the points below, and why, is in section 8):
   training, the language model and the checked lines of each fold are the same as before. Book 8's reader signature
   is also unchanged after C22–C24 (same letters and checked lines): it stays *up to date*.
 - **Gate (still to run, heavy):** Measure of book 8 on a copy of your library after the migrations must give the
-  numbers of `docs/SPEED_PLAN.md` S4 (with the line-by-line page). Only printed checked lines exist (book 8); there is
+  numbers of `docs/plans/done/SPEED_PLAN.md` S4 (with the line-by-line page). Only printed checked lines exist (book 8); there is
   no handwritten number to compare.
 - **Files:** `app/library.py` (`LeftOut`, `left_out`), `app/linesearch.py`, `app/dictionary.py`; tests
   `tests/test_fold_fair.py` (new: a renamed copy of a page is left out, a same-named other page is not),
@@ -446,7 +446,7 @@ renamed files) and to several datasets. The gate measurement is still needed.
   no dataset need nothing left out.
 - The speed plan's feature store is keyed by sample and mask content, so the split does not make it stale.
 - **Gate (must pass before C24 is done):** on a copy of your library, Measure after the split gives the same
-  numbers as before it on the same checked lines (the "after" numbers of `docs/SPEED_PLAN.md` S4), with a
+  numbers as before it on the same checked lines (the "after" numbers of `docs/plans/done/SPEED_PLAN.md` S4), with a
   line-by-line page to check by eye. Both printed and handwritten are tried; I say if a number exists for
   only one (today the checked lines are all printed, book 6).
 - **Files:** `app/linesearch.py` (`measure`), `app/dictionary.py` (`book_model_without`), tests.
@@ -455,7 +455,7 @@ renamed files) and to several datasets. The gate measurement is still needed.
 
 ## 6. Later (left out of the lean scope)
 
-From the full plan, to build when wanted. **Planned in detail in `docs/implementation_plan_phase3_later.md`
+From the full plan, to build when wanted. **Planned in detail in `docs/phases/phase4_C25-on.md`
 (C25–C29); C25 (drag and drop) and C26 (files into the uploads folder) built 2026-10-17.**
 
 - **Existing files move into the uploads folder** automatically (copy, verify by hash, switch paths, keep the
