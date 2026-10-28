@@ -14,20 +14,25 @@ letter boxes. Here:
   language model without the fold's pages (fold-fair), by several readers (stock and trained Tesseract), scored
   with Measure's `_chars` / `_distance`; `score_page` is the line-by-line page.
 
-Nothing here changes the library: it reads lines and writes files in the given folders.
+Nothing here changes the library's database: it reads lines and writes files in the given folders.
+
+In the app (C30c): `train_book_model` trains a book's model on all its checked lines and keeps it in its reading
+model folder (`model_folder`); any book can read with any trained model (`Config.ocr_model_book`, `book_model`).
 """
 from __future__ import annotations
 
 import difflib
+import hashlib
 import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
 import unicodedata
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image
@@ -35,11 +40,13 @@ from sqlalchemy import select
 
 from .. import io_utils
 from ..ocr.tesseract import find_tesseract, prepare_line, read_line
-from .db import Line
-from .library import Library, LibraryError
+from .db import BOOK, Book, Line, now
+from .library import Cancelled, Library, LibraryError, NotFound
 from .linesearch import _chars, _distance, checked_rows, fold_pages
 
 BORDER = 10                                  # white border around a line image, as `read_line` adds
+MODEL = "book"                               # a book's trained model: <model folder>/book.traineddata (C30c)
+TRAIN_PSM = 13                               # training reads a raw line; a trained model reads a line it read empty again so
 
 
 def gt_text(text: str) -> str:
@@ -128,21 +135,37 @@ def box_lines(text: str, width: int, height: int) -> List[str]:
     return out
 
 
-def _run(cmd: Sequence[str], env: Dict[str, str], log) -> None:
-    log.write("$ " + " ".join(str(c) for c in cmd) + "\n")
-    log.flush()
-    r = subprocess.run([str(c) for c in cmd], env=env, stdout=log, stderr=subprocess.STDOUT)
-    if r.returncode != 0:
-        raise LibraryError(f"{Path(str(cmd[0])).name} failed (exit code {r.returncode}); see {log.name}.")
+def runner(cancel: Optional[Callable[[], bool]] = None) -> Callable:
+    """A `run(cmd, env, log)` for `train_model` that stops the program when `cancel()` turns true (Cancelled)."""
+    def run(cmd: Sequence[str], env: Dict[str, str], log) -> None:
+        log.write("$ " + " ".join(str(c) for c in cmd) + "\n")
+        log.flush()
+        p = subprocess.Popen([str(c) for c in cmd], env=env, stdout=log, stderr=subprocess.STDOUT)
+        while True:
+            try:
+                code = p.wait(timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                if cancel and cancel():
+                    p.kill()
+                    p.wait()
+                    raise Cancelled("Cancelled; the Tesseract model is as it was.")
+        if code != 0:
+            raise LibraryError(f"{Path(str(cmd[0])).name} failed (exit code {code}); see {log.name}.")
+    return run
+
+
+_run = runner()
 
 
 def train_model(gt_dir: Path, work: Path, name: str, tools: Path, start: Path, epochs: int = 20,
-                psm: int = 13, learning_rate: float = 0.0001, ratio_train: float = 0.9, indic: bool = True,
-                run: Callable = _run) -> Path:
+                psm: int = TRAIN_PSM, learning_rate: float = 0.0001, ratio_train: float = 0.9, indic: bool = True,
+                run: Callable = _run, progress: Optional[Callable[[str], None]] = None) -> Path:
     """Fine-tune the float model `start` (a .traineddata of tessdata_best, in a folder with `configs/lstm.train`)
     on the pairs in `gt_dir`, with the training programs in `tools` (`<tools>/bin`, langdata in
     `<tools>/langdata`: tools/tesstrain/setup.sh). Work files go to
-    `work/<name>/`; returns `work/<name>.traineddata`. `run(cmd, env, log)` runs one program (tests).
+    `work/<name>/`; returns `work/<name>.traineddata`. `run(cmd, env, log)` runs one program (tests, `runner`);
+    `progress(message)` hears each step.
     `psm` 13 (a raw line, tesstrain's default): with 7, `lstm.train` writes no `.lstmf` and says nothing
     (seen on 2026-10-20). Reading stays at the book's `ocr_psm`. A line without a `.lstmf` is listed in the log."""
     gt_dir, work, tools, start = Path(gt_dir), Path(work), Path(tools), Path(start)
@@ -156,7 +179,10 @@ def train_model(gt_dir: Path, work: Path, name: str, tools: Path, start: Path, e
     with open(out / "training.log", "a", encoding="utf-8") as log:
         log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')}: {name}, {len(pairs)} lines, {epochs} epochs\n")
         lstmf, gt_all = [], []
-        for gt in pairs:
+        say = progress or (lambda m: None)
+        for i, gt in enumerate(pairs):
+            if i % 20 == 0:
+                say(f"training files: line {i + 1} of {len(pairs)}")
             stem = gt.name[:-len(".gt.txt")]
             png = gt_dir / f"{stem}.png"
             text = gt.read_text(encoding="utf-8").strip()
@@ -192,6 +218,7 @@ def train_model(gt_dir: Path, work: Path, name: str, tools: Path, start: Path, e
              "--output_dir", out / "proto", *(["--pass_through_recoder"] if indic else []), "--lang", name], env, log)
         proto = out / "proto" / name / f"{name}.traineddata"
         (out / "checkpoints").mkdir(exist_ok=True)
+        say(f"training on {len(lstmf)} lines, {epochs} epochs")
         run(["lstmtraining", "--traineddata", proto, "--old_traineddata", start, "--continue_from",
              f"{unpacked}.lstm", "--learning_rate", str(learning_rate), "--model_output", out / "checkpoints" / name,
              "--train_listfile", out / "list.train", "--eval_listfile", out / "list.eval",
@@ -200,6 +227,131 @@ def train_model(gt_dir: Path, work: Path, name: str, tools: Path, start: Path, e
         run(["lstmtraining", "--stop_training", "--continue_from", out / "checkpoints" / f"{name}_checkpoint",
              "--traineddata", proto, "--model_output", model], env, log)
     return model
+
+
+# ---- in the app (C30c) --------------------------------------------------------------------------------
+
+def default_tools() -> Path:
+    """Where tools/tesstrain/setup.sh puts the training programs (the app setting `tesstrain_tools` when empty)."""
+    return Path.home() / "tesstrain"
+
+
+def model_folder(lib: Library, book: Book) -> Path:
+    """Where a book's trained Tesseract model is kept: its reading model folder's `tesseract/` (C23)."""
+    return lib.model_dir(book) / "tesseract"
+
+
+def lines_signature(lib: Library, book_id: int) -> str:
+    """The book's checked lines (line and text, as trained) as a hash: the model is out of date when it changes."""
+    rows = sorted((r[4], gt_text(r[6])) for r in checked_rows(lib, book_id))
+    return hashlib.sha1(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()
+
+
+def model_info(lib: Library, book: Book) -> Optional[Dict]:
+    """What the book's trained model learnt (meta.json), or None; `changed`: its checked lines changed since."""
+    meta = model_folder(lib, book) / "meta.json"
+    if not meta.is_file() or not (meta.parent / f"{MODEL}.traineddata").is_file():
+        return None
+    info = json.loads(meta.read_text(encoding="utf-8"))
+    return {**{k: v for k, v in info.items() if k != "signature"}, "book_id": book.id, "book_name": book.name,
+            "changed": info.get("signature") != lines_signature(lib, book.id)}
+
+
+def trained_models(lib: Library) -> List[Dict]:
+    """Every book's trained model (`model_info`), for choosing one in Reading setup."""
+    out = []
+    for row in lib.list_books(BOOK):
+        info = model_info(lib, lib.get_book(row["id"]))
+        if info:
+            out.append(info)
+    return out
+
+
+def book_model(lib: Library, book: Book) -> Optional[Tuple[str, str, int]]:
+    """The Tesseract model the book reads with (`ocr_model_book`): (folder for --tessdata-dir, language, PSM for
+    a line read empty), or None for Standard."""
+    src_id = lib.book_config(book).ocr_model_book
+    if not src_id:
+        return None
+    try:
+        src = lib.get_book(src_id)
+    except NotFound:
+        raise LibraryError("The book whose Tesseract model this book reads with is gone: choose another in "
+                           "Reading setup.") from None
+    folder = model_folder(lib, src)
+    if not (folder / f"{MODEL}.traineddata").is_file():
+        raise LibraryError(f"'{src.name}' has no trained Tesseract model (any more): train it, or choose another in "
+                           "Reading setup.")
+    meta = folder / "meta.json"
+    psm = json.loads(meta.read_text(encoding="utf-8")).get("psm", TRAIN_PSM) if meta.is_file() else TRAIN_PSM
+    return str(folder), MODEL, int(psm)
+
+
+def start_model(lib: Library, book: Book, tools: Path, start_book: int = 0) -> Path:
+    """The float model training starts from: another book's trained model, or the setup's `tessdata_best`
+    model of the book's script (`ocr_langs` script/Devanagari: tessdata/Devanagari.traineddata)."""
+    if start_book:
+        if start_book == book.id:
+            raise LibraryError("Start from Standard or from another book's model, not from this book's own.")
+        src = lib.get_book(start_book)
+        path = model_folder(lib, src) / f"{MODEL}.traineddata"
+        if not path.is_file():
+            raise LibraryError(f"'{src.name}' has no trained Tesseract model to start from.")
+        return path
+    script = lib.book_config(book).ocr_langs.split("+")[0].split("/")[-1]
+    path = tools / "tessdata" / f"{script}.traineddata"
+    if not path.is_file():
+        raise LibraryError(f"No start model {path}: run tools/tesstrain/setup.sh (docs/INSTALL_TESSERACT.md).")
+    return path
+
+
+def _training_error(log: Path) -> Optional[float]:
+    """The last training error (lstmtraining's "BCER train=1.300%") in the log, %."""
+    found = re.findall(r"BCER train=([\d.]+)%", log.read_text(encoding="utf-8", errors="replace")) if log.is_file() else []
+    return float(found[-1]) if found else None
+
+
+def train_book_model(lib: Library, book_id: int, start_book: int = 0, tools: str = "",
+                     progress: Optional[Callable[[str], None]] = None, cancel: Optional[Callable[[], bool]] = None,
+                     run: Optional[Callable] = None) -> Dict:
+    """Train the book's Tesseract model on all its checked lines (from Standard or `start_book`'s model) and keep it
+    in `model_folder` (the old one stays until the new one is done). `run` replaces the programs (tests)."""
+    t0 = time.time()
+    book = lib.get_book(book_id)
+    lib.need_kind(book, BOOK, "a Tesseract model")
+    cfg = lib.book_config(book)
+    tools_dir = Path(tools).expanduser() if tools else default_tools()
+    if run is None and not (tools_dir / "bin" / "lstmtraining").is_file():
+        raise LibraryError(f"The Tesseract training programs are not in {tools_dir}: run tools/tesstrain/setup.sh "
+                           "(docs/INSTALL_TESSERACT.md), or set their folder in the app settings.")
+    start = start_model(lib, book, tools_dir, start_book)
+    say = progress or (lambda m: None)
+    signature = lines_signature(lib, book_id)
+    folder = model_folder(lib, book)
+    work = folder / "work"
+    if work.exists():
+        shutil.rmtree(work)
+    say("exporting the checked lines")
+    exported = export_lines(lib, book_id, work / "lines", folds=1)
+    model = train_model(work / "lines" / "all", work, MODEL, tools_dir, start, epochs=cfg.tesstrain_epochs,
+                        run=run or runner(cancel), progress=say)
+    if cancel and cancel():
+        raise Cancelled("Cancelled; the Tesseract model is as it was.")
+    say("keeping the model")
+    shutil.copyfile(model, folder / f"{MODEL}.traineddata.new")
+    os.replace(folder / f"{MODEL}.traineddata.new", folder / f"{MODEL}.traineddata")
+    if (start.parent / "configs").is_dir():              # reading with hocr looks for configs/ in the model's folder
+        shutil.copytree(start.parent / "configs", folder / "configs", dirs_exist_ok=True)
+    log = work / MODEL / "training.log"
+    if log.is_file():
+        shutil.copyfile(log, folder / "training.log")
+    start_name = lib.get_book(start_book).name if start_book else "Standard"
+    info = {"trained_at": now().isoformat(), "lines": exported["lines"], "epochs": cfg.tesstrain_epochs,
+            "start_book": start_book, "start_name": start_name, "psm": TRAIN_PSM,
+            "training_error": _training_error(log), "seconds": round(time.time() - t0, 1), "signature": signature}
+    (folder / "meta.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
+    shutil.rmtree(work, ignore_errors=True)
+    return {k: v for k, v in info.items() if k != "signature"}
 
 
 # ---- scoring ----------------------------------------------------------------------------------------

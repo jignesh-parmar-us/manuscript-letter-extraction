@@ -313,7 +313,7 @@ class WholeLineTests(unittest.TestCase):
         c = TestClient(create_app(self.lib, "t"))
         h = {"X-Token": "t"}
         self.assertEqual(c.get(f"/api/pages/{self.page}/whole-lines", headers=h).status_code, 404)
-        with mock.patch("letter_extractor.app.wholelines.tesseract_reader", return_value=lambda rgb: READ):
+        with mock.patch("letter_extractor.app.suggest.tesseract_reader", return_value=lambda rgb: READ):
             job = c.post(f"/api/books/{self.book}/convert", json={"part": "training", "page_ids": [self.page],
                                                                    "mode": "lines"}, headers=h).json()
             for _ in range(200):

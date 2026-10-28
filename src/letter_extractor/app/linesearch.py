@@ -703,6 +703,8 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
     lines are read. Beside it:
     Tesseract alone and Tesseract + language model as read whole (that language model knows every page),
     and the second opinion's marks on Tesseract + language model. Kept in the reader's folder (measure.json).
+    `tesseract_fair` is false when the book reads with a Tesseract model trained on its own checked lines (C30c):
+    that model has seen the tested lines.
 
     The letters' rows come from the feature store (each computed once, kept); the base readers of all folds
     are trained first, so that each checked line is cut into windows once for learning from corrections and
@@ -802,6 +804,7 @@ def measure(lib: Library, book_id: int, folds: int = 4, progress=None, cancel: O
                 for e in ("ours", "tesseract", "tesseract_lm")},
         "marked": round(100 * sum(x["marked"] for x in lines) / aksharas, 1),
         "mistakes": mistakes, "caught": sum(x["caught"] for x in lines),
+        "tesseract_model": cfg.ocr_model_book, "tesseract_fair": cfg.ocr_model_book != book_id,
         "line_results": lines,
     }
     f = _measure_file(lib, book, quick)                     # a quick one never replaces the last full measure

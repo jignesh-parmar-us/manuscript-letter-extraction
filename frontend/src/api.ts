@@ -148,7 +148,7 @@ export interface Job {
   book_id: number;
   kind: "capture" | "add_pages" | "recut_page" | "export" | "suggest" | "fix_cuts" | "fix_bars" | "capture_read" | "import_pdf"
     | "copy_pages" | "move_uploads"
-    | "convert" | "line_search" | "line_search_train" | "line_search_measure" | "train" | "use_reader" | "generate_letters"
+    | "convert" | "line_search" | "line_search_train" | "line_search_measure" | "tesseract_train" | "train" | "use_reader" | "generate_letters"
     | "top_up";
   status: "running" | "done" | "failed" | "cancelled";
   done: number;
@@ -320,6 +320,8 @@ export interface LineSearchMeasure {
   marked: number; // % of the aksharas marked by the second opinion
   mistakes: number; // aksharas still wrong after Tesseract + language model
   caught: number; // of them marked
+  tesseract_model?: number; // C30c: the book whose trained Tesseract model the book read with (0: Standard)
+  tesseract_fair?: boolean; // false: that model learnt this book's checked lines, so Tesseract's numbers are not fold-fair
   line_results: {
     page: string;
     line: number;
@@ -341,6 +343,30 @@ export interface ReadingSetupInfo {
   reader: LineSearchState["reader"];
   measure: LineSearchMeasure | null;
   quick_measure: LineSearchMeasure | null;
+  tesseract: TesseractSetup;
+}
+
+/** A Tesseract model trained on a book's checked lines (C30c). */
+export interface TesseractModel {
+  book_id: number;
+  book_name: string;
+  trained_at: string;
+  lines: number;
+  epochs: number;
+  start_book: number; // 0: from Standard Tesseract
+  start_name: string;
+  psm: number;
+  training_error: number | null; // % on its own training lines: only shows that training worked
+  seconds: number;
+  changed: boolean; // the book's checked lines changed since
+}
+
+export interface TesseractSetup {
+  own: TesseractModel | null; // this book's trained model
+  using: number; // the book whose model this book reads with; 0: Standard
+  models: TesseractModel[]; // every trained model in the library
+  tools: string; // the training programs' folder
+  tools_ok: boolean;
 }
 
 /** The line truth screen: checked text of whole lines. */
@@ -709,6 +735,9 @@ export const api = {
   readingSetup: (id: number) => get<ReadingSetupInfo>(`/api/books/${id}/reading-setup`),
   setBookDatasets: (id: number, datasetIds: number[]) =>
     put<ReadingSetupInfo>(`/api/books/${id}/datasets`, { dataset_ids: datasetIds }),
+  setTesseractModel: (id: number, bookId: number) =>
+    put<ReadingSetupInfo>(`/api/books/${id}/tesseract-model`, { book_id: bookId }),
+  tesseractTrain: (id: number, startBook = 0) => post<Job>(`/api/books/${id}/tesseract/train`, { start_book: startBook }),
   wholeLines: (pageId: number, engine: LineEngine = "tesseract") =>
     get<WholeLines>(`/api/pages/${pageId}/whole-lines?engine=${engine}`),
   saveWholeLine: (lineId: number, change: { text?: string; reviewed?: boolean; shown?: string }) =>

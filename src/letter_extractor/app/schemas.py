@@ -40,6 +40,14 @@ class DatasetChoice(BaseModel):
     dataset_ids: List[int]                        # the datasets a book's reading model learns from (C23)
 
 
+class TesseractModelChoice(BaseModel):
+    book_id: int = 0                              # read with the Tesseract model trained on this book; 0 = Standard (C30c)
+
+
+class TesseractTrain(BaseModel):
+    start_book: int = 0                           # start from this book's trained model; 0 = Standard (C30c)
+
+
 class PageMove(BaseModel):
     by: int                                       # -1 up, +1 down
 

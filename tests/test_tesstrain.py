@@ -13,8 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import appbook                                                      # noqa: E402
 from test_wholelines import READ, reading                           # noqa: E402
 from letter_extractor import io_utils                               # noqa: E402
-from letter_extractor.app import linesearch, tesstrain              # noqa: E402
-from letter_extractor.app.db import Line, Page                      # noqa: E402
+from letter_extractor.app import linesearch, suggest, tesstrain     # noqa: E402
+from letter_extractor.app.db import BOOK, Book, Line, Page          # noqa: E402
+from letter_extractor.app.library import Cancelled                  # noqa: E402
 from letter_extractor.app.wholelines import read_book_lines, set_whole_line   # noqa: E402
 from letter_extractor.config import Config                          # noqa: E402
 from letter_extractor.ocr import tesseract as T                     # noqa: E402
@@ -173,6 +174,112 @@ class TesstrainTests(unittest.TestCase):
         self.assertTrue(s["stem"].startswith(f"p{self.pages[0]}_L"))                # the export's picture
         self.assertNotIn("नारायण भग", [x["truth"] for x in tesstrain.suspects(r, "tuned")])   # reads it right
         self.assertIn(f"all/{s['stem']}.png", tesstrain.suspects_page(found, "t"))
+
+
+
+class BookModelTests(unittest.TestCase):
+    """C30c: a book's Tesseract model trained in the app, and any book reading with any trained model."""
+
+    def setUp(self):
+        TesstrainTests.setUp(self)
+        with self.lib.session() as s:
+            s.get(Book, self.book).kind = BOOK                       # a model is trained on a book's checked lines
+        self.tools = self.tmp / "tools"
+        (self.tools / "tessdata" / "configs").mkdir(parents=True)
+        (self.tools / "tessdata" / "Devanagari.traineddata").write_bytes(b"start")
+        (self.tools / "tessdata" / "configs" / "hocr").write_text("hocr", encoding="utf-8")
+        self.calls = []
+
+    def tearDown(self):
+        appbook.cleanup(self.tmp, self.lib)
+
+    def run_programs(self, cmd, env, log):
+        cmd = [str(c) for c in cmd]
+        self.calls.append(cmd)
+        if cmd[0] == "tesseract":
+            Path(f"{cmd[2]}.lstmf").write_bytes(b"")
+        if cmd[0] == "lstmtraining" and "--stop_training" not in cmd:
+            log.write("At iteration 40/40/40, mean rms=0.1%, delta=0.2%, BCER train=1.300%, BWER train=4%\n")
+        if "--stop_training" in cmd:
+            Path(cmd[cmd.index("--model_output") + 1]).write_bytes(b"trained")
+
+    def train(self, start_book=0):
+        return tesstrain.train_book_model(self.lib, self.book, start_book, str(self.tools), run=self.run_programs)
+
+    def test_a_book_model_is_trained_on_every_checked_line_and_kept(self):
+        self.lib.set_book_config(self.book, Config(language_model=False, tesstrain_epochs=7))
+        r = self.train()
+        folder = tesstrain.model_folder(self.lib, self.lib.get_book(self.book))
+        self.assertEqual((folder / "book.traineddata").read_bytes(), b"trained")
+        self.assertTrue((folder / "configs" / "hocr").is_file())                 # reading with hocr needs it
+        self.assertFalse((folder / "work").exists())                              # work files are not kept
+        self.assertEqual((r["lines"], r["epochs"], r["start_name"], r["psm"], r["training_error"]),
+                         (3, 7, "Standard", 13, 1.3))
+        self.assertEqual(sum(c[0] == "tesseract" for c in self.calls), 3)          # every checked line, no folds
+        train = next(c for c in self.calls if c[0] == "lstmtraining")
+        self.assertEqual(train[train.index("--old_traineddata") + 1],
+                         str(self.tools / "tessdata" / "Devanagari.traineddata"))
+        info = tesstrain.model_info(self.lib, self.lib.get_book(self.book))
+        self.assertFalse(info["changed"])
+        self.assertNotIn("signature", info)
+        self.assertEqual([m["book_id"] for m in tesstrain.trained_models(self.lib)], [self.book])
+        set_whole_line(self.lib, self.lines[2], text="नर", reviewed=True)            # a checked line changes
+        self.assertTrue(tesstrain.model_info(self.lib, self.lib.get_book(self.book))["changed"])
+
+    def test_training_can_start_from_another_books_model_but_not_its_own(self):
+        self.train()
+        other = self.lib.create_book("Other printing", writing="printed", kind=BOOK).id
+        own = tesstrain.model_folder(self.lib, self.lib.get_book(self.book)) / "book.traineddata"
+        self.assertEqual(tesstrain.start_model(self.lib, self.lib.get_book(other), self.tools, self.book), own)
+        with self.assertRaises(tesstrain.LibraryError):
+            tesstrain.start_model(self.lib, self.lib.get_book(self.book), self.tools, self.book)
+
+    def test_the_book_reads_with_the_chosen_model(self):
+        book = self.lib.get_book(self.book)
+        self.assertIsNone(tesstrain.book_model(self.lib, book))                     # Standard
+        self.lib.set_book_config(self.book, Config(ocr_model_book=self.book))
+        with self.assertRaises(tesstrain.LibraryError):                             # chosen, but not trained
+            tesstrain.book_model(self.lib, self.lib.get_book(self.book))
+        self.train()
+        folder = str(tesstrain.model_folder(self.lib, book))
+        self.assertEqual(tesstrain.book_model(self.lib, self.lib.get_book(self.book)), (folder, "book", 13))
+        engine = T.Engine("tesseract", "5", ["book"], tessdata_dir=folder)
+        empty = T.LineReading(words=[], hocr="", scale=1.0)
+        with mock.patch.object(suggest, "find_tesseract", return_value=engine) as find, \
+                mock.patch.object(suggest, "read_line", side_effect=lambda *a, **kw: empty if kw["psm"] == 7 else RIGHT) as read:
+            self.assertIs(suggest.book_tesseract_reader(self.lib, self.lib.get_book(self.book))(None), RIGHT)
+        self.assertEqual(find.call_args.args, ("", folder))
+        self.assertEqual([(c.kwargs["langs"], c.kwargs["psm"]) for c in read.call_args_list], [("book", 7), ("book", 13)])
+
+    def test_standard_tesseract_reads_an_empty_line_once(self):
+        engine = T.Engine("tesseract", "5", ["script/Devanagari"])
+        empty = T.LineReading(words=[], hocr="", scale=1.0)
+        with mock.patch.object(suggest, "find_tesseract", return_value=engine), \
+                mock.patch.object(suggest, "read_line", return_value=empty) as read:
+            suggest.book_tesseract_reader(self.lib, self.lib.get_book(self.book))(None)
+        self.assertEqual([c.kwargs["psm"] for c in read.call_args_list], [7])       # as before C30c
+
+    def test_cancelling_stops_a_training_program(self):
+        log = open(self.tmp / "log.txt", "w", encoding="utf-8")
+        try:
+            with self.assertRaises(Cancelled):
+                tesstrain.runner(lambda: True)(["sleep", "30"], {}, log)
+        finally:
+            log.close()
+
+    def test_choosing_a_model_in_reading_setup(self):
+        from fastapi.testclient import TestClient
+        from letter_extractor.app.api import create_app
+        c = TestClient(create_app(self.lib, "t"))
+        h = {"X-Token": "t"}
+        url = f"/api/books/{self.book}/tesseract-model"
+        self.assertEqual(c.put(url, json={"book_id": self.book}, headers=h).status_code, 400)   # not trained yet
+        self.train()
+        setup = c.put(url, json={"book_id": self.book}, headers=h).json()["tesseract"]
+        self.assertEqual((setup["using"], setup["own"]["lines"], len(setup["models"])), (self.book, 3, 1))
+        self.assertEqual(self.lib.book_config(self.lib.get_book(self.book)).ocr_model_book, self.book)
+        self.assertEqual(c.put(url, json={"book_id": 0}, headers=h).json()["tesseract"]["using"], 0)
+        c.close()
 
 
 if __name__ == "__main__":

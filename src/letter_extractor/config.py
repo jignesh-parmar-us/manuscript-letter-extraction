@@ -128,6 +128,8 @@ class Config:
     ocr_langs: str = "script/Devanagari"  # Tesseract language models, joined by +
     ocr_psm: int = 7                      # Tesseract page segmentation mode: 7 = one text line
     ocr_letter_height: int = 0            # letter-body height Tesseract gets, px; 0 = the line image as it is
+    ocr_model_book: int = 0               # C30c: read with the Tesseract model trained on this book's lines; 0 = Standard
+    tesstrain_epochs: int = 20            # C30c: passes over the checked lines when training a Tesseract model
     align_min_overlap: float = 0.6        # an OCR akshara and a sample match from this x overlap...
     align_sure_overlap: float = 0.8       # ...if they are also each other's best match, or from this one
     align_min_matched: float = 0.5        # a line where fewer of its samples match is not used

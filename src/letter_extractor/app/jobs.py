@@ -39,7 +39,7 @@ def _heavy(what: str, run: Callable[..., Dict]) -> Callable[..., Dict]:
 class Job:
     id: str
     book_id: int
-    kind: str                                  # move_uploads (C26, the whole library: book_id 0) | capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | copy_pages | convert | line_search | line_search_train | line_search_measure | train | use_reader
+    kind: str                                  # move_uploads (C26, the whole library: book_id 0) | capture | add_pages | recut_page | export | suggest | fix_cuts | fix_bars | capture_read | import_pdf | copy_pages | convert | line_search | line_search_train | line_search_measure | tesseract_train | train | use_reader
     status: str = "running"                    # running | done | failed | cancelled
     done: int = 0
     total: int = 0
@@ -288,6 +288,24 @@ class Jobs:
                                     f"{r['letters']} letters, {r['lines']} checked lines", time.time() - t0))
             return r
         return self.start(book_id, "line_search_train", _heavy(f"Retrain (book {book_id})", run), total=1)
+
+    def tesseract_train(self, book_id: int, start_book: int = 0, tools: str = "") -> Job:
+        """Train the book's Tesseract model on its checked lines (C30c, tesstrain.train_book_model), from Standard or
+        from another book's model."""
+        from .db import BOOK
+        from .suggest import LineDone
+        from .tesstrain import train_book_model
+        book = self.lib.get_book(book_id)
+        self.lib.need_kind(book, BOOK, "a Tesseract model")
+
+        def run(progress, cancel):
+            t0 = time.time()
+            r = train_book_model(self.lib, book_id, start_book, tools,
+                                 lambda msg: progress(0, 1, LineDone(msg, "OK", "", time.time() - t0)), cancel)
+            progress(1, 1, LineDone("Tesseract model", "OK", f"{r['lines']} checked lines, {r['epochs']} epochs",
+                                    time.time() - t0))
+            return r
+        return self.start(book_id, "tesseract_train", _heavy(f"Train Tesseract (book {book_id})", run), total=1)
 
     def line_search_measure(self, book_id: int, quick: bool = False) -> Job:
         """Score the line search fold-fair on the checked lines (linesearch.measure): one step per fold.

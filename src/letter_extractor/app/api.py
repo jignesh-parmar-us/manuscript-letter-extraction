@@ -77,7 +77,7 @@ from .centres import suggestions
 from .db import BOOK, DATASET, GENERATED, Book, LetterGroup, Line, Page, Sample
 from .jobs import Jobs
 from .library import BookHasReviewError, Library, LibraryError, NotFound
-from .schemas import (DatasetChoice, PageExclude, PageFile, PageMove, AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
+from .schemas import (DatasetChoice, TesseractModelChoice, TesseractTrain, PageExclude, PageFile, PageMove, AcceptSuggestions, ConfirmSamples, LineSearchRequest, BookCreate, BookUpdate, BookSettings, Crop, ExportRequest, FolderPath, Force,
                       ConvertRequest, PagePart, Proofread, ReadSource, ReaderChoice, TrainRequest, WordListImport, WordListUse, LineTruthText, WholeLineEdit,
                       FontMakerFont, FontSize, GroupRef, HelpPage, Label, LabelSamples, LibraryChoice, Merge, Move, RejectSuggestion,
                       RemoveReadings, SampleIds, Split, Status, SuggestRequest, Upload)
@@ -448,7 +448,39 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
                 "datasets": [rows[d] for d in used if d in rows],
                 "others": [r for d, r in rows.items() if d not in used],
                 "reader": line_reader_info(library, book_id), "measure": last_measure(library, book_id),
-                "quick_measure": last_measure(library, book_id, quick=True)}
+                "quick_measure": last_measure(library, book_id, quick=True), "tesseract": tesseract_setup(book)}
+
+    def tesstrain_tools() -> str:
+        from .main import load_settings
+        return str(load_settings(context.settings_file).get("tesstrain_tools", ""))   # app setting (C30c)
+
+    def tesseract_setup(book: Book) -> Dict:
+        """The book's Tesseract model (C30c): its own trained one, the one it reads with, every trained one."""
+        from .tesstrain import default_tools, model_info, trained_models
+        tools = Path(tesstrain_tools()).expanduser() if tesstrain_tools() else default_tools()
+        return {"own": model_info(library, book), "using": library.book_config(book).ocr_model_book,
+                "models": trained_models(library), "tools": str(tools),
+                "tools_ok": (tools / "bin" / "lstmtraining").is_file()}
+
+    @app.put("/api/books/{book_id}/tesseract-model", dependencies=auth)
+    def choose_tesseract_model(book_id: int, body: TesseractModelChoice) -> Dict:
+        """Read the book with Standard Tesseract (0) or with the model trained on a book (C30c)."""
+        from .tesstrain import model_info
+        if jobs.running_for(book_id):
+            raise HTTPException(409, "A job is running for this book; choose its Tesseract model when it has finished.")
+        book = library.get_book(book_id)
+        library.need_kind(book, BOOK, "a reading setup")
+        if body.book_id and model_info(library, library.get_book(body.book_id)) is None:
+            raise HTTPException(400, "That book has no trained Tesseract model.")
+        cfg = library.book_config(book)
+        cfg.ocr_model_book = body.book_id
+        library.set_book_config(book_id, cfg)
+        return reading_setup(book_id)
+
+    @app.post("/api/books/{book_id}/tesseract/train", dependencies=auth, status_code=202)
+    def tesseract_train(book_id: int, body: TesseractTrain = TesseractTrain()) -> Dict:
+        """Train the book's Tesseract model on its checked lines (a heavy job, C30c)."""
+        return jobs.tesseract_train(book_id, body.start_book, tesstrain_tools()).as_dict()
 
     @app.put("/api/books/{book_id}/datasets", dependencies=auth)
     def choose_datasets(book_id: int, body: DatasetChoice) -> Dict:
@@ -630,15 +662,14 @@ def create_app(library: Library, token: str, context=None) -> FastAPI:
     @app.get("/api/lines/{line_id}/tesseract", dependencies=auth)
     def line_tesseract(line_id: int) -> Dict:
         """Tesseract's reading of the whole line, without letter cutting."""
-        from .suggest import tesseract_reader
+        from .suggest import book_tesseract_reader
         from .truth import tesseract_text
         with library.session() as s:
             line = s.get(Line, line_id)
             if line is None:
                 raise HTTPException(404, f"No line with id {line_id}.")
             book = s.get(Book, s.get(Page, line.page_id).book_id)
-            cfg = library.book_config(book)
-        return tesseract_text(library, line_id, tesseract_reader(cfg, tesseract_setting()))
+        return tesseract_text(library, line_id, book_tesseract_reader(library, book, tesseract_setting()))
 
     @app.put("/api/lines/{line_id}/truth", dependencies=auth)
     def line_truth(line_id: int, body: LineTruthText) -> Dict:

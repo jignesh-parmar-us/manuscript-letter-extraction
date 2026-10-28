@@ -44,16 +44,33 @@ class LineDone:
     seconds: float
 
 
-def tesseract_reader(cfg: Config, tesseract_path: str = "") -> LineReader:
+def tesseract_reader(cfg: Config, tesseract_path: str = "", model: Optional[Tuple[str, str, int]] = None) -> LineReader:
     """Read lines with the installed Tesseract and the book's settings (one thread per process,
-    because several lines are read at once)."""
+    because several lines are read at once). `model`: a trained model (C30c, `tesstrain.book_model`: its folder,
+    language and the PSM a line read empty is read again in) instead of the installed `ocr_langs`."""
+    folder, langs, again = model or ("", cfg.ocr_langs, None)
     try:
-        engine = find_tesseract(tesseract_path)
-        engine.check_langs(cfg.ocr_langs)
+        engine = find_tesseract(tesseract_path, folder)
+        engine.check_langs(langs)
     except TesseractError as e:
         raise LibraryError(str(e)) from e
-    return lambda rgb: read_line(rgb, engine, langs=cfg.ocr_langs, psm=cfg.ocr_psm,
-                                 target_height=cfg.ocr_letter_height, env={"OMP_THREAD_LIMIT": "1"})
+
+    def read(rgb, psm):
+        return read_line(rgb, engine, langs=langs, psm=psm, target_height=cfg.ocr_letter_height,
+                         env={"OMP_THREAD_LIMIT": "1"})
+
+    def reader(rgb):
+        reading = read(rgb, cfg.ocr_psm)
+        if again is not None and again != cfg.ocr_psm and not reading.text.strip():
+            reading = read(rgb, again)
+        return reading
+    return reader
+
+
+def book_tesseract_reader(lib: Library, book: Book, tesseract_path: str = "") -> LineReader:
+    """`tesseract_reader` with the Tesseract model the book reads with (Reading setup, C30c)."""
+    from .tesstrain import book_model
+    return tesseract_reader(lib.book_config(book), tesseract_path, book_model(lib, book))
 
 
 def _workers() -> int:

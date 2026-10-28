@@ -343,7 +343,7 @@
       line is filled in: correct it and press Enter). 30 to 50 lines from a few pages are the test set every way of
       reading is measured on, independent of how the letters were cut. Saving a line here also corrects it in Whole
       lines and marks it ✓ there; removing its text here takes the ✓ away (the correction stays).</li>
-    <li><span class="ui">Reading setup</span> (the Dictionary tab before; its old address opens here) has three parts.
+    <li><span class="ui">Reading setup</span> (the Dictionary tab before; its old address opens here) has four parts.
       <strong>1. Datasets used:</strong> the datasets whose reviewed letters our reader learns and whose labels the
       language model learns, one or several: <span class="ui">Add dataset</span> (one of another writing is allowed,
       with a warning), <span class="ui">Remove from this book</span> (the dataset itself is untouched),
@@ -357,8 +357,21 @@
       reviewed letters or the checked lines changed since, <span class="ui">Train</span> /
       <span class="ui">Retrain</span> and <span class="ui">Measure</span> (fold-fair on the checked lines: each group of tested pages is left out of the
       training, also where the same page is in a dataset under another name; takes a
-      while). Each book has its own reading model, kept in <code>models/</code> in the library folder.</li>
+      while). Each book has its own reading model, kept in <code>models/</code> in the library folder.
+      <strong>4. Tesseract model:</strong> <span class="ui">Read with</span> chooses the Tesseract that reads the whole
+      lines: <em>Standard Tesseract</em>, or a model <em>trained on</em> a book's checked lines, this book's or another
+      book's in a similar print (read the pages again after choosing). <span class="ui">Train Tesseract</span> teaches
+      Tesseract this book's checked lines (Line truth; about 100 lines is a good start, about 10 minutes), starting from
+      <em>Standard Tesseract</em> or from another book's model (<span class="ui">Start from</span>: fewer lines may be
+      enough). It is <em>out of date</em> when the checked lines changed since. On book 8 (printed) it brought the
+      characters wrong from 4.6% to 2.5%, measured fairly (each group of pages read by a model that never saw them).
+      While a book reads with a model trained on its own checked lines, <span class="ui">Measure</span> says its
+      Tesseract numbers are not fair: that model has seen the tested lines. Training needs Tesseract's training programs,
+      set up once (<code>tools/tesstrain/setup.sh</code>, <code>docs/INSTALL_TESSERACT.md</code>).</li>
   </ol>
+  <div class="box tip"><strong>A new printed book:</strong> correcting lines now teaches more than labelling letters.
+    Check about 100 lines in Line truth, then try another printed book's Tesseract model on it, or train its own.
+    Handwritten books have not been tried this way yet.</div>
   <div class="box tip"><strong>Printed books</strong> are read by Tesseract and checked against your labelled groups;
     <strong>handwritten books</strong> by your groups alone for now, so their text is rough until many groups are reviewed.
     Every letter you correct teaches the next reader training.</div>

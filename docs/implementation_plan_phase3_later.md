@@ -7,8 +7,9 @@ It starts after C19–C24. Chunk names go on from there (C25–C29).
 2026-10-17**; C26's move ran on your library the same day (21:34, checked: section "C26 as built"). C27–C29 not
 started; questions 3–6 still open. **C30 (Tesseract learns the book from its checked lines) and C31 (backup:
 glyphs along the line) added 2026-10-20** from `docs/LINE_READER_RESEARCH.md`; C30a built, all 4 folds trained and scored
-2026-10-20 (passes at PSM 7 with PSM 13 for lines read empty: 2.94% against 4.69%; confirmed in one run 2026-10-21); **next: section "C30a: start here
-next session"**.
+2026-10-20 (passes at PSM 7 with PSM 13 for lines read empty: 2.94% against 4.69%; confirmed in one run 2026-10-21; after the user's proofreading, exported, retrained and scored again
+2026-10-28: 2.51% against 4.57%, every fold better); C30c built 2026-10-28 (not yet trained in the app); **next: train book 8's model in the app, then check
+30-40 Vadtal lines and try book 8's model on them (section C30c)**.
 
 ## 0. What is where today (checked in the code and, read-only, in your library on 2026-10-17)
 
@@ -367,7 +368,7 @@ pairs `line.png` + `line.gt.txt`. The Whole lines (Tesseract) route stays the sa
 |---|---|---|---|---|
 | C30a | Tools and a fold-fair measurement; no app change | 4–6 h | build the training programs once (~15 min), 4 fold trainings + scoring on a copy | none (a copy) |
 | C30b | Synthetic lines (only if C30a is short, or to balance rare letters) | 3–4 h | one training per fold | none |
-| C30c | In the app: train a book's Tesseract model, choose it in Reading setup (**only if C30a passes**) | 5–7 h | one training of book 8 | a model file per book |
+| C30c | In the app: train a Tesseract model on a book's checked lines (from Standard or another book's model), any book reads with any trained model | 5–7 h | one training of book 8 | a model file per book |
 
 #### C30a. Tools and a fold-fair measurement (no app change)
 
@@ -456,7 +457,15 @@ PYTHONPATH=src .venv/bin/python tools/tesstrain/score.py --library ~/harness/lib
 PYTHONPATH=src .venv/bin/python tools/tesstrain/suspects.py --data ~/tesstrain/book8 --name score-fallback
 ```
 
-Then the user fixes the checked texts from `score-fallback-suspects.html`, and we export, train and score again
+**Proofread and retrained, 2026-10-28 (done):** the user fixed the checked texts from
+`score-fallback-suspects.html`. New copy `~/harness/libcopy-c30r2` (`tools/harness/copy_library.sh ~/harness/libcopy-c30r2
+0008-vachnamrut-printed-1944-training-data`), new export `~/tesstrain/book8r2` (120 lines, 53 texts changed, one new
+line), the 4 folds trained (481-698 s each) and scored with `--fallback-psm 13`: **tuned + LM 2.51% against stock + LM
+4.57%** (was 2.94 / 4.69), every fold better, fold 2 the least (6.44 / 7.13). 270 places on 102 lines left in
+`~/tesstrain/book8r2/score-fallback-suspects.html`. Numbers in `docs/TUNING_PHASE2.md`, "C30a again, after
+proofreading". The first run stays in `~/tesstrain/book8`.
+
+Before that: the user fixes the checked texts from `score-fallback-suspects.html`, and we export, train and score again
 (steps 3 and 4 below). C30c then reads with the book's model at the book's `ocr_psm`, falling back to PSM 13 for an
 empty line.
 
@@ -509,18 +518,58 @@ open ~/tesstrain/book8/score.html         # every line, differences from the che
   to the book's (Font Maker's font when it exists), plus noise, blur, slant and faded ink.
 - Measured as C30a: real lines only vs real + synthetic, same folds.
 
-#### C30c. In the app (only if C30a passes)
+#### C30c. In the app (C30a passed: 2.51% against 4.57% on book 8, 2026-10-28)
 
-- Reading setup → **Tesseract model:** *Standard* (today) | *Trained on this book* (with its date and lines).
-  **Train Tesseract on the checked lines**: a heavy job (lock, cancel, progress) that exports the book's checked
-  lines and trains `models/<book folder>/tesseract/book.traineddata` from the start model. Out of date when
-  checked lines change, like the reader.
-- Reading with it: `tesseract_reader` passes the book's model folder (`tessdata_dir`) and its name as language, and reads a line it read empty again at PSM 13 (C30a: the trained models read 4 of 119 lines empty at PSM 7).
-- Settings: `ocr_model` (`standard` | `book`), `tesstrain_iterations`; the training programs' folder in the app
-  settings (empty: the C30a folder `~/tesstrain`).
+**Changed 2026-10-28, before building:** a book does not have to train its own model. The trained model learns
+book 8's typeface, ink and scans; another printing in a similar typeface may read well with it as it is, or need only
+a short fine-tuning from it. So a trained model belongs to the book it learnt from, but **any book can read with any
+trained model**, and training can **start from another book's model** instead of stock Tesseract.
+
+- **Where a model is kept:** `<the book's reading model folder>/tesseract/` (`lib.model_dir`, C23): `book.traineddata`
+  (the float model, so it can be a start model too), `configs/` (reading with `hocr` needs it), `meta.json` (when,
+  lines, epochs, start model, seconds, the training error, and the signature of the checked lines it learnt).
+- **Train** (Reading setup → *Tesseract model* → **Train Tesseract on the checked lines**): a heavy job (lock,
+  cancel, progress) that exports the book's checked lines (all of them, `export_lines(…, folds=1)` into the model
+  folder's `work/`), trains (`train_model`) and keeps the model. **Start from:** *Standard* (`tessdata_best`, the setup's
+  `tessdata/<script>.traineddata`) or another book's trained model. **Out of date** when the book's checked lines
+  changed since, like our reader.
+- **Choose** (Reading setup → *Tesseract model*): *Standard* (today) or *Trained on <book>* (date, lines), any book
+  with a trained model. Setting `ocr_model_book` (0 = Standard). Read the pages again to use it.
+- **Reading with it:** `tesseract_reader` gets the model (`tesstrain.book_model`: its folder as `tessdata_dir`,
+  `book` as language) and reads a line it read empty again at the PSM it learnt in (13; C30a: 4 of 119 lines read
+  empty at PSM 7). Used by Read Book (Whole lines, Convert) and the line's Tesseract text in Line truth; label
+  suggestions on Training Data stay with Standard.
+- **Fairness of Measure:** Measure scores the stored Tesseract readings. A model trained on this book's checked
+  lines has seen Measure's test lines, so then Measure says its Tesseract numbers are **not fold-fair** (on screen
+  and in the result). The fold-fair number for a book's own model is C30a's (`tools/tesstrain/score.py`, 4
+  trainings). A model from another book is fair.
+- **Is another book's model good enough? (Vadtal 1933, next):** check 30-40 lines of it, then
+  `tools/tesstrain/score.py --model <model folder>` reads every checked line with Standard and with that model (no
+  folds: the model never saw the book). Light, about 2 minutes. Use it as it is if it is clearly better; otherwise
+  train from it.
+- **Settings:** `ocr_model_book` and `tesstrain_epochs` (20) per book; the training programs' folder as the app
+  setting `tesstrain_tools` (empty: `~/tesstrain`, where `tools/tesstrain/setup.sh` puts them).
 - **Training Data for a new book** changes from "label letters" to "correct lines" (help `new-book`, README).
-- **Files:** `app/tesstrain.py`, `app/suggest.py`, `app/jobs.py`, `app/api.py`, `config.py`,
-  `frontend/src/screens/ReadingSetup.tsx`; tests; help, README.
+- **Handwritten:** the same, but untested; book 9 needs about 100 checked lines first. A printed book's model
+  will most likely not help a handwritten one.
+- **Files:** `app/tesstrain.py`, `app/suggest.py`, `app/wholelines.py`, `app/texts.py`, `app/linesearch.py`
+  (the fairness flag), `app/jobs.py`, `app/api.py`, `config.py`, `tools/tesstrain/score.py` (`--model`),
+  `frontend/src/screens/ReadingSetup.tsx`, `frontend/src/api.ts`; tests; help, README.
+- **As built (2026-10-28):** as above. `tesstrain.train_book_model` (export with one fold into the model folder's
+  `work/`, `train_model`, then `book.traineddata` replaced only when the new one is done, `configs/`, `training.log`,
+  `meta.json`; `work/` removed), `model_info` / `trained_models` / `book_model` / `start_model`; training programs
+  run through `tesstrain.runner(cancel)`, which kills the running program on Cancel. `suggest.book_tesseract_reader`
+  is used by Whole lines, Convert and Line truth's Tesseract text; label suggestions keep Standard. Measure stores
+  `tesseract_model` and `tesseract_fair`. API: `reading-setup` gains `tesseract` (own model, the one used, every
+  trained model, the training programs' folder and whether they are there), `PUT /api/books/{id}/tesseract-model`,
+  `POST /api/books/{id}/tesseract/train` (job `tesseract_train`). Reading setup part **4. Tesseract model**: *Read
+  with*, this book's model (when, lines, epochs, start, training error, up to date / out of date), *Start from*
+  (Standard or another book's model, never its own), *Train / Retrain Tesseract*. Tests: `tests/test_tesstrain.py`
+  (`BookModelTests`: trained on every checked line and kept; out of date when a checked line changes; starting from
+  another book's model, not its own; reading with the chosen model and PSM 13 for an empty line; Standard reads once;
+  Cancel stops a program; choosing in the API), `ReadingSetup.test.tsx` (choosing, training from another model,
+  the not-fold-fair warnings, missing training programs). **Not run yet:** a real training in the app (heavy; when you
+  ask): book 8 from Standard, about 10 minutes.
 
 ### C31. Backup: glyphs placed along the line (Ocular-style), printed books
 

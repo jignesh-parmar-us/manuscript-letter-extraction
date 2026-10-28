@@ -46,7 +46,7 @@ from ..ocr.language import candidates, correct_line
 from .centres import centres
 from .db import Book, LetterGroup, Line, Page, PageText, Sample, now
 from .library import Cancelled, Library, LibraryError
-from .suggest import LineDone, tesseract_reader, _workers
+from .suggest import LineDone, book_tesseract_reader, _workers
 
 LineReader = Callable[[np.ndarray], object]
 
@@ -344,7 +344,7 @@ def convert_book(lib: Library, book_id: int, page_ids: Optional[Sequence[int]] =
     if not ids:
         raise LibraryError("No pages to convert: cut the Read Book pages first.")
     if reader is None and book.writing == "printed":
-        reader = tesseract_reader(cfg, tesseract_path)
+        reader = book_tesseract_reader(lib, book, tesseract_path)
     letter_reader = _letter_reader(lib, book)                # loaded once for all the pages
     lm = _language_model(lib, book, cfg)
     done, uncertain, letters = 0, 0, 0

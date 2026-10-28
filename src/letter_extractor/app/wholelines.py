@@ -44,7 +44,7 @@ from ..ocr.language import correct_line, tesseract_options
 from .db import Book, Line, LineTruth, Page, WholeLine, now
 from .library import Cancelled, Library, LibraryError, NotFound
 from .linesearch import disagreements
-from .suggest import LineDone, _workers, tesseract_reader
+from .suggest import LineDone, _workers, book_tesseract_reader
 
 
 def _aksharas(reading, lm=None, cfg=None, origin=(0, 0)) -> List[list]:
@@ -149,7 +149,7 @@ def read_book_lines(lib: Library, book_id: int, page_ids: Optional[Sequence[int]
         ids = list(s.scalars(q.order_by(Page.number, Page.id)))
     if not ids:
         raise LibraryError("No pages to read: cut the Read Book pages first.")
-    reader = reader or tesseract_reader(lib.book_config(book), tesseract_path)
+    reader = reader or book_tesseract_reader(lib, book, tesseract_path)
     lines = uncertain = 0
     for n, pid in enumerate(ids, 1):
         if cancel and cancel():
