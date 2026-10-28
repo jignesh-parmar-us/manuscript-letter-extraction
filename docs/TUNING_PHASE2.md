@@ -553,3 +553,28 @@ fold-fair language model. Characters wrong:
 - Pages: `~/tesstrain/book8/score.html` (every line, PSM 7), `score-psm13.html` (PSM 13), and the likely wrong
   checked texts `score-suspects.html` (332 places on 108 lines; the 4 empty lines are in it at confidence 0) and
   `score-psm13-suspects.html` (405 places on 110 lines), all in `~/tesstrain/book8/`.
+
+### C30a again, after proofreading (2026-10-28)
+
+The user fixed the checked texts from `score-fallback-suspects.html`. New library copy `~/harness/libcopy-c30r2`,
+new export `~/tesstrain/book8r2` (the first run stays in `~/tesstrain/book8`): 120 checked lines (one new,
+`p173_L02`, fold 2), 10,945 characters; 53 lines' checked texts changed. Same steps: 20 epochs at PSM 13, read at
+PSM 7 with a line read empty read again at PSM 13 (`score.py --fallback-psm 13 --name score-fallback`, 125 s).
+
+| Fold | Training lines | Training time | Stock | Stock + LM | Tuned | Tuned + LM | Before (tuned + LM / stock + LM) |
+|---|---|---|---|---|---|---|---|
+| 1 | 85 | 570 s | 5.32% | 4.64% | 2.83% | 2.40% | 2.84 / 4.56 |
+| 2 | 106 | 698 s | 8.58% | 7.13% | 6.44% | 6.44% | 6.78 / 7.78 |
+| 3 | 80 | 481 s | 4.72% | 4.09% | 2.24% | 1.72% | 2.38 / 4.32 |
+| 4 | 89 | 554 s | 4.99% | 3.91% | 2.32% | 1.85% | 2.13 / 3.98 |
+| All | | | 5.43% | 4.57% | 2.93% | **2.51%** | 2.94 / 4.69 |
+
+- **Passes again, by more:** tuned + LM 2.06 points better than stock + LM (was 1.75), every fold better (the
+  least: fold 2, 0.69 point; it was 1.0).
+- Stock barely moves (4.69 → 4.57 with the LM): the fixes mostly removed places where the checked text, not the
+  reading, was wrong. Tuned gains more (2.94 → 2.51) because it now also learns from the right texts.
+- Fold 2 (14 lines, 1.jpg, 4.jpg, Untitled-51, the 8.30.59 PM photo) stays the weak one, and the language model
+  does not help it (6.44% with and without).
+- Likely wrong checked texts left: 270 places on 102 lines (was 343 on 108),
+  `~/tesstrain/book8r2/score-fallback-suspects.html`. Every line: `~/tesstrain/book8r2/score-fallback.html`.
+- Printed only (book 8).
